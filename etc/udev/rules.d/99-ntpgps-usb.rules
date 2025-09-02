@@ -1,0 +1,80 @@
+################################################################################
+# 99-ntpgps-usb.rules
+#
+# Enables USB plug and play for GPS receiver with NTP
+#
+# Copyright (C) 2025 Richard Elwell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+################################################################################
+
+################################################################################
+# Handles creation and removal of /dev/gpsN for NTP
+#
+# Use this UDEV rule or a copy of it when your GPS device:
+# - FTDI USB-to-Serial converter with unique serial number
+# - USB-to-Serial converter is connected to a GPS module: VCC,GND,TX,RX,DCD
+# - PPS line of the GPS module is wired to the DCD line of the USB-to-Serial converter
+# - GPS module with PPS support
+# - GPS module has battery-backed RAM or flash memory to store settings
+# - GPS module does not require additional programming when plugged in
+# - GPS module has been configured with:
+#   - PPS enabled
+#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS 
+#     receiver can result in the output of $GNZDA messages which NTP does not support
+#   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
+#
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="A600KP6X", \
+    SYMLINK+="gps10", ENV{NTP_GPSNUM}="10", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
+
+################################################################################
+# Handles creation and removal of /dev/gpsN for NTP
+#
+# Use this UDEV rule or a copy of it when your GPS device:
+# - GPS device is a single USB stick, example: VK172
+# - GPS only, no PPS
+# - No battery-backed RAM or flash memory to store configuration settings
+# - Requires additional programming when plugged in, to turn on $GPZDA messages and 
+#   turn off all other NMEA and UBX messages
+# - Has the u-blox 7 chipset and is programmable
+#
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
+  ATTRS{manufacturer}=="u-blox AG - www.u-blox.com", ATTRS{product}=="u-blox 7 - GPS/GNSS Receiver", \
+  SYMLINK+="gps20", ENV{NTP_GPSNUM}="20", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-ublox7-config@%k.service"
+
+################################################################################
+# Handles creation and removal of /dev/gpsN for NTP
+#
+# Use this UDEV rule or a copy of it when your GPS device:
+# - ch341 USB-to-Serial converter without a serial number
+# - USB-to-Serial converter is connected to a GPS module: VCC,GND,TX,RX
+# - GPS module without PPS or PPS is not passed through the UART
+# - GPS module has battery-backed RAM or flash memory to store settings
+# - GPS module does not require additional programming when plugged in
+# - GPS module has been configured with:
+#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS 
+#     receiver can result in the output of $GNZDA messages which NTP does not support
+#   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
+#
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+    SYMLINK+="gps30", ENV{NTP_GPSNUM}="30", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-nopps@%k.service"
+
+################################################################################
+# Handles creation and removal of /dev/gpsppsN for NTP
+#
+ACTION=="add", SUBSYSTEM=="pps", \
+    PROGRAM="/usr/local/bin/gpspps-symlink.sh %k", \
+    SYMLINK+="%c"
+
