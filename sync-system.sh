@@ -49,24 +49,28 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() {
-    local status=$?
-    echo "Sync complete[$status]"
-}
+finish() { echo "Sync complete[$?]"; }
 trap finish EXIT
+
 #set -x # debug switch
-set -e
+set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFERENCE_FILE="$PROJECT_DIR/.sync-system-filelist"
 MAX_FILES=15
 
 update_reference_file() {
+    local tmpfile
+    tmpfile=$(mktemp)
+
     cd "$PROJECT_DIR"
     find . -mindepth 2 \( \
         -path "./.git/*" \
         \) -prune -o -type f -print \
-    | cut -c3- >"$REFERENCE_FILE"
+    | cut -c3- > "$tmpfile"
+
+    # Atomically replace reference file
+    mv "$tmpfile" "$REFERENCE_FILE"
 }
 
 cd "$PROJECT_DIR"
@@ -106,10 +110,16 @@ fi
 
 # Now do a normal two-way rsync
 #echo "Syncing system -> project (only newer files)"
-sudo rsync -azui --relative --ignore-missing-args --omit-dir-times --out-format='[UPDATE] '$PROJECT_DIR'/%f' --files-from="$REFERENCE_FILE" / "$PROJECT_DIR"/
+rsync -azui --relative --ignore-missing-args --omit-dir-times \
+    --out-format='[UPDATE] '$PROJECT_DIR'/%f' \
+    --no-o --no-g \
+    --files-from="$REFERENCE_FILE" / "$PROJECT_DIR"/
 
 #echo "Syncing project -> system (only newer files)"
-sudo rsync -azui --relative --ignore-missing-args --omit-dir-times --out-format='[UPDATE] /%f' --files-from="$REFERENCE_FILE" "$PROJECT_DIR"/ /
+sudo rsync -azui --relative --ignore-missing-args --omit-dir-times \
+    --out-format='[UPDATE] /%f' \
+    --no-o --no-g \
+    --files-from="$REFERENCE_FILE" "$PROJECT_DIR"/ /
 
 # Update reference file list to new state
 update_reference_file
