@@ -46,7 +46,7 @@ sudo rm -rf /etc/ntpgps/
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        sudo sed -i '/includefile \/etc\/ntpgps\/ntpgps.conf/d' "$conf"
+        sudo sed -i '/includefile \/tmp\/ntpgps\/ntpgps.conf/d' "$conf"
     fi
 done
 

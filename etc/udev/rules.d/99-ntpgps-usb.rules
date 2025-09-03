@@ -24,7 +24,7 @@
 # Handles creation and removal of /dev/gpsN for NTP
 #
 # Use this UDEV rule or a copy of it when your GPS device:
-# - FTDI USB-to-Serial converter with unique serial number
+# - FTDI USB-to-Serial converter
 # - USB-to-Serial converter is connected to a GPS module: VCC,GND,TX,RX,DCD
 # - PPS line of the GPS module is wired to the DCD line of the USB-to-Serial converter
 # - GPS module with PPS support
@@ -36,7 +36,7 @@
 #     receiver can result in the output of $GNZDA messages which NTP does not support
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
 #
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{serial}=="A600KP6X", \
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     SYMLINK+="gps10", ENV{NTP_GPSNUM}="10", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
 
 ################################################################################

@@ -75,14 +75,18 @@ sudo install -Dm644 etc/systemd/system/gps-ublox7-config@.service /etc/systemd/s
 sudo install -Dm755 usr/local/bin/gpspps-symlink.sh /usr/local/bin/gpspps-symlink.sh
 sudo install -Dm755 usr/local/bin/gps-setup.sh /usr/local/bin/gps-setup.sh
 sudo install -Dm755 usr/local/bin/ublox7-config.sh /usr/local/bin/ublox7-config.sh
-sudo install -Dm644 etc/ntpgps/ntpgps.conf /etc/ntpgps/ntpgps.conf
+sudo install -Dm755 usr/local/bin/ntp-add.sh /usr/local/bin/ntp-add.sh
+sudo install -Dm755 usr/local/bin/ntp-remove.sh /usr/local/bin/ntp-remove.sh
+sudo install -Dm644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template/ntpgps.conf
+sudo install -Dm644 etc/ntpgps/template/nmea_gpspps.conf /etc/ntpgps/template/nmea_gpspps.conf
+sudo install -Dm644 etc/ntpgps/template/nmea_gps.conf /etc/ntpgps/template/nmea_gps.conf
 
 # --- Patch ntp.conf / ntpsec.conf ---
 echo "[*] Patching NTP config..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        if ! grep -q "includefile /etc/ntpgps/ntpgps.conf" "$conf"; then
-            echo "includefile /etc/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
+        if ! grep -q "includefile /tmp/ntpgps/ntpgps.conf" "$conf"; then
+            echo "includefile /tmp/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
         fi
     fi
 done

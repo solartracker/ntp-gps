@@ -1,0 +1,38 @@
+#!/bin/bash
+################################################################################
+# ntp-remove.sh
+#
+# Copyright (C) 2025 Richard Elwell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+################################################################################
+set -euo pipefail
+
+GPSNUM="$1"
+CONF_TMP_PATH="/tmp/ntpgps/ntpgps.conf"
+CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
+NMEA_TMP_PATH="$CONF_TMP_DIR/nmea_gps$GPSNUM.conf"
+
+# Validate GPSNUM
+if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
+  echo "Error: GPSNUM must be an integer between 0 and 255" >&2
+  exit 1
+fi
+
+# Remove the include line safely
+if [ -f "$CONF_TMP_PATH" ]; then
+  sudo sed -i "\#includefile $NMEA_TMP_PATH#d" "$CONF_TMP_PATH"
+fi
+
