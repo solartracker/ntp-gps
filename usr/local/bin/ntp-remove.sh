@@ -25,14 +25,16 @@ CONF_TMP_PATH="/tmp/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 NMEA_TMP_PATH="$CONF_TMP_DIR/nmea_gps$GPSNUM.conf"
 
-# Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
   echo "Error: GPSNUM must be an integer between 0 and 255" >&2
   exit 1
 fi
 
-# Remove the include line safely
 if [ -f "$CONF_TMP_PATH" ]; then
   sudo sed -i "\#includefile $NMEA_TMP_PATH#d" "$CONF_TMP_PATH"
+fi
+
+if [ -f "$NMEA_TMP_PATH" ]; then
+  sudo rm -f "$NMEA_TMP_PATH"
 fi
 
