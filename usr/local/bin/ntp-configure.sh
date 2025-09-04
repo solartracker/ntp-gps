@@ -22,7 +22,7 @@
 set -euo pipefail
 
 TTYNAME="$1"
-HASPPS="$3"
+HASPPS="$2"
 GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
 
 # Validate GPSNUM
