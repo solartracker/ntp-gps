@@ -69,3 +69,6 @@ if [ -n "$CONF_TEMPLATE" ]; then
 
 fi
 
+# Dynamically generate the NTP authentication keys
+/usr/local/bin/ntp-keys.sh
+
