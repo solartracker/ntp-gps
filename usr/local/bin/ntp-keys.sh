@@ -53,11 +53,21 @@ fi
 
 # Link the NTP authentication keys into our NTP configuration
 if [ -f "$KEYS_PATH" ]; then
+
+    if [ ! -d "$CONF_DIR" ]; then
+        sudo mkdir -p "$CONF_DIR"
+    fi
+
+    if [ ! -f "$CONF_PATH" ]; then
+        sudo cp -p /etc/ntpgps/template/ntpgps.conf "$CONF_PATH"
+    fi
+
     if [ ! -d "$CONF_AUTH_DIR" ]; then
         sudo mkdir -p "$CONF_AUTH_DIR"
     fi
 
     if [ ! -f "$CONF_AUTH_PATH" ]; then
+        sudo cp -p /etc/ntpgps/template/keys.conf "$CONF_AUTH_PATH"
         echo "keys /run/ntpgps/ntp.keys"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
         echo "trustedkey 1"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
         echo "controlkey 1"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
