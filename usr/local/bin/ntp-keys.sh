@@ -35,19 +35,23 @@ fi
 
 cd "$KEYS_DIR" || { echo "Failed to change directory to $KEYS_DIR"; exit 1; }
 
-if command -v ntpkeygen >/dev/null 2>&1; then
-    echo "Found ntpkeygen, generating keys..."
-    sudo ntpkeygen
-    rm -f "$CONF_AUTH_PATH"
-elif command -v ntp-keygen >/dev/null 2>&1; then
-    echo "Found ntp-keygen, generating MD5 keys..."
-    sudo ntp-keygen -M
-    rm -f "$CONF_AUTH_PATH"
-else
-    echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
-    exit 1
+# Create new NTP authentication keys if they do not exist
+if [ ! -f "$KEYS_PATH" ]; then
+    if command -v ntpkeygen >/dev/null 2>&1; then
+        echo "Found ntpkeygen, generating keys..."
+        sudo ntpkeygen
+        rm -f "$CONF_AUTH_PATH"
+    elif command -v ntp-keygen >/dev/null 2>&1; then
+        echo "Found ntp-keygen, generating MD5 keys..."
+        sudo ntp-keygen -M
+        rm -f "$CONF_AUTH_PATH"
+    else
+        echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
+        exit 1
+    fi
 fi
 
+# Link the NTP authentication keys into our NTP configuration
 if [ -f "$KEYS_PATH" ]; then
     if [ ! -d "$CONF_AUTH_DIR" ]; then
         sudo mkdir -p "$CONF_AUTH_DIR"

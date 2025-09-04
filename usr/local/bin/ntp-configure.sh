@@ -37,7 +37,10 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
   exit 1
 fi
 
-# Dynamically generate the NTP configuration
+# Dynamically generate the NTP authentication keys
+/usr/local/bin/ntp-keys.sh
+
+# Dynamically generate the NTP device configuration
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
@@ -68,7 +71,4 @@ if [ -n "$CONF_TEMPLATE" ]; then
   fi
 
 fi
-
-# Dynamically generate the NTP authentication keys
-/usr/local/bin/ntp-keys.sh
 
