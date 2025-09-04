@@ -51,7 +51,6 @@
 ################################################################################
 finish() { echo "Sync complete[$?]"; }
 trap finish EXIT
-
 #set -x # debug switch
 set -euo pipefail
 
@@ -76,7 +75,7 @@ update_reference_file() {
         rm -f "$tmpfile"
         exit 1
     else
-        # Atomically replace reference file and save the old version
+        # Atomically replace reference file
         mv "$tmpfile" "$REFERENCE_FILE"
     fi
 }
