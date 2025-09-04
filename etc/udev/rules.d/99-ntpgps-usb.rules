@@ -37,7 +37,8 @@
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
-    SYMLINK+="gps10", ENV{NTP_GPSNUM}="10", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
+    PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
@@ -51,8 +52,9 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
 # - Has the u-blox 7 chipset and is programmable
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
-  ATTRS{manufacturer}=="u-blox AG - www.u-blox.com", ATTRS{product}=="u-blox 7 - GPS/GNSS Receiver", \
-  SYMLINK+="gps20", ENV{NTP_GPSNUM}="20", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-ublox7-config@%k.service"
+    ATTRS{manufacturer}=="u-blox AG - www.u-blox.com", ATTRS{product}=="u-blox 7 - GPS/GNSS Receiver", \
+    PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="gps-ublox7-config@%k.service"
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
@@ -69,7 +71,8 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
-    SYMLINK+="gps30", ENV{NTP_GPSNUM}="30", TAG+="systemd", ENV{SYSTEMD_WANTS}="gps-nopps@%k.service"
+    PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="gps-nopps@%k.service"
 
 ################################################################################
 # Handles creation and removal of /dev/gpsppsN for NTP

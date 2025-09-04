@@ -25,7 +25,8 @@ After=dev-%i.device
 [Service]
 Type=oneshot
 ExecStartPre=/usr/local/bin/ublox7-config.sh %i
-ExecStart=/usr/local/bin/gps-setup.sh %i
+ExecStart=/usr/local/bin/gps-setup.sh %i 0
+ExecStop=/usr/local/bin/gps-stop.sh %i
 RemainAfterExit=yes
 #Restart=on-failure
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# ntp-add.sh
+# ntp-configure.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -21,8 +21,9 @@
 #!/bin/bash
 set -euo pipefail
 
-GPSNUM="$1"
-HASPPS="$2"
+TTYNAME="$1"
+HASPPS="$3"
+GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
 
 # Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
@@ -36,7 +37,8 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
   exit 1
 fi
 
-CONF_TMP_PATH="/tmp/ntpgps/ntpgps.conf"
+# Dynamically generate the NTP configuration
+CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 NMEA_TMP_PATH="$CONF_TMP_DIR/nmea_gps$GPSNUM.conf"
 CONF_TEMPLATE=""

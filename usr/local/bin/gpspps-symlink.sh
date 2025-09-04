@@ -20,8 +20,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-TTYDEV=$(cat /sys/class/pps/$1/path)
-#GPSNUM=$(udevadm info -q property -n "$TTYDEV" --property="NTP_GPSNUM" --value)
-GPSNUM=$(udevadm info -q property -n "$TTYDEV" | grep '^NTP_GPSNUM=' | cut -d= -f2)
+PPSNAME=$1
+TTYDEV=$(cat /sys/class/pps/$PPSNAME/path)
+TTYNAME=${TTYDEV##*/}
+GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
 [ -n "$GPSNUM" ] && echo "gpspps$GPSNUM" || echo ""
 

@@ -22,19 +22,21 @@
 set -euo pipefail
 
 TTYNAME="$1"
+HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
 # Ensure low latency
 setserial "$TTYDEV" low_latency
 
-# Which logical gpsX is this? (follow the symlink)
-#GPSNUM=$(udevadm info -q property -n "$TTYDEV" --property="NTP_GPSNUM" --value)
-GPSNUM=$(udevadm info -q property -n "$TTYDEV" | grep '^NTP_GPSNUM=' | cut -d= -f2)
+# Which logical gpsX is this?
+GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
 
 if [ -z "$GPSNUM" ]; then
   echo "Could not determine gps number for $TTYDEV"
   exit 1
 fi
+
+/usr/local/bin/ntp-configure.sh $TTYNAME $HASPPS
 
 echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 

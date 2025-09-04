@@ -24,7 +24,7 @@ After=dev-%i.device
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/gps-setup.sh %i
+ExecStartPre=/usr/local/bin/gps-setup.sh %i 1
 ExecStart=/usr/sbin/ldattach -d pps /dev/%i
 ExecStop=/usr/local/bin/gps-stop.sh %i
 StandardOutput=journal
