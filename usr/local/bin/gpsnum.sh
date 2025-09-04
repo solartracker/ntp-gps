@@ -25,19 +25,19 @@ N=${TTYNAME##*[!0-9]}
 if [ -n "$N" ]; then
   # USB serial GPS
   if [ "$DEVTYPE" == "ttyUSB" ]; then
-    GPSNUM=$(( 100 + $N ))
+    GPSNUM=$(( 100 + N ))
 
   # ACM modem GPS
   elif [ "$DEVTYPE" == "ttyACM" ]; then
-    GPSNUM=$(( 120 + $N ))
+    GPSNUM=$(( 120 + N ))
 
   # Onboard UART
   elif [ "$DEVTYPE" == "ttyAMA" ]; then
-    GPSNUM=$(( 140 + $N ))
+    GPSNUM=$(( 140 + N ))
 
   # Legacy/PCI serial
   elif [ "$DEVTYPE" == "ttyS" ]; then
-    GPSNUM=$(( 160 + $N ))
+    GPSNUM=$(( 160 + N ))
 
   # Error: Unsupported
   else
