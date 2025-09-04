@@ -25,8 +25,11 @@ TTYNAME="$1"
 HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
-# Ensure low latency
-setserial "$TTYDEV" low_latency
+# Validate HASPPS (0 or 1)
+if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
+  echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
+  exit 1
+fi
 
 # Which logical gpsX is this?
 GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
@@ -36,7 +39,8 @@ if [ -z "$GPSNUM" ]; then
   exit 1
 fi
 
-/usr/local/bin/ntp-configure.sh $TTYNAME $HASPPS
+# Ensure low latency
+setserial "$TTYDEV" low_latency
 
 echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
