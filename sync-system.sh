@@ -57,7 +57,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REFERENCE_FILE="$PROJECT_DIR/.sync-system-filelist"
-MAX_FILES=15
+MAX_FILES=20
 
 update_reference_file() {
     local tmpfile
@@ -67,10 +67,18 @@ update_reference_file() {
     find . -mindepth 2 \( \
         -path "./.git/*" \
         \) -prune -o -type f -print \
-    | cut -c3- > "$tmpfile"
+    | cut -c3- >"$tmpfile"
 
-    # Atomically replace reference file
-    mv "$tmpfile" "$REFERENCE_FILE"
+    # Safety check.  Increase this limit as needed.
+    NUM_FILES=$(wc -l <"$tmpfile")
+    if (( NUM_FILES > MAX_FILES )); then
+        echo "ERROR: Too many files ($NUM_FILES). Aborting to prevent accidental mass overwrite." >&2
+        rm -f "$tmpfile"
+        exit 1
+    else
+        # Atomically replace reference file and save the old version
+        mv "$tmpfile" "$REFERENCE_FILE"
+    fi
 }
 
 cd "$PROJECT_DIR"
@@ -100,13 +108,6 @@ fi
 
 # Update reference file list to new state
 update_reference_file
-
-# Safety check.  Increase this limit as needed.
-NUM_FILES=$(wc -l <"$REFERENCE_FILE")
-if (( NUM_FILES > MAX_FILES )); then
-    echo "ERROR: Too many files ($NUM_FILES). Aborting to prevent accidental mass overwrite." >&2
-    exit 1
-fi
 
 # Now do a normal two-way rsync
 #echo "Syncing system -> project (only newer files)"
