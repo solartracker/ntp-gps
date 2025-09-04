@@ -23,8 +23,8 @@
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
 #
-# Use this UDEV rule or a copy of it when your GPS device:
-# - FTDI USB-to-Serial converter
+# FTDI USB-to-Serial converter connected to GPS module
+#
 # - USB-to-Serial converter is connected to a GPS module: VCC,GND,TX,RX,DCD
 # - PPS line of the GPS module is wired to the DCD line of the USB-to-Serial converter
 # - GPS module with PPS support
@@ -39,12 +39,17 @@
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
     ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
+### HOWTO: include filter on unique serial number
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+#    ATTRS{serial}=="A600KP6X", \
+#    PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+#    ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
 #
-# Use this UDEV rule or a copy of it when your GPS device:
-# - GPS device is a single USB stick, example: VK172
+# GPS device is a single USB stick, example: USB Dongle GPS Receiver VK-172
+#
 # - GPS only, no PPS
 # - No battery-backed RAM or flash memory to store configuration settings
 # - Requires additional programming when plugged in, to turn on $GPZDA messages and 
@@ -59,8 +64,8 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
 #
-# Use this UDEV rule or a copy of it when your GPS device:
-# - ch341 USB-to-Serial converter without a serial number
+# ch341 USB-to-Serial converter connected to GPS module
+#
 # - USB-to-Serial converter is connected to a GPS module: VCC,GND,TX,RX
 # - GPS module without PPS or PPS is not passed through the UART
 # - GPS module has battery-backed RAM or flash memory to store settings
@@ -69,6 +74,7 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
 #   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS 
 #     receiver can result in the output of $GNZDA messages which NTP does not support
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
+# - Usually never has a unique serial number.
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
     PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \

@@ -55,13 +55,16 @@ convert_to_seconds() {
 }
 
 if command -v systemctl >/dev/null; then
-    PEERLINE=$(ntpq -p 2>/dev/null | grep "NMEA($GPSNUM)" || true)
+    TMP_NTPQ=$(mktemp)
+    ntpq -pn 2>/dev/null >$TMP_NTPQ
+
+    PEERLINE=$(grep "NMEA($GPSNUM)" $TMP_NTPQ || true)
 
     if [ -z "$PEERLINE" ]; then
         MSG="NTP does not see NMEA($GPSNUM), restarting NTP..."
         echo "$MSG"
         logger -t gps-setup "$MSG"
-        systemctl restart ntp.service || true
+        sudo systemctl restart ntp.service || true
     else
         # Extract type (4th column)
         TYPE=$(echo "$PEERLINE" | awk '{print $4}')
@@ -83,15 +86,17 @@ if command -v systemctl >/dev/null; then
             MSG="NMEA($GPSNUM) stuck (when=$WHEN_RAW > poll=$POLL_RAW), restarting NTP..."
             echo "$MSG"
             logger -t gps-setup "$MSG"
-            systemctl restart ntp.service || true
+            sudo systemctl restart ntp.service || true
         elif [ "$REACH" -eq 0 ]; then
             MSG="NMEA($GPSNUM) unreachable (reach=0), restarting NTP..."
             echo "$MSG"
             logger -t gps-setup "$MSG"
-            systemctl restart ntp.service || true
+            sudo systemctl restart ntp.service || true
         else
             echo "NMEA($GPSNUM) present and healthy (when=$WHEN_RAW, poll=$POLL_RAW, reach=$REACH)"
         fi
     fi
+
+    rm -f $TMP_NTPQ
 fi
 
