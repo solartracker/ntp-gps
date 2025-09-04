@@ -67,15 +67,5 @@ if [ -n "$CONF_TEMPLATE" ]; then
     fi
   fi
 
-  # Ensure permanent system-wide config includes the tmp config
-  if [ ! -f /etc/ntpgps/ntpgps.conf ]; then
-    sudo cp -p /etc/ntpgps/template/ntpgps.conf /etc/ntpgps/ntpgps.conf
-  fi
-
-  if [ -f /etc/ntpgps/ntpgps.conf ]; then
-    if ! sudo grep -Fxq "includefile $CONF_TMP_PATH" /etc/ntpgps/ntpgps.conf; then
-      echo "includefile $CONF_TMP_PATH" | sudo tee -a /etc/ntpgps/ntpgps.conf >/dev/null
-    fi
-  fi
 fi
 
