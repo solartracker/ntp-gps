@@ -40,13 +40,13 @@ fi
 # Dynamically generate the NTP configuration
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
-NMEA_TMP_PATH="$CONF_TMP_DIR/nmea_gps$GPSNUM.conf"
+NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 CONF_TEMPLATE=""
 
 if [ "$HASPPS" == "0" ]; then
-  CONF_TEMPLATE="nmea_gps.conf"
+  CONF_TEMPLATE="nmea-gps.conf"
 elif [ "$HASPPS" == "1" ]; then
-  CONF_TEMPLATE="nmea_gps_pps.conf"
+  CONF_TEMPLATE="nmea-gps-pps.conf"
 fi
 
 if [ -n "$CONF_TEMPLATE" ]; then

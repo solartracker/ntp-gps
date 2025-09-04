@@ -38,15 +38,19 @@ sudo rm -f /etc/modules-load.d/ntpgps-pps.conf
 sudo rm -f /etc/systemd/system/gps-pps@.service
 sudo rm -f /etc/systemd/system/gps-nopps@.service
 sudo rm -f /etc/systemd/system/gps-ublox7-config@.service
+sudo rm -f /usr/local/bin/gpsnum.sh
 sudo rm -f /usr/local/bin/gpspps-symlink.sh
 sudo rm -f /usr/local/bin/gps-setup.sh
+sudo rm -f /usr/local/bin/gps-stop.sh
+sudo rm -f /usr/local/bin/ntp-configure.sh
+sudo rm -f /usr/local/bin/ntp-remove.sh
 sudo rm -f /usr/local/bin/ublox7-config.sh
 sudo rm -rf /etc/ntpgps/
 
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        sudo sed -i '/includefile \/tmp\/ntpgps\/ntpgps.conf/d' "$conf"
+        sudo sed -i '/includefile \/run\/ntpgps\/ntpgps.conf/d' "$conf"
     fi
 done
 

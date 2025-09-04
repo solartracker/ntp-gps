@@ -72,21 +72,23 @@ sudo install -Dm644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d/ntpgp
 sudo install -Dm644 etc/systemd/system/gps-pps@.service /etc/systemd/system/gps-pps@.service
 sudo install -Dm644 etc/systemd/system/gps-nopps@.service /etc/systemd/system/gps-nopps@.service
 sudo install -Dm644 etc/systemd/system/gps-ublox7-config@.service /etc/systemd/system/gps-ublox7-config@.service
+sudo install -Dm755 usr/local/bin/gpsnum.sh /usr/local/bin/gpsnum.sh
 sudo install -Dm755 usr/local/bin/gpspps-symlink.sh /usr/local/bin/gpspps-symlink.sh
 sudo install -Dm755 usr/local/bin/gps-setup.sh /usr/local/bin/gps-setup.sh
-sudo install -Dm755 usr/local/bin/ublox7-config.sh /usr/local/bin/ublox7-config.sh
-sudo install -Dm755 usr/local/bin/ntp-add.sh /usr/local/bin/ntp-add.sh
+sudo install -Dm755 usr/local/bin/gps-stop.sh /usr/local/bin/gps-stop.sh
+sudo install -Dm755 usr/local/bin/ntp-configure.sh /usr/local/bin/ntp-configure.sh
 sudo install -Dm755 usr/local/bin/ntp-remove.sh /usr/local/bin/ntp-remove.sh
+sudo install -Dm755 usr/local/bin/ublox7-config.sh /usr/local/bin/ublox7-config.sh
 sudo install -Dm644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template/ntpgps.conf
-sudo install -Dm644 etc/ntpgps/template/nmea_gpspps.conf /etc/ntpgps/template/nmea_gpspps.conf
-sudo install -Dm644 etc/ntpgps/template/nmea_gps.conf /etc/ntpgps/template/nmea_gps.conf
+sudo install -Dm644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template/nmea-gps-pps.conf
+sudo install -Dm644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template/nmea-gps.conf
 
 # --- Patch ntp.conf / ntpsec.conf ---
 echo "[*] Patching NTP config..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        if ! grep -q "includefile /tmp/ntpgps/ntpgps.conf" "$conf"; then
-            echo "includefile /tmp/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
+        if ! grep -q "includefile /run/ntpgps/ntpgps.conf" "$conf"; then
+            echo "includefile /run/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
         fi
     fi
 done

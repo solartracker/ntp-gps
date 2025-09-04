@@ -30,7 +30,7 @@ fi
 
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
-NMEA_TMP_PATH="$CONF_TMP_DIR/nmea_gps$GPSNUM.conf"
+NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 
 if [ -f "$CONF_TMP_PATH" ]; then
   sudo sed -i "\#includefile $NMEA_TMP_PATH#d" "$CONF_TMP_PATH"
