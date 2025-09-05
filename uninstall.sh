@@ -41,12 +41,16 @@ sudo rm -f /usr/local/bin/ntp-remove.sh
 sudo rm -f /usr/local/bin/gps-setup.sh
 sudo rm -f /usr/local/bin/ntp-configure.sh
 sudo rm -f /usr/local/bin/gpsnum.sh
-sudo rm -rf /etc/ntpgps/
+sudo rm -f /etc/ntpgps/template/nmea-gps.conf
+sudo rm -f /etc/ntpgps/template/nmea-gps-pps.conf
+sudo rm -f /etc/ntpgps/template/keys.conf
+sudo rm -f /etc/ntpgps/template/ntpgps.conf
 sudo rm -f /etc/udev/rules.d/99-ntpgps-usb.rules
 sudo rm -f /etc/modules-load.d/ntpgps-pps.conf
 sudo rm -f /etc/systemd/system/gps-nopps@.service
 sudo rm -f /etc/systemd/system/gps-pps@.service
 sudo rm -f /etc/systemd/system/gps-ublox7-config@.service
+sudo rmdir --ignore-fail-on-non-empty /etc/ntpgps
 
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
