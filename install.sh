@@ -116,6 +116,7 @@ for entry in "${files[@]}"; do
     if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
         dest_file="$dest/uninstall-ntpgps.sh"
         sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
+        echo "[*] Binding $dest_file to repo directory $SCRIPT_DIR..."
         sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$dest_file"
     else
         dest_file="$dest/$(basename "$src")"
