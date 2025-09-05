@@ -20,6 +20,13 @@
 ################################################################################
 set -e
 
+# --- Check if the user can run sudo ---
+if ! sudo -n true 2>/dev/null; then
+    echo "This script requires sudo privileges."
+    echo "Please ensure your user can run sudo and try again."
+    exit 1
+fi
+
 install_dependencies() {
     local need_update=0
 
@@ -67,24 +74,48 @@ install_dependencies
 
 # --- Install files ---
 echo "[*] Installing files..."
-sudo install -Dm755 usr/local/bin/ublox7-config.sh /usr/local/bin/ublox7-config.sh
-sudo install -Dm755 usr/local/bin/gps-stop.sh /usr/local/bin/gps-stop.sh
-sudo install -Dm755 usr/local/bin/gpspps-symlink.sh /usr/local/bin/gpspps-symlink.sh
-sudo install -Dm755 usr/local/bin/ntp-keys.sh /usr/local/bin/ntp-keys.sh
-sudo install -Dm755 usr/local/bin/ntp-remove.sh /usr/local/bin/ntp-remove.sh
-sudo install -Dm755 usr/local/bin/gps-setup.sh /usr/local/bin/gps-setup.sh
-sudo install -Dm755 usr/local/bin/ntp-configure.sh /usr/local/bin/ntp-configure.sh
-sudo install -Dm755 usr/local/bin/gpsnum.sh /usr/local/bin/gpsnum.sh
-sudo install -Dm755 uninstall.sh /usr/local/bin/uninstall-ntpgps.sh
-sudo install -Dm644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template/nmea-gps.conf
-sudo install -Dm644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template/nmea-gps-pps.conf
-sudo install -Dm644 etc/ntpgps/template/keys.conf /etc/ntpgps/template/keys.conf
-sudo install -Dm644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template/ntpgps.conf
-sudo install -Dm644 etc/udev/rules.d/99-ntpgps-usb.rules /etc/udev/rules.d/99-ntpgps-usb.rules
-sudo install -Dm644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d/ntpgps-pps.conf
-sudo install -Dm644 etc/systemd/system/gps-nopps@.service /etc/systemd/system/gps-nopps@.service
-sudo install -Dm644 etc/systemd/system/gps-pps@.service /etc/systemd/system/gps-pps@.service
-sudo install -Dm644 etc/systemd/system/gps-ublox7-config@.service /etc/systemd/system/gps-ublox7-config@.service
+
+# Format: "mode source destination"
+files=(
+    "755 usr/local/bin/ublox7-config.sh /usr/local/bin"
+    "755 usr/local/bin/gps-stop.sh /usr/local/bin"
+    "755 usr/local/bin/gpspps-symlink.sh /usr/local/bin"
+    "755 usr/local/bin/ntp-keys.sh /usr/local/bin"
+    "755 usr/local/bin/ntp-remove.sh /usr/local/bin"
+    "755 usr/local/bin/gps-setup.sh /usr/local/bin"
+    "755 usr/local/bin/ntp-configure.sh /usr/local/bin"
+    "755 usr/local/bin/gpsnum.sh /usr/local/bin"
+    "755 uninstall.sh /usr/local/bin"
+    "644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template"
+    "644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template"
+    "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
+    "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
+    "644 etc/udev/rules.d/99-ntpgps-usb.rules /etc/udev/rules.d"
+    "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
+    "644 etc/systemd/system/gps-nopps@.service /etc/systemd/system"
+    "644 etc/systemd/system/gps-pps@.service /etc/systemd/system"
+    "644 etc/systemd/system/gps-ublox7-config@.service /etc/systemd/system"
+)
+
+# --- Copy files, create directories, set permissions ---
+for entry in "${files[@]}"; do
+    mode=${entry%% *}                  # First field
+    rest=${entry#* }                   
+    src=${rest%% *}                    # Second field
+    dest=${rest#* }                    # Third field
+
+    sudo mkdir -p "$dest"
+
+    # Special rename for uninstall.sh
+    if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
+        dest_file="$dest/uninstall-ntpgps.sh"
+    else
+        dest_file="$dest/$(basename "$src")"
+    fi
+
+    sudo cp -af --no-preserve=ownership --remove-destination "$src" "$dest_file"
+    sudo chmod "$mode" "$dest_file"
+done
 
 # --- Patch ntp.conf / ntpsec.conf ---
 echo "[*] Patching NTP config..."
