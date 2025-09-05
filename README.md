@@ -14,7 +14,7 @@ On the solar tracker, the **Raspberry Pi** acts as the **Gateway**.
 - It receives commands from and sends commands to the tracker controller.  
 - The tracker controller is responsible for:
   - Calculating the sun’s position using fixed latitude/longitude coordinates and the current date and time.  
-  - Running the motors to control motion on the two axes.  
+  - Running the motors to control **elevation and azimuth** of the two axes.  
 
 Accurate time on the Gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
 
