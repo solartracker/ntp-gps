@@ -18,39 +18,69 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
+finish() { echo "Uninstall finished[$?]"; }
+trap finish EXIT
+#set -x #debug switch
 set -e
 
-#echo "[*] Stopping services..."
-#sudo systemctl stop gps-pps@.service || true
-#sudo systemctl stop gps-no-pps@.service || true
-#sudo systemctl stop gps-ublox7@.service || true
+# --- Check if the user can run sudo ---
+if ! sudo -n true 2>/dev/null; then
+    echo "This script requires sudo privileges."
+    echo "Please ensure your user can run sudo and try again."
+    exit 1
+fi
 
-#echo "[*] Disabling services..."
-#sudo systemctl disable gps-pps@.service || true
-#sudo systemctl disable gps-nopps@.service || true
-#sudo systemctl disable gps-ublox7-config@.service || true
-#sudo systemctl daemon-reload
+echo "[*] Stopping and disabling GPS services for all devices..."
+
+services=(
+    "gps-pps@.service"
+    "gps-nopps@.service"
+    "gps-ublox7-config@.service"
+)
+
+for service_name in "${services[@]}"; do
+    # List all running instances of this template
+    instances=$(systemctl list-units --type=service --state=running \
+                | awk '{print $1}' | grep "^${service_name%@.}@" || true)
+    
+    for svc in $instances; do
+        echo "[*] Stopping $svc ..."
+        sudo systemctl stop "$svc" || true
+        echo "[*] Disabling $svc ..."
+        sudo systemctl disable "$svc" || true
+    done
+done
+
+# Reload systemd daemon
+sudo systemctl daemon-reload
+
+echo "[*] GPS services stopped and disabled."
 
 echo "[*] Removing installed files..."
-[ -f ./.sync-system-filelist ] && rm -f ./.sync-system-filelist
-sudo rm -f /usr/local/bin/ublox7-config.sh
-sudo rm -f /usr/local/bin/gps-stop.sh
-sudo rm -f /usr/local/bin/gpspps-symlink.sh
-sudo rm -f /usr/local/bin/ntp-keys.sh
-sudo rm -f /usr/local/bin/ntp-remove.sh
-sudo rm -f /usr/local/bin/gps-setup.sh
-sudo rm -f /usr/local/bin/ntp-configure.sh
-sudo rm -f /usr/local/bin/gpsnum.sh
-sudo rm -f /etc/ntpgps/template/nmea-gps.conf
-sudo rm -f /etc/ntpgps/template/nmea-gps-pps.conf
-sudo rm -f /etc/ntpgps/template/keys.conf
-sudo rm -f /etc/ntpgps/template/ntpgps.conf
-sudo rm -f /etc/udev/rules.d/99-ntpgps-usb.rules
-sudo rm -f /etc/modules-load.d/ntpgps-pps.conf
-sudo rm -f /etc/systemd/system/gps-nopps@.service
-sudo rm -f /etc/systemd/system/gps-pps@.service
-sudo rm -f /etc/systemd/system/gps-ublox7-config@.service
-sudo rmdir --ignore-fail-on-non-empty /etc/ntpgps
+files=(
+    /usr/local/bin/ublox7-config.sh
+    /usr/local/bin/gps-stop.sh
+    /usr/local/bin/gpspps-symlink.sh
+    /usr/local/bin/ntp-keys.sh
+    /usr/local/bin/ntp-remove.sh
+    /usr/local/bin/gps-setup.sh
+    /usr/local/bin/ntp-configure.sh
+    /usr/local/bin/gpsnum.sh
+    /etc/ntpgps/template/nmea-gps.conf
+    /etc/ntpgps/template/nmea-gps-pps.conf
+    /etc/ntpgps/template/keys.conf
+    /etc/ntpgps/template/ntpgps.conf
+    /etc/udev/rules.d/99-ntpgps-usb.rules
+    /etc/modules-load.d/ntpgps-pps.conf
+    /etc/systemd/system/gps-nopps@.service
+    /etc/systemd/system/gps-pps@.service
+    /etc/systemd/system/gps-ublox7-config@.service
+)
+
+for f in "${files[@]}"; do
+    sudo rm -vf "$f"
+done
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps
 
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
@@ -61,6 +91,23 @@ done
 
 echo "[*] Reloading udev rules..."
 sudo udevadm control --reload-rules
+
+################################################################################
+# Purge .sync-system-filelist
+#
+SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
+REPO_DIR="__REPO_DIR__"
+
+if [ -f "$SCRIPT_DIR/.sync-system-filelist" ]; then
+    echo "[*] Removing $SCRIPT_DIR/.sync-system-filelist"
+    rm -vf "$SCRIPT_DIR/.sync-system-filelist"
+elif [ -n "$REPO_DIR" ] && [ -f "$REPO_DIR/.sync-system-filelist" ]; then
+    echo "[*] Removing $REPO_DIR/.sync-system-filelist"
+    rm -vf "$REPO_DIR/.sync-system-filelist"
+else
+    echo "[*] No .sync-system-filelist found to remove."
+fi
+################################################################################
 
 echo "[+] Uninstall complete. Note: dependent packages (setserial, pps-tools) are still installed."
 

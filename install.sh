@@ -18,6 +18,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
+finish() { echo "Install finished[$?]"; }
+trap finish EXIT
+#set -x #debug switch
 set -e
 
 # --- Check if the user can run sudo ---
@@ -26,6 +29,9 @@ if ! sudo -n true 2>/dev/null; then
     echo "Please ensure your user can run sudo and try again."
     exit 1
 fi
+
+# Absolute path to the directory where install.sh resides
+SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
 
 install_dependencies() {
     local need_update=0
@@ -104,16 +110,18 @@ for entry in "${files[@]}"; do
     src=${rest%% *}                    # Second field
     dest=${rest#* }                    # Third field
 
-    sudo mkdir -p "$dest"
+    sudo mkdir -vp "$dest"
 
     # Special rename for uninstall.sh
     if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
         dest_file="$dest/uninstall-ntpgps.sh"
+        sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
+        sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$dest_file"
     else
         dest_file="$dest/$(basename "$src")"
+        sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
     fi
 
-    sudo cp -af --no-preserve=ownership --remove-destination "$src" "$dest_file"
     sudo chmod "$mode" "$dest_file"
 done
 
