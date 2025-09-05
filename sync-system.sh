@@ -3,35 +3,36 @@
 # sync-system.sh
 #
 # Developer-only utility script.
-# Not intended for end users — used by project developers to keep the source
-# tree and installed system files in sync.
+# Not intended for end users or production environments.
+# Used by developers on test machines to sync the project source tree with
+# installed system files.
 #
 # Behavior:
-#   • Performs bi-directional sync between project tree and system files.
+#   • Performs bi-directional sync between the project tree and system files.
 #   • Only syncs files in subdirectories (root-level project files are skipped).
-#   • File timestamps decide which side is newer (last modified wins).
-#   • Deletions are tracked with a reference file list:
-#       - If a file existed previously but is missing on one side, it will be
-#         deleted from the other side as well.
-#       - If the reference file list does not exist, no deletions occur
+#   • File timestamps determine which version is newer (last modified wins).
+#   • Deletions are tracked using a reference file list:
+#       - Files missing on one side are removed from the other.
+#       - If the reference file list does not exist, deletions are skipped
 #         (first sync is always safe).
 #   • Reference file list is updated after each successful sync.
 #
 # Reference file:
-#   .sync-system-filelist
+#   $PROJECT_DIR/.sync-system-filelist (hidden in project root)
 #   - Stores the list of known files from the last sync.
-#   - Deleting this file resets deletion tracking. The next sync will act as
-#     if it were the first run (no deletions until list is rebuilt).
+#   - Deleting this file resets deletion tracking. The next sync behaves
+#     as if it were the first run.
 #
 # Intended workflow:
-#   1. Edit files in the system (or project).
+#   1. Edit files in the project tree or system.
 #   2. Run sync-system.sh to push/pull changes both ways.
 #   3. Deletions propagate automatically after the first sync.
 #
 # SAFETY NOTE:
-#   Running this script outside of the development workflow may delete
-#   important system or project files. Do not use unless you understand
-#   the project’s sync mechanism.
+#   Running this script outside the development workflow may delete
+#   critical system or project files. Only run it if you understand the
+#   synchronization mechanism.
+#   Requires sudo for system-side changes.
 #
 # Copyright (C) 2025 Richard Elwell
 #
