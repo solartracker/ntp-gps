@@ -131,7 +131,7 @@ cd ntp-gps
 Run the installer:
 
 ```bash
-sudo ./install.sh
+./install.sh
 ```
 
 - The installer sets up the necessary components for your GPS to be used as a **local NTP reference clock**.
@@ -146,7 +146,7 @@ sudo ./install.sh
 To remove the installed components:
 
 ```bash
-sudo ./uninstall.sh
+./uninstall.sh
 ```
 
 This cleans up configuration files and installed scripts.
