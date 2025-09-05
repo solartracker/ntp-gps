@@ -1,152 +1,142 @@
-# NTP-GPS
+# NTP-GPS Integration for Raspberry Pi
 
-**Accurate offline time synchronization for solar trackers using a USB GPS receiver.**
+This project provides a lightweight way to integrate USB GPS receivers with `ntpd` (via NTPsec) on a Raspberry Pi 4B. It is designed for minimal system impact, so it coexists cleanly with vendor-supplied software.
 
-NTP-GPS ensures your solar tracker maintains precise system time even when the internet is unavailable, allowing your 2-axis tracker to reliably calculate the sun’s position.
-
----
-
-## Why This Project Exists
-
-A 2-axis solar tracker relies on **precise time** to calculate the sun’s position using:
-
-- Current **date and time** (including seconds)
-- **Geographic coordinates** (latitude and longitude)
-
-If the system loses internet connectivity, it cannot reliably sync its clock with online NTP servers.
-
-**NTP-GPS** solves this by:
-
-- Providing a **local, highly accurate time source** via a USB GPS receiver.
-- Maintaining system time **offline**, ensuring your tracker points correctly.
-- Allowing **runtime NTP configuration** without restarting the daemon, keeping your tracker running smoothly.
+The main use case is a solar tracker controller that relies on accurate time to calculate the sun’s position. Since the controller’s onboard RTC (STMicroelectronics **M41T93ZMY6**) is not very accurate compared to a DS3231, a reliable external time source is required. This project ensures that the Raspberry Pi gateway keeps accurate time from both the Internet and a GPS receiver.
 
 ---
 
-## Why Accurate Time Matters
+## System Overview
 
-The tracker controller uses an **STMicroelectronics M41T93ZMY6 RTC** as its system clock. Compared to more accurate RTCs like the DS3231:
+On the solar tracker, the **Raspberry Pi** acts as the **Gateway**.  
 
-- Its **ppm accuracy is much worse**, so over time the tracker can drift **several minutes or more** if not updated by the Raspberry Pi gateway.
-- It lacks **temperature compensation**, so in hot or cold environments the drift worsens.
-- For a 2-axis solar tracker, this can cause the controller to **constantly “chase the sun” slightly off-target**, reducing energy efficiency if it relies solely on the onboard RTC.
+- The Gateway allows **remote monitoring and control** by the manufacturer.  
+- It receives commands from and sends commands to the tracker controller.  
+- The tracker controller is responsible for:
+  - Calculating the sun’s position using fixed latitude/longitude coordinates and the current date and time.  
+  - Running the motors to control motion on the two axes.  
 
-Using **NTP-GPS on the Raspberry Pi gateway** ensures the tracker receives **accurate time updates**, keeping it correctly aligned even in extreme environments or during internet outages.
-
----
-
-## System Architecture
-
-The NTP-GPS setup is designed for a **solar tracker system** using a **Raspberry Pi 4B as the gateway**.
-
-- The **Raspberry Pi** runs the NTP daemon and acts as the **local time authority** for the solar tracker.
-- GPS receivers connected via USB provide a **highly accurate time source**, ensuring the tracker can calculate the sun’s position even when internet access is unavailable.
-- The **gateway software** on the Raspberry Pi:
-  - Configures the tracker controller.
-  - Allows **remote monitoring** by the manufacturer.
-  - Interfaces with NTP-GPS for reliable timekeeping.
-
-> This design ensures the tracker operates autonomously, keeps accurate logs, and remains correctly oriented toward the sun at all times.
-
----
-
-## Redundancy and Reliability
-
-Accurate timekeeping is critical, but relying on **only one source** can be risky:
-
-- **Internet NTP peers**: If the internet is down, your tracker could drift.
-- **GPS local reference clock**: Provides highly accurate offline time.
-- **Combined approach**: Using both internet peers and GPS ensures robustness:
-  - If GPS fails (e.g., jamming, satellite issues, or attacks), the tracker can still sync with internet peers hosting **real atomic clocks**.
-  - If the internet is down, GPS maintains system accuracy.
-
-> This dual-source setup provides **robust and reliable timekeeping**, ensuring your solar tracker stays precisely aligned under a wide range of conditions.
-
----
-
-## Minimal Impact Design
-
-All NTP-GPS runtime configuration is isolated from the main NTP configuration to ensure **USB plug-and-play** works safely and other manufacturer programs are unaffected.
-
-- **Single includefile** in `/etc/ntp.conf`:
-
-```conf
-includefile /run/ntpgps/ntpgps.conf
-```
-
-- **How it works:**
-  - NTP reads additional configuration from `/run/ntpgps/ntpgps.conf`.
-  - All GPS peers, ephemeral keys (`ntp.keys`), and runtime peer additions/removals are handled in this directory.
-  - If no GPS is plugged in, the file may be empty or missing — NTP continues running with internet peers.
-  - Dynamic commands using `ntpq -c ":config peer"` or `:config unpeer` modify the running daemon **without touching `/etc/ntp.conf`**.
-
-- **Ephemeral keys:**
-  - Generated at runtime under `/run/ntpgps/` using `ntp-keygen` or `ntpkeygen` with MD5 or AES.
-  - Ensures keys are fresh for each boot and isolated from the system.
-
-> This design ensures your NTP-GPS setup is fully isolated, lightweight, and safe for coexisting with other software on the Raspberry Pi.
+Accurate time on the Gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
 
 ---
 
 ## Features
 
-- Automatic detection of USB GPS devices.
-- Synchronizes system time via GPS using NTP.
-- Optional runtime configuration of NTP through `ntpq`.
-- Simple install and uninstall scripts.
+- Plug-and-play support for USB GPS receivers (with or without PPS).
+- Automatically generates secure runtime keys with `ntpkeygen` (AES).
+- Dynamically updates `ntpd` configuration without requiring a restart.
+- Supports both **Internet NTP peers** and a **local GPS reference clock**.
+- Minimal changes to system configuration:
+  - Only one line is added to `/etc/ntp.conf`:
+    ```conf
+    includefile /run/ntpgps/ntpgps.conf
+    ```
 
 ---
 
-## Requirements
+## Why Both GPS and Internet?
 
-- Linux system with `ntpd` or compatible NTP daemon.
-- USB GPS receiver (NMEA or PPS compatible).
-- `sudo` privileges for installation and NTP configuration.
+Most people understand Internet outages, so having GPS for time synchronization is a no-brainer. But GPS can also fail — due to jamming, interference, or even deliberate attacks on satellites.  
+
+By combining both sources:
+- **GPS** provides atomic-clock precision locally.
+- **Internet peers** provide redundancy if GPS is unavailable.
+
+### RTC Limitations
+
+The tracker controller uses the **STMicroelectronics M41T93ZMY6 RTC** as its system clock. Compared to the DS3231:
+
+- Its **ppm accuracy is worse**, so over time the tracker can drift several minutes or more if it isn’t updated by the gateway.
+- No temperature compensation, so in hot or cold environments the drift worsens.
+- For a solar tracker, this could mean the controller is constantly “chasing the sun” slightly off-target if relying purely on the RTC instead of GPS or light sensors.
 
 ---
 
-## Tested Hardware
+## Example NTP Status
 
-NTP-GPS has been tested with the following devices:
+Example combined output showing both Internet peers and GPS together (`ntpq -p`):
 
-| USB Adapter / Interface | GPS Device | PPS Support |
-|-------------------------|-----------|------------|
-| FTDI USB-to-Serial      | Reyax RY725AI, RY825AI | Yes (PPS line discipline) |
-| CH341 USB-to-Serial     | Reyax RY725AI, RY825AI | No PPS |
-| USB Dongle GPS Receiver | VK-172   | N/A |
+```
+     remote                                   refid      st t when poll reach   delay   offset   jitter
+=======================================================================================================
+ 0.debian.pool.ntp.org                   .POOL.          16 p    -  256    0   0.0000   0.0000   0.0010
+ 1.debian.pool.ntp.org                   .POOL.          16 p    -   64    0   0.0000   0.0000   0.0010
+ 2.debian.pool.ntp.org                   .POOL.          16 p    -  256    0   0.0000   0.0000   0.0010
+ 3.debian.pool.ntp.org                   .POOL.          16 p    -  256    0   0.0000   0.0000   0.0010
+oNMEA(100)                               .GPS.            0 l   40   64  377   0.0000  -0.0017   0.0096
+*50.205.57.38                            .GPS.            1 u   63   64  377  16.8398 103.7795   1.8259
++chi2.us.ntp.li                          204.9.54.119     2 u   54   64  377  26.5118 100.1912   1.0062
+-s2-a.time.mci1.us.rozint.net            204.117.185.216  2 u    1  128  377  39.8138 100.4103   2.0381
+-stl1.us.ntp.li                          17.253.26.123    2 u   78  128  375  39.0835 102.2884   1.3697
+-time.richie.net                         97.183.206.88    2 u   12  128  377  20.9658 103.1317   1.2163
++nyc3.us.ntp.li                          17.253.2.35      2 u   17   64  377  16.0761 101.0030   1.2141
+```
 
-> Note: PPS (Pulse Per Second) improves timing accuracy for NTP, but devices without PPS can still be used.
+---
+
+## Tested Devices
+
+This has been verified to work with:
+
+- **FTDI USB-to-Serial** connected to Reyax RY725AI / RY825AI (with PPS line discipline).
+- **CH341 USB-to-Serial** connected to Reyax RY725AI / RY825AI (without PPS).
+- **USB Dongle GPS Receiver VK-172**.
 
 ---
 
 ## Installation
 
-Clone the repository:
-
-```bash
-git clone https://github.com/solartracker/ntp-gps.git
-cd ntp-gps
-```
-
-Run the installer:
+Clone the repo, then run:
 
 ```bash
 ./install.sh
 ```
 
-- The installer sets up the necessary components for your GPS to be used as a **local NTP reference clock**.
-- Supports both the classic `ntp-keygen` and the latest `ntpkeygen` (including AES keys) internally.
-
-> End users **do not need to manage keys manually**; this is handled automatically for runtime NTP configuration.
+- Requires `sudo` privileges.  
+- Adds the minimal configuration hook (`includefile`) to your system’s `/etc/ntp.conf`.  
+- Installs udev rules and scripts that automatically configure GPS devices at runtime.
 
 ---
 
 ## Uninstallation
 
-To remove the installed components:
+To remove all installed files and configuration:
 
 ```bash
 ./uninstall.sh
 ```
 
-This cleans up configuration files and installed scripts.
+Requires `sudo` privileges.
+
+---
+
+## Notes for Developers
+
+- Runtime configuration is managed through `/run/ntpgps/ntpgps.conf`.  
+- NTP control can be performed dynamically using `ntpq` with runtime keys. Example:
+
+```bash
+ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config peer 127.127.20.100"
+ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config unpeer 127.127.20.100"
+```
+
+- Keys are regenerated at runtime — if no GPS is connected at boot, `/run/ntpgps/ntp.keys` will not exist.
+
+---
+
+## Runtime Details
+
+- There is only one `includefile` line added to `/etc/ntp.conf`:
+
+```conf
+includefile /run/ntpgps/ntpgps.conf
+```
+
+- This hook allows NTP to pick up all GPS device configuration dynamically.  
+- The configuration starts in `/run` because of how USB plug-and-play works, making runtime management simpler.
+
+---
+
+## Purpose
+
+This software was written to ensure that a **2-axis solar tracker** can always determine the sun’s position, even if Internet connectivity is lost. Combining Internet NTP peers with a GPS reference clock provides maximum reliability in time synchronization.
