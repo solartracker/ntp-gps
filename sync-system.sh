@@ -124,3 +124,28 @@ sudo rsync -azui --relative --ignore-missing-args --omit-dir-times \
 # Update reference file list to new state
 update_reference_file
 
+################################################################################
+sync_file() {
+    if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+        echo "[!] Usage: sync_file <source> <destination>" >&2
+        exit 1
+    fi
+
+    local src="$PROJECT_DIR/$1"
+    local repo_name
+    repo_name=$(basename "$PROJECT_DIR" | tr -cd '[:alnum:]')
+    local dest="${2//%PROJECT_NAME/$repo_name}"
+
+    if [ -f "$src" ]; then
+        sudo rsync -azui --ignore-missing-args --omit-dir-times \
+            --out-format='[UPDATE] '$dest \
+            --no-o --no-g \
+            "$src" "$dest"
+    else
+        echo "[!] $src not found, skipping."
+    fi
+}
+
+# Custom one-way sync for specific top-level files
+sync_file uninstall.sh /usr/local/bin/uninstall-%PROJECT_NAME.sh
+
