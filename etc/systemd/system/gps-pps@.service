@@ -20,18 +20,19 @@
 [Unit]
 Description=GPS PPS binding for %i
 BindsTo=dev-%i.device
-After=dev-%i.device
+After=dev-%i.device ntp.service
 
 [Service]
 Type=simple
 ExecStartPre=/usr/local/bin/ntp-configure.sh %i 1
 ExecStart=/usr/sbin/ldattach -d pps /dev/%i
 ExecStartPost=/usr/local/bin/gps-setup.sh %i 1
-ExecStop=/usr/bin/pkill -f "/usr/sbin/ldattach -d pps /dev/%i" || true
-ExecStopPost=/usr/local/bin/gps-stop.sh %i
+#ExecStop=/usr/bin/pkill -f "/usr/sbin/ldattach -d pps /dev/%i" || true
+ExecStop=/usr/local/bin/gps-stop.sh %i
+KillMode=control-group
+Restart=no
 StandardOutput=journal
 StandardError=journal
-#Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target

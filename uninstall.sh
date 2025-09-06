@@ -33,29 +33,36 @@ fi
 echo "[*] Stopping and disabling GPS services for all devices..."
 
 services=(
-    "gps-pps@.service"
-    "gps-nopps@.service"
-    "gps-ublox7-config@.service"
+    "^gps-pps@.*\.service$"
+    "^gps-nopps@.*\.service$"
+    "^gps-ublox7-config@.*\.service$"
 )
 
+# Stop and disable services
+all_instances=()
 for service_name in "${services[@]}"; do
-    # List all running instances of this template
     instances=$(systemctl list-units --type=service --state=running \
-                | awk '{print $1}' | grep "^${service_name%@.}@" || true)
-    
+                | awk '{print $1}' | grep -E "$service_name") || true
     for svc in $instances; do
+        all_instances+=("$svc")
         echo "[*] Stopping $svc ..."
         sudo systemctl stop "$svc" || true
-        echo "[*] Disabling $svc ..."
-        sudo systemctl disable "$svc" || true
+        #echo "[*] Disabling $svc ..."
+        #sudo systemctl disable "$svc" || true
     done
 done
 
-# Reload systemd daemon
-sudo systemctl daemon-reload
+# Wait until all instances are fully inactive
+for svc in "${all_instances[@]}"; do
+    while systemctl is-active --quiet "$svc"; do
+        sleep 0.5
+    done
+done
 
+sudo systemctl daemon-reload
 echo "[*] GPS services stopped and disabled."
 
+# Remove installed files
 echo "[*] Removing installed files..."
 files=(
     /usr/local/bin/ublox7-config.sh
@@ -82,6 +89,7 @@ for f in "${files[@]}"; do
 done
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps
 
+# Clean NTP configs
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
@@ -89,12 +97,11 @@ for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     fi
 done
 
+# Reload udev rules
 echo "[*] Reloading udev rules..."
 sudo udevadm control --reload-rules
 
-################################################################################
 # Purge .sync-system-filelist
-#
 SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
 REPO_DIR="__REPO_DIR__"
 
@@ -107,7 +114,6 @@ elif [ -n "$REPO_DIR" ] && [ -f "$REPO_DIR/.sync-system-filelist" ]; then
 else
     echo "[*] No .sync-system-filelist found to remove."
 fi
-################################################################################
 
 echo "[+] Uninstall complete. Note: dependent packages (setserial, pps-tools) are still installed."
 

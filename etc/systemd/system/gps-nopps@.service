@@ -20,7 +20,7 @@
 [Unit]
 Description=GPS binding for %i
 BindsTo=dev-%i.device
-After=dev-%i.device
+After=dev-%i.device ntp.service
 
 [Service]
 Type=oneshot
