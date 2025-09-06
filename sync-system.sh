@@ -133,20 +133,23 @@ sync_file() {
     fi
 
     local src="$PROJECT_DIR/$1"
-    local repo_name
-    repo_name=$(basename "$PROJECT_DIR" | tr -cd '[:alnum:]')
+    local repo_name=$(basename "$PROJECT_DIR" | tr -cd '[:alnum:]')
     local dest="${2//%PROJECT_NAME/$repo_name}"
+    local repo_tag="${3:-}"
 
     if [ -f "$src" ]; then
         sudo rsync -azui --ignore-missing-args --omit-dir-times \
             --out-format='[UPDATE] '$dest \
             --no-o --no-g \
             "$src" "$dest"
+
+        if [ -n "$repo_tag" ]; then
+            sudo sed -i "s|$repo_tag|$PROJECT_DIR|g" "$dest"
+        fi
     else
         echo "[!] $src not found, skipping."
     fi
 }
 
 # Custom one-way sync for specific top-level files
-sync_file uninstall.sh /usr/local/bin/uninstall-%PROJECT_NAME.sh
-
+sync_file uninstall.sh /usr/local/bin/uninstall-%PROJECT_NAME.sh __REPO_DIR__
