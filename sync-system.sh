@@ -144,7 +144,9 @@ sync_file() {
             "$src" "$dest"
 
         if [ -n "$repo_tag" ]; then
-            sudo sed -i "s|$repo_tag|$PROJECT_DIR|g" "$dest"
+            if grep -q "$repo_tag" "$dest"; then
+                sudo sed -i "s|$repo_tag|$PROJECT_DIR|g" "$dest"
+            fi
         fi
     else
         echo "[!] $src not found, skipping."
