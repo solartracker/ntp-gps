@@ -33,22 +33,23 @@ fi
 echo "[*] Stopping and disabling GPS services for all devices..."
 
 services=(
-    "^gps-pps@.*\.service$"
-    "^gps-nopps@.*\.service$"
-    "^gps-ublox7-config@.*\.service$"
+    "gps-pps@*.service"
+    "gps-nopps@*.service"
+    "gps-ublox7-config@*.service"
 )
 
 # Stop and disable services
 all_instances=()
 for service_name in "${services[@]}"; do
-    instances=$(systemctl list-units --type=service --state=running \
-                | awk '{print $1}' | grep -E "$service_name") || true
+    instances=$(systemctl list-units --type=service --state=running "$service_name" \
+        --no-legend --no-pager | awk '{print $1}')
     for svc in $instances; do
         all_instances+=("$svc")
         echo "[*] Stopping $svc ..."
         sudo systemctl stop "$svc" || true
-        #echo "[*] Disabling $svc ..."
-        #sudo systemctl disable "$svc" || true
+        sleep 0.5
+        echo "[*] Disabling $svc ..."
+        sudo systemctl disable "$svc" || true
     done
 done
 
@@ -59,6 +60,7 @@ for svc in "${all_instances[@]}"; do
     done
 done
 
+sleep 2
 sudo systemctl daemon-reload
 echo "[*] GPS services stopped and disabled."
 
