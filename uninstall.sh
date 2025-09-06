@@ -63,6 +63,7 @@ done
 sleep 2
 sudo systemctl daemon-reload
 echo "[*] GPS services stopped and disabled."
+exit 1
 
 # Remove installed files
 echo "[*] Removing installed files..."

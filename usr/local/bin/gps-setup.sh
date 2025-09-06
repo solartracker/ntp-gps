@@ -25,17 +25,17 @@ TTYNAME="$1"
 HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
-# Validate HASPPS (0 or 1)
-if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
-  echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
-  exit 1
-fi
-
 # Which logical gpsX is this?
 GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
 
 if [ -z "$GPSNUM" ]; then
   echo "Could not determine gps number for $TTYDEV"
+  exit 1
+fi
+
+# Validate HASPPS (0 or 1)
+if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
+  echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
   exit 1
 fi
 
