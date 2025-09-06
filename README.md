@@ -2,7 +2,7 @@
 
 This project provides a lightweight solution to integrate USB GPS receivers with `ntpd` (via NTPsec) on a Raspberry Pi 4B. It is designed for minimal system impact, so it coexists cleanly with vendor-supplied software.
 
-The main use case is a solar tracker controller that relies on accurate time to calculate the sun’s position. Since the controller’s onboard RTC (STMicroelectronics **M41T93ZMY6**) is not very accurate compared to a DS3231, a reliable external time source is required. This project ensures that the Raspberry Pi gateway keeps accurate time from both the Internet and a GPS receiver.
+The main use case is a solar tracker controller that relies on accurate time to calculate the sun’s position. Since the controller’s onboard RTC (STMicroelectronics **M41T93ZMY6**) is not very accurate compared to a DS3231, a reliable external time source is required. This project ensures that the Raspberry Pi gateway keeps accurate time using both the Internet and a GPS receiver.
 
 ---
 
