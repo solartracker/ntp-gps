@@ -8,15 +8,15 @@ The main use case is a solar tracker controller that relies on accurate time to 
 
 ## System Overview
 
-On the solar tracker, the **Raspberry Pi** acts as the **Gateway**.  
+On the solar tracker, the **Raspberry Pi** acts as the **gateway**.  
 
-- The Gateway allows **remote monitoring and control** by the manufacturer.  
+- The gateway allows **remote monitoring and control** by the manufacturer.  
 - It receives commands from and sends commands to the tracker controller.  
 - The tracker controller is responsible for:
   - Calculating the sun’s position using fixed latitude/longitude coordinates and the current date and time.  
   - Running the motors to control **elevation and azimuth** of the two axes.  
 
-Accurate time on the Gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
+Accurate time on the gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
 
 ---
 
