@@ -39,8 +39,8 @@ if command -v systemctl >/dev/null; then
     ntpq -pn 2>/dev/null >"$TMP_NTPQ"
 
     if grep -Fq "NMEA($GPSNUM)" "$TMP_NTPQ"; then
-        echo "/dev/gps$GPSNUM removed — restarting NTP in background."
-        nohup sudo systemctl restart ntp.service >/dev/null 2>&1 &
+        echo "Restarting NTP in background."
+        sudo systemctl restart --no-block ntp.service
     else
         echo "No local reference clock found for /dev/gps$GPSNUM — NTP restart not needed."
     fi
@@ -49,9 +49,11 @@ if command -v systemctl >/dev/null; then
 fi
 
 # Kill the main process of the service (ldattach)
-if [ "$HASPPS" == "1" ] && [ -n "${MAINPID:-}" ]; then
-    sleep 1
-    kill "$MAINPID"
-    echo "Killed MainPID process $MAINPID (ldattach)"
+if [ "$HASPPS" == "1" ]; then
+    if [ -n "${MAINPID:-}" ] && [ -d "/proc/$MAINPID" ]; then
+        sleep 1
+        kill "$MAINPID"
+        echo "Killed MainPID process $MAINPID (ldattach)"
+    fi
 fi
 
