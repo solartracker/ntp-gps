@@ -1,22 +1,22 @@
 # NTP-GPS Integration for Raspberry Pi
 
-This project provides a lightweight way to integrate USB GPS receivers with `ntpd` (via NTPsec) on a Raspberry Pi 4B. It is designed for minimal system impact, so it coexists cleanly with vendor-supplied software.
+This project provides a lightweight solution to integrate USB GPS receivers with `ntpd` (via NTPsec) on a Raspberry Pi 4B. It is designed for minimal system impact, so it coexists cleanly with vendor-supplied software.
 
-The main use case is a solar tracker controller that relies on accurate time to calculate the sun’s position. Since the controller’s onboard RTC (STMicroelectronics **M41T93ZMY6**) is not very accurate compared to a DS3231, a reliable external time source is required. This project ensures that the Raspberry Pi gateway keeps accurate time from both the Internet and a GPS receiver.
+The main use case is a solar tracker controller that relies on accurate time to calculate the sun’s position. Since the controller’s onboard RTC (STMicroelectronics **M41T93ZMY6**) is not very accurate compared to a DS3231, a reliable external time source is required. This project ensures that the Raspberry Pi gateway keeps accurate time using both the Internet and a GPS receiver.
 
 ---
 
 ## System Overview
 
-On the solar tracker, the **Raspberry Pi** acts as the **Gateway**.  
+On the solar tracker, the **Raspberry Pi** acts as the **gateway**.  
 
-- The Gateway allows **remote monitoring and control** by the manufacturer.  
+- The gateway allows **remote monitoring and control** by the manufacturer.  
 - It receives commands from and sends commands to the tracker controller.  
 - The tracker controller is responsible for:
   - Calculating the sun’s position using fixed latitude/longitude coordinates and the current date and time.  
   - Running the motors to control **elevation and azimuth** of the two axes.  
 
-Accurate time on the Gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
+Accurate time on the gateway is critical because the controller relies on it to determine the sun’s position. This is why the NTP-GPS integration is essential for reliable operation.
 
 ---
 
