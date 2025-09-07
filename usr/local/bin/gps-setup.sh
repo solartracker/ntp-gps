@@ -62,7 +62,7 @@ if command -v systemctl >/dev/null; then
     TMP_NTPQ=$(mktemp)
     ntpq -pn 2>/dev/null >$TMP_NTPQ
 
-    PEERLINE=$(grep "NMEA($GPSNUM)" $TMP_NTPQ || true)
+    PEERLINE=$(grep -F "NMEA($GPSNUM)" $TMP_NTPQ || grep -F "127.127.20.$GPSNUM" $TMP_NTPQ || true)
 
     if [ -z "$PEERLINE" ]; then
         MSG="NTP does not see NMEA($GPSNUM), restarting NTP..."

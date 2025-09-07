@@ -38,7 +38,7 @@ if command -v systemctl >/dev/null; then
     TMP_NTPQ=$(mktemp)
     ntpq -pn 2>/dev/null >"$TMP_NTPQ"
 
-    if grep -Fq "NMEA($GPSNUM)" "$TMP_NTPQ"; then
+    if [ grep -Fq "NMEA($GPSNUM)" "$TMP_NTPQ" ] || [ grep -Fq "127.127.20.$GPSNUM" "$TMP_NTPQ" ]; then
         echo "Restarting NTP in background."
         sudo systemctl restart --no-block ntp.service
     else
