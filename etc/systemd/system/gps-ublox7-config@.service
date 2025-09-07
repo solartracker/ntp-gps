@@ -20,7 +20,7 @@
 [Unit]
 Description=GPS u-blox 7 USB binding for %i
 BindsTo=dev-%i.device
-After=dev-%i.device ntp.service
+After=dev-%i.device
 
 [Service]
 Type=oneshot

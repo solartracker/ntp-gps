@@ -20,7 +20,7 @@
 [Unit]
 Description=GPS PPS binding for %i
 BindsTo=dev-%i.device
-After=dev-%i.device ntp.service
+After=dev-%i.device
 
 [Service]
 Type=simple
