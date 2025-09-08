@@ -21,6 +21,7 @@
 Description=GPS PPS binding for %i
 BindsTo=dev-%i.device
 After=dev-%i.device
+Before=ntp.service chronyd.service systemd-timesyncd.service
 
 [Service]
 Type=simple
