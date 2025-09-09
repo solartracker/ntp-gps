@@ -84,6 +84,7 @@ echo "[*] Installing files..."
 # Format: "mode source destination"
 files=(
     "755 usr/local/bin/ublox7-config.sh /usr/local/bin"
+    "755 usr/local/bin/ntp-setconfig.sh /usr/local/bin"
     "755 usr/local/bin/gps-stop.sh /usr/local/bin"
     "755 usr/local/bin/gpspps-symlink.sh /usr/local/bin"
     "755 usr/local/bin/ntp-keys.sh /usr/local/bin"
