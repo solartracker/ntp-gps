@@ -28,10 +28,39 @@ KEYS_PATH="/run/ntpgps/ntp.keys"
 KEYS_DIR=$(dirname "$KEYS_PATH")
 CONF_AUTH_PATH="/run/ntpgps/keys.conf"
 CONF_AUTH_DIR=$(dirname "$CONF_AUTH_PATH")
+KEYID_FIRST=1001
 
 if [ ! -d "$KEYS_DIR" ]; then
     sudo mkdir -p "$KEYS_DIR"
 fi
+
+# Renumber our keys so they don't conflict with others
+ntp_keys_renumber() {
+    local tmpfile
+    local keysfile
+
+    # Follow link to real file if it's a symlink, otherwise keep as-is
+    if [ -L "$KEYS_PATH" ]; then
+        keysfile=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
+    else
+        keysfile="$KEYSPATH"
+    fi
+
+    tmpfile=$(sudo mktemp)
+    sudo chown --reference="$keysfile" "$tmpfile"
+    sudo chmod --reference="$keysfile" "$tmpfile"
+
+    sudo awk -v base="$KEYID_FIRST" '
+      /^#/ { print; next }                    # keep comments
+      /^[[:space:]]*[0-9]+/ {
+        $1 = base++                           # sequential IDs
+        print
+        next
+      }
+      { print }                               # other lines unchanged
+    ' "$keysfile" | sudo tee "$tmpfile" >/dev/null
+    sudo mv -f "$tmpfile" "$keysfile"
+}
 
 cd "$KEYS_DIR" || { echo "Failed to change directory to $KEYS_DIR"; exit 1; }
 
@@ -40,11 +69,13 @@ if [ ! -f "$KEYS_PATH" ]; then
     if command -v ntpkeygen >/dev/null 2>&1; then
         echo "Found ntpkeygen, generating keys..."
         sudo ntpkeygen
-        rm -f "$CONF_AUTH_PATH"
+        ntp_keys_renumber
+        sudo rm -f "$CONF_AUTH_PATH"
     elif command -v ntp-keygen >/dev/null 2>&1; then
         echo "Found ntp-keygen, generating MD5 keys..."
         sudo ntp-keygen -M
-        rm -f "$CONF_AUTH_PATH"
+        ntp_keys_renumber
+        sudo rm -f "$CONF_AUTH_PATH"
     else
         echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
         exit 1
@@ -69,8 +100,8 @@ if [ -f "$KEYS_PATH" ]; then
     if [ ! -f "$CONF_AUTH_PATH" ]; then
         sudo cp -p /etc/ntpgps/template/keys.conf "$CONF_AUTH_PATH"
         echo "keys /run/ntpgps/ntp.keys"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "trustedkey 1"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "controlkey 1"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
+        echo "trustedkey $(( KEYID_FIRST + 10 ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
+        echo "controlkey $(( KEYID_FIRST + 10 ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
     fi
 
     if ! sudo grep -Fxq "includefile $CONF_AUTH_PATH" "$CONF_PATH"; then

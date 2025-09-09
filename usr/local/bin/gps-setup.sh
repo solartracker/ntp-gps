@@ -18,7 +18,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-#set -x # debug switch
+finish() { echo "gps-setup.sh[$?]"; }
+trap finish EXIT
+#set -x #debug switch
 set -euo pipefail
 
 TTYNAME="$1"
@@ -59,6 +61,13 @@ convert_to_seconds() {
 }
 
 if command -v systemctl >/dev/null; then
+    NTP_STATE=$(systemctl is-active ntp.service || true)
+    if [ "$NTP_STATE" != "active" ]; then
+        echo "NTP state is $NTP_STATE.  Exiting..."
+        exit 0
+    fi
+
+    echo "Checking NTP peers for NMEA/GPS reference clock 127.127.20.$GPSNUM"
     TMP_NTPQ=$(mktemp)
     ntpq -pn 2>/dev/null >$TMP_NTPQ
 

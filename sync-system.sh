@@ -127,15 +127,20 @@ update_reference_file
 
 ################################################################################
 sync_file() {
+    local src
+    local repo_name
+    local dest
+    local repo_tag
+
     if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
         echo "[!] Usage: sync_file <source> <destination>" >&2
         exit 1
     fi
 
-    local src="$PROJECT_DIR/$1"
-    local repo_name=$(basename "$PROJECT_DIR" | tr -cd '[:alnum:]')
-    local dest="${2//%PROJECT_NAME/$repo_name}"
-    local repo_tag="${3:-}"
+    src="$PROJECT_DIR/$1"
+    repo_name=$(basename "$PROJECT_DIR" | tr -cd '[:alnum:]')
+    dest="${2//%PROJECT_NAME/$repo_name}"
+    repo_tag="${3:-}"
 
     if [ -f "$src" ]; then
         sudo rsync -azui --ignore-missing-args --omit-dir-times \

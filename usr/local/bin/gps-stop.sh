@@ -35,6 +35,12 @@ fi
 
 # Restart NTP only if the GPS clock was active, in the background
 if command -v systemctl >/dev/null; then
+    NTP_STATE=$(systemctl is-active ntp.service || true)
+    if [ "$NTP_STATE" != "active" ]; then
+        echo "NTP state is $NTP_STATE.  Exiting..."
+        exit 0
+    fi
+
     TMP_NTPQ=$(mktemp)
     ntpq -pn 2>/dev/null >"$TMP_NTPQ"
 

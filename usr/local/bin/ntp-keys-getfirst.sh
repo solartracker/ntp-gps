@@ -1,5 +1,6 @@
+#!/bin/bash
 ################################################################################
-# nmea-gps%N.conf
+# ntp-keys-getfirst.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -17,18 +18,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
+KEYS_PATH="/run/ntpgps/ntp.keys"
 
-# Generic NMEA GPS Receiver
-#  mode is 9600 baud + $GPZDA only
-#  /dev/gpsN for NMEA
-#  https://www.eecis.udel.edu/~mills/ntp/html/drivers/driver20.html
+if [[ ! -f "$KEYS_PATH" ]]; then
+    echo "File not found: $KEYS_PATH"
+    exit 1
+fi
 
-# /dev/gps%N
-#unpeer 127.127.20.%N
-server 127.127.20.%N mode 24 prefer true # select bitrate, $GPZDA, truechimer
-fudge 127.127.20.%N refid GPS # an ASCII string from one to four characters, with default GPS
-fudge 127.127.20.%N stratum 0 # the driver stratum, in decimal from 0 to 15, with default 0
-fudge 127.127.20.%N flag1 0 # Disable PPS signal processing
-fudge 127.127.20.%N flag3 0 # Do not use the kernel discipline
-fudge 127.127.20.%N flag4 1 # Obscures location in timecode
+# Return the first keyid and password from ntp.keys
+# Output format: "<keyid> <password>"
+ntp_keys_first() {
+    sudo awk '
+      /^[[:space:]]*[0-9]+[[:space:]]+/ {    # lines starting with a number
+        print $1, $3                        # keyid and password
+        exit                                # stop after first match
+      }
+    ' "$KEYS_PATH"
+}
 
+ntp_keys_first
