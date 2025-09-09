@@ -102,8 +102,15 @@ if [ -f "$KEYS_PATH" ]; then
     if [ ! -f "$CONF_AUTH_PATH" ]; then
         sudo cp -p /etc/ntpgps/template/keys.conf "$CONF_AUTH_PATH"
         echo "keys /run/ntpgps/ntp.keys"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "trustedkey $(( KEYID_FIRST + 10 ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "controlkey $(( KEYID_FIRST + 10 ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
+        echo "trustedkey $(( KEYID_FIRST ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
+        echo "controlkey $(( KEYID_FIRST ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
+        ########################################################################
+        # When you issue a control command ntpq(:config) to ntpd, the request
+        # must be authenticated with a control key.  Classic ntpd only
+        # implements MD5 for control message verification. SHA1 keys are ignored
+        # for control messages, which is why you get:
+        # "***Server disallowed request (authentication?)".
+        ########################################################################
     fi
 
     if ! sudo grep -Fxq "includefile $CONF_AUTH_PATH" "$CONF_PATH"; then
