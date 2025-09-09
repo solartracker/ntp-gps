@@ -22,6 +22,7 @@
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
+# /dev/ttyUSBn
 #
 # FTDI USB-to-Serial converter connected to GPS module
 #
@@ -32,37 +33,45 @@
 # - GPS module does not require additional programming when plugged in
 # - GPS module has been configured with:
 #   - PPS enabled
-#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS 
+#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS
 #     receiver can result in the output of $GNZDA messages which NTP does not support
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
-    ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
-### HOWTO: include filter on unique serial number
+    ENV{SYSTEMD_WANTS}="gps-pps@%k.service", \
+    MODE="0666"
+
+### HOWTO: filter on unique serial number
 #SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
 #    ATTRS{serial}=="A600KP6X", \
 #    PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
-#    ENV{SYSTEMD_WANTS}="gps-pps@%k.service"
+#    ENV{SYSTEMD_WANTS}="gps-pps@%k.service", \
+#    MODE="0666"
+
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
+# /dev/ttyACMn
 #
 # GPS device is a single USB stick, example: USB Dongle GPS Receiver VK-172
 #
 # - GPS only, no PPS
 # - No battery-backed RAM or flash memory to store configuration settings
-# - Requires additional programming when plugged in, to turn on $GPZDA messages and 
+# - Requires additional programming when plugged in, to turn on $GPZDA messages and
 #   turn off all other NMEA and UBX messages
 # - Has the u-blox 7 chipset and is programmable
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
     ATTRS{manufacturer}=="u-blox AG - www.u-blox.com", ATTRS{product}=="u-blox 7 - GPS/GNSS Receiver", \
     PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
-    ENV{SYSTEMD_WANTS}="gps-ublox7-config@%k.service"
+    ENV{SYSTEMD_WANTS}="gps-ublox7-config@%k.service", \
+    MODE="0666"
+
 
 ################################################################################
 # Handles creation and removal of /dev/gpsN for NTP
+# /dev/ttyUSBn
 #
 # ch341 USB-to-Serial converter connected to GPS module
 #
@@ -71,14 +80,16 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
 # - GPS module has battery-backed RAM or flash memory to store settings
 # - GPS module does not require additional programming when plugged in
 # - GPS module has been configured with:
-#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS 
+#   - GLONASS disabled because NTP expects $GPZDA messages only. Enabling GLONASS on a GNSS
 #     receiver can result in the output of $GNZDA messages which NTP does not support
 #   - $GPZDA messages enabled, and all other NMEA and UBX messages disabled
 # - Usually never has a unique serial number.
 #
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
     PROGRAM="/usr/local/bin/gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
-    ENV{SYSTEMD_WANTS}="gps-nopps@%k.service"
+    ENV{SYSTEMD_WANTS}="gps-nopps@%k.service", \
+    MODE="0666"
+
 
 ################################################################################
 # Handles creation and removal of /dev/gpsppsN for NTP
