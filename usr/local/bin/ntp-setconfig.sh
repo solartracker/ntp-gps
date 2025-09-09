@@ -12,8 +12,9 @@
 #   --force-passwd  Force old authentication style (-c keyid / -c passwd)
 #   --force-file    Force new authentication style (-a / -k)
 ################################################################################
-finish() { echo "ntp-setconfig.sh[$?]"; }
-trap finish EXIT
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+enter() { echo "[ENTERING] $(basename "$0")"; }
+enter
 #set -x #debug switch
 set -euo pipefail
 

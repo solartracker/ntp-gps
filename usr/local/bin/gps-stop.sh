@@ -7,8 +7,9 @@
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
 ################################################################################
-finish() { echo "gps-stop.sh[$?]"; }
-trap finish EXIT
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+enter() { echo "[ENTERING] $(basename "$0")"; }
+enter
 #set -x #debug switch
 set -euo pipefail
 
