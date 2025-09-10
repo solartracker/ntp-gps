@@ -1,6 +1,6 @@
 #!/bin/sh
 ################################################################################
-# ublox7-config.sh
+# ntpgps-ublox7-config.sh
 #
 # Program the u-blox 7 GPS everytime it is plugged into the USB port, for when 
 # a limited product or Chinese clone does not include battery-backed RAM or 
@@ -34,7 +34,7 @@ TTYNAME=$1
 TTYDEV=/dev/$TTYNAME
 
 if [ -z "$TTYNAME" ]; then
-  echo "ublox7-config.sh: the device path is missing"
+  echo "ntpgps-ublox7-config.sh: the device path is missing"
   exit 1
 fi
 

@@ -1,6 +1,8 @@
 #!/bin/bash
 ################################################################################
-# gpsnum.sh
+# ntpgps-gpspps-symlink.sh
+#
+# Used for creation and removal of /dev/gpsppsN for NTP
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -18,35 +20,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-TTYNAME=$1
-DEVTYPE=$(echo $TTYNAME | sed -E s/[0-9]+$//)
-N=${TTYNAME##*[!0-9]}
+PPSNAME=$1
+TTYDEV=$(cat /sys/class/pps/$PPSNAME/path)
+TTYNAME=${TTYDEV##*/}
+GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
+[ -n "$GPSNUM" ] && echo "gpspps$GPSNUM" || echo ""
 
-if [ -n "$N" ]; then
-  # USB serial GPS
-  if [ "$DEVTYPE" == "ttyUSB" ]; then
-    GPSNUM=$(( 100 + N ))
-
-  # ACM modem GPS
-  elif [ "$DEVTYPE" == "ttyACM" ]; then
-    GPSNUM=$(( 120 + N ))
-
-  # Onboard UART
-  elif [ "$DEVTYPE" == "ttyAMA" ]; then
-    GPSNUM=$(( 140 + N ))
-
-  # Legacy/PCI serial
-  elif [ "$DEVTYPE" == "ttyS" ]; then
-    GPSNUM=$(( 160 + N ))
-
-  # Error: Unsupported
-  else
-    GPSNUM=99
-  fi
-
-# Error: Invalid TTY device
-else
-  GPSNUM=99
-fi
-
-echo $GPSNUM

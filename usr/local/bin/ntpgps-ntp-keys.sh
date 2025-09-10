@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# ntp-keys.sh
+# ntpgps-ntp-keys.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #

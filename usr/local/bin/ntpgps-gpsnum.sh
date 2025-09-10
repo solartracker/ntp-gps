@@ -1,5 +1,6 @@
+#!/bin/bash
 ################################################################################
-# gps-ublox7-config@.service
+# ntpgps-gpsnum.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -17,21 +18,35 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-[Unit]
-Description=GPS u-blox 7 USB binding for %i
-BindsTo=dev-%i.device
-After=dev-%i.device
-Before=ntp.service chronyd.service systemd-timesyncd.service
+TTYNAME=$1
+DEVTYPE=$(echo $TTYNAME | sed -E s/[0-9]+$//)
+N=${TTYNAME##*[!0-9]}
 
-[Service]
-Type=oneshot
-ExecStartPre=/usr/local/bin/ublox7-config.sh %i
-ExecStartPre=/usr/local/bin/ntp-configure.sh %i 0
-ExecStart=/usr/local/bin/gps-setup.sh %i 0
-ExecStop=/usr/local/bin/gps-stop.sh %i 0
-RemainAfterExit=yes
-#Restart=on-failure
+if [ -n "$N" ]; then
+  # USB serial GPS
+  if [ "$DEVTYPE" == "ttyUSB" ]; then
+    GPSNUM=$(( 100 + N ))
 
-[Install]
-WantedBy=multi-user.target
+  # ACM modem GPS
+  elif [ "$DEVTYPE" == "ttyACM" ]; then
+    GPSNUM=$(( 120 + N ))
 
+  # Onboard UART
+  elif [ "$DEVTYPE" == "ttyAMA" ]; then
+    GPSNUM=$(( 140 + N ))
+
+  # Legacy/PCI serial
+  elif [ "$DEVTYPE" == "ttyS" ]; then
+    GPSNUM=$(( 160 + N ))
+
+  # Error: Unsupported
+  else
+    GPSNUM=99
+  fi
+
+# Error: Invalid TTY device
+else
+  GPSNUM=99
+fi
+
+echo $GPSNUM

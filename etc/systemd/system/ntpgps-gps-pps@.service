@@ -1,5 +1,5 @@
 ################################################################################
-# gps-pps@.service
+# ntpgps-gps-pps@.service
 # 
 # Copyright (C) 2025 Richard Elwell
 #
@@ -25,10 +25,10 @@ Before=ntp.service chronyd.service systemd-timesyncd.service
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/ntp-configure.sh %i 1
+ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 1
 ExecStart=/usr/sbin/ldattach -d pps /dev/%i
-ExecStartPost=/usr/local/bin/gps-setup.sh %i 1
-ExecStop=/usr/local/bin/gps-stop.sh %i 1
+ExecStartPost=/usr/local/bin/ntpgps-gps-setup.sh %i 1
+ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 1
 KillMode=control-group
 TimeoutStopSec=10s
 Restart=no

@@ -34,9 +34,9 @@ fi
 echo "[*] Stopping and disabling GPS services for all devices..."
 
 services=(
-    "gps-pps@*.service"
-    "gps-nopps@*.service"
-    "gps-ublox7-config@*.service"
+    "ntpgps-gps-pps@*.service"
+    "ntpgps-gps-nopps@*.service"
+    "ntpgps-gps-ublox7-config@*.service"
 )
 
 # Stop and disable services
@@ -68,23 +68,24 @@ echo "[*] GPS services stopped and disabled."
 # Remove installed files
 echo "[*] Removing installed files..."
 files=(
-    /usr/local/bin/ublox7-config.sh
-    /usr/local/bin/gps-stop.sh
-    /usr/local/bin/gpspps-symlink.sh
-    /usr/local/bin/ntp-keys.sh
-    /usr/local/bin/ntp-remove.sh
-    /usr/local/bin/gps-setup.sh
-    /usr/local/bin/ntp-configure.sh
-    /usr/local/bin/gpsnum.sh
+    /usr/local/bin/ntpgps-ublox7-config.sh
+    /usr/local/bin/ntpgps-ntp-setconfig.sh
+    /usr/local/bin/ntpgps-gps-stop.sh
+    /usr/local/bin/ntpgps-gpspps-symlink.sh
+    /usr/local/bin/ntpgps-ntp-keys.sh
+    /usr/local/bin/ntpgps-ntp-remove.sh
+    /usr/local/bin/ntpgps-gps-setup.sh
+    /usr/local/bin/ntpgps-ntp-configure.sh
+    /usr/local/bin/ntpgps-gpsnum.sh
     /etc/ntpgps/template/nmea-gps.conf
     /etc/ntpgps/template/nmea-gps-pps.conf
     /etc/ntpgps/template/keys.conf
     /etc/ntpgps/template/ntpgps.conf
     /etc/udev/rules.d/99-ntpgps-usb.rules
     /etc/modules-load.d/ntpgps-pps.conf
-    /etc/systemd/system/gps-nopps@.service
-    /etc/systemd/system/gps-pps@.service
-    /etc/systemd/system/gps-ublox7-config@.service
+    /etc/systemd/system/ntpgps-gps-nopps@.service
+    /etc/systemd/system/ntpgps-gps-pps@.service
+    /etc/systemd/system/ntpgps-gps-ublox7-config@.service
 )
 
 for f in "${files[@]}"; do

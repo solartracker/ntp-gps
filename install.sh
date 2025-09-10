@@ -84,15 +84,15 @@ echo "[*] Installing files..."
 
 # Format: "mode source destination"
 files=(
-    "755 usr/local/bin/ublox7-config.sh /usr/local/bin"
-    "755 usr/local/bin/ntp-setconfig.sh /usr/local/bin"
-    "755 usr/local/bin/gps-stop.sh /usr/local/bin"
-    "755 usr/local/bin/gpspps-symlink.sh /usr/local/bin"
-    "755 usr/local/bin/ntp-keys.sh /usr/local/bin"
-    "755 usr/local/bin/ntp-remove.sh /usr/local/bin"
-    "755 usr/local/bin/gps-setup.sh /usr/local/bin"
-    "755 usr/local/bin/ntp-configure.sh /usr/local/bin"
-    "755 usr/local/bin/gpsnum.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ntp-setconfig.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-gps-stop.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-gpspps-symlink.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ntp-keys.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ntp-remove.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ntp-configure.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-gpsnum.sh /usr/local/bin"
     "755 uninstall.sh /usr/local/bin"
     "644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template"
@@ -100,9 +100,9 @@ files=(
     "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
     "644 etc/udev/rules.d/99-ntpgps-usb.rules /etc/udev/rules.d"
     "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
-    "644 etc/systemd/system/gps-nopps@.service /etc/systemd/system"
-    "644 etc/systemd/system/gps-pps@.service /etc/systemd/system"
-    "644 etc/systemd/system/gps-ublox7-config@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-gps-ublox7-config@.service /etc/systemd/system"
 )
 
 # --- Copy files, create directories, set permissions ---
@@ -140,14 +140,11 @@ done
 
 # --- Generate NTP keys ---
 echo "[*] Generating NTP authentication keys..."
-sudo /usr/local/bin/ntp-keys.sh
+sudo /usr/local/bin/ntpgps-ntp-keys.sh
 
 # --- Enable services ---
 echo "[*] Enabling services..."
 sudo systemctl daemon-reload
-#sudo systemctl enable gps-pps@.service
-#sudo systemctl enable gps-nopps@.service
-#sudo systemctl enable gps-ublox7-config@.service
 
 # --- Reload udev ---
 echo "[*] Reloading udev rules..."

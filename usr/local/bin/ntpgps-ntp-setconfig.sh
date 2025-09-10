@@ -1,12 +1,12 @@
 #!/bin/bash
 ################################################################################
-# ntp-setconfig.sh
+# ntpgps-ntp-setconfig.sh
 #
 # Recursively configures ntpd with lines containing a given refclock address,
 # ignoring comments, stripping inline comments, following includefile directives,
 # and storing 'keys' and 'controlkey' values in variables.
 #
-# Usage: ./ntp-setconfig.sh [-n] [--force-passwd | --force-file] [--unpeer] <refclock-address>
+# Usage: ./ntpgps-ntp-setconfig.sh [-n] [--force-passwd | --force-file] [--unpeer] <refclock-address>
 #
 #   -n              Dry run (print ntpq command but do not execute)
 #   --force-passwd  Force old authentication style (-c keyid / -c passwd)

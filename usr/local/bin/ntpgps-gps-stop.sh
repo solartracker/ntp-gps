@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# gps-setup.sh
+# ntpgps-gps-stop.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -28,12 +28,12 @@ TTYNAME="$1"
 HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
-# Which logical gpsX is this?
-GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
+# Get GPS logical number
+GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
 
 if [ -z "$GPSNUM" ]; then
-  echo "Could not determine gps number for $TTYDEV"
-  exit 1
+    echo "Could not determine gps number for $TTYDEV"
+    exit 1
 fi
 
 # Validate HASPPS (0 or 1)
@@ -42,10 +42,8 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
   exit 1
 fi
 
-# Ensure low latency
-setserial "$TTYDEV" low_latency
-
-echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
+# Remove NTP references
+/usr/local/bin/ntpgps-ntp-remove.sh "$TTYNAME"
 
 if command -v systemctl >/dev/null; then
     NTP_STATE=$(systemctl is-active ntp.service || true)
@@ -54,7 +52,16 @@ if command -v systemctl >/dev/null; then
         exit 0
     fi
 
-    # Add the refclock to the list of NTP network peers
-    /usr/local/bin/ntp-setconfig.sh 127.127.20.$GPSNUM
+    # Remove the refclock from the list of NTP network peers
+    /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.20.$GPSNUM
+fi
+
+# Kill the main process of the service (ldattach)
+if [ "$HASPPS" == "1" ]; then
+    if [ -n "${MAINPID:-}" ] && [ -d "/proc/$MAINPID" ]; then
+        sleep 1
+        kill "$MAINPID"
+        echo "Killed MainPID process $MAINPID (ldattach)"
+    fi
 fi
 

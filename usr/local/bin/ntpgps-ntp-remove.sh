@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# gps-stop.sh
+# ntpgps-ntp-remove.sh
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -21,47 +21,25 @@
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 enter
-#set -x #debug switch
 set -euo pipefail
 
 TTYNAME="$1"
-HASPPS="$2"
-TTYDEV="/dev/$TTYNAME"
+GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
 
-# Get GPS logical number
-GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
-
-if [ -z "$GPSNUM" ]; then
-    echo "Could not determine gps number for $TTYDEV"
-    exit 1
-fi
-
-# Validate HASPPS (0 or 1)
-if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
-  echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
+if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
+  echo "Error: GPSNUM must be an integer between 0 and 255" >&2
   exit 1
 fi
 
-# Remove NTP references
-/usr/local/bin/ntp-remove.sh "$TTYNAME"
+CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
+CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
+NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 
-if command -v systemctl >/dev/null; then
-    NTP_STATE=$(systemctl is-active ntp.service || true)
-    if [ "$NTP_STATE" != "active" ]; then
-        echo "NTP state is $NTP_STATE.  Exiting..."
-        exit 0
-    fi
-
-    # Remove the refclock from the list of NTP network peers
-    /usr/local/bin/ntp-setconfig.sh --unpeer 127.127.20.$GPSNUM
+if [ -f "$CONF_TMP_PATH" ]; then
+  sudo sed -i "\#includefile $NMEA_TMP_PATH#d" "$CONF_TMP_PATH"
 fi
 
-# Kill the main process of the service (ldattach)
-if [ "$HASPPS" == "1" ]; then
-    if [ -n "${MAINPID:-}" ] && [ -d "/proc/$MAINPID" ]; then
-        sleep 1
-        kill "$MAINPID"
-        echo "Killed MainPID process $MAINPID (ldattach)"
-    fi
+if [ -f "$NMEA_TMP_PATH" ]; then
+  sudo rm -f "$NMEA_TMP_PATH"
 fi
 

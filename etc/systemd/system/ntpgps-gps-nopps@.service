@@ -1,8 +1,5 @@
-#!/bin/bash
 ################################################################################
-# gpspps-symlink.sh
-#
-# Used for creation and removal of /dev/gpsppsN for NTP
+# ntpgps-gps-nopps@.service
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -20,9 +17,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-PPSNAME=$1
-TTYDEV=$(cat /sys/class/pps/$PPSNAME/path)
-TTYNAME=${TTYDEV##*/}
-GPSNUM=$(/usr/local/bin/gpsnum.sh $TTYNAME)
-[ -n "$GPSNUM" ] && echo "gpspps$GPSNUM" || echo ""
+[Unit]
+Description=GPS binding for %i
+BindsTo=dev-%i.device
+After=dev-%i.device
+Before=ntp.service chronyd.service systemd-timesyncd.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 0
+ExecStart=/usr/local/bin/ntpgps-gps-setup.sh %i 0
+ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 0
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+#Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 
