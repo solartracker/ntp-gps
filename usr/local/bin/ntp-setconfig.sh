@@ -29,10 +29,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
-enter() { echo "[ENTERING] $(basename "$0")"; }
-enter
-#set -x #debug switch
 set -euo pipefail
 
 CONFIG_FILE="/run/ntpgps/ntpgps.conf"
@@ -122,8 +118,12 @@ process_file() {
 
 process_file "$CONFIG_FILE"
 
-if [[ -z "$NTP_KEYS_FILE" || -z "$NTP_CONTROL_KEY" ]]; then
-    echo "Error: required 'keys' or 'controlkey' missing."
+if [[ -z "$NTP_KEYS_FILE" ]]; then
+    echo "Error: missing 'keys' directive in config."
+    exit 1
+fi
+if [[ -z "$NTP_CONTROL_KEY" ]]; then
+    echo "Error: missing 'controlkey' directive in config."
     exit 1
 fi
 
@@ -146,46 +146,30 @@ if [[ "$AUTH_MODE" == "passwd" && -z "$NTP_PASSWD" ]]; then
     exit 1
 fi
 
-if [[ $UNPEER -eq 1 ]]; then
-    # Build single unpeer command
-    if [[ "$AUTH_MODE" == "passwd" ]]; then
-        CMD=(sudo ntpq -c "keyid $NTP_CONTROL_KEY" -c "passwd $NTP_PASSWD" -c ":config unpeer $REFCLOCK_ADDR")
-        CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd $NTP_PASSWD\" -c \":config unpeer $REFCLOCK_ADDR\")
-    else
-        CMD=(sudo ntpq -a "$NTP_CONTROL_KEY" -k "$NTP_KEYS_FILE" -c ":config unpeer $REFCLOCK_ADDR")
-        CMD_DISPLAY=(sudo ntpq -a "$NTP_CONTROL_KEY" -k \"$NTP_KEYS_FILE\" -c \":config unpeer $REFCLOCK_ADDR\")
-    fi
+if [[ $UNPEER -eq 1 || ${#MATCHING_LINES[@]} -gt 0 ]]; then
 
-    echo "Auth mode: $AUTH_MODE ($AUTH_SOURCE)"
-
-    # Show proper quoting for the displayed command so the user can 
-    # copy-paste it into the shell without breaking.
-    echo "Command: ${CMD_DISPLAY[*]}"
-    echo
-
-    if [[ $DRYRUN -eq 0 ]]; then
-        "${CMD[@]}"
-    else
-        echo "[dry-run] Command not executed"
-    fi
-elif [[ ${#MATCHING_LINES[@]} -gt 0 ]]; then
+    # Build authentication
     if [[ "$AUTH_MODE" == "passwd" ]]; then
         CMD=(sudo ntpq -c "keyid $NTP_CONTROL_KEY" -c "passwd $NTP_PASSWD")
-        CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd $NTP_PASSWD\")
+        CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd \$\(sudo awk \'\$1==\"$NTP_CONTROL_KEY\" {print \$3}\' $NTP_KEYS_FILE\)\")
     else
         CMD=(sudo ntpq -a "$NTP_CONTROL_KEY" -k "$NTP_KEYS_FILE")
         CMD_DISPLAY=(sudo ntpq -a "$NTP_CONTROL_KEY" -k \"$NTP_KEYS_FILE\")
     fi
 
-    for l in "${MATCHING_LINES[@]}"; do
-        CMD+=(-c ":config $l")
-        CMD_DISPLAY+=(-c \":config $l\")
-    done
+    # Build control commands
+    if [[ $UNPEER -eq 1 ]]; then
+        CMD+=(-c ":config unpeer $REFCLOCK_ADDR")
+        CMD_DISPLAY+=(-c \":config unpeer $REFCLOCK_ADDR\")
+    else
+        for l in "${MATCHING_LINES[@]}"; do
+            CMD+=(-c ":config $l")
+            CMD_DISPLAY+=(-c \":config $l\")
+        done
+    fi
 
     echo "Auth mode: $AUTH_MODE ($AUTH_SOURCE)"
 
-    # Show proper quoting for the displayed command so the user can 
-    # copy-paste it into the shell without breaking.
     echo "Command: ${CMD_DISPLAY[*]}"
     echo
 
@@ -194,6 +178,7 @@ elif [[ ${#MATCHING_LINES[@]} -gt 0 ]]; then
     else
         echo "[dry-run] Command not executed"
     fi
+
 else
     echo "No matching lines for \"$REFCLOCK_ADDR\" found in config."
 fi
