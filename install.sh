@@ -18,8 +18,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { echo "Install finished[$?]"; }
-trap finish EXIT
+#finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+#enter() { echo "[ENTERING] $(basename "$0")"; }
+#enter
 #set -x #debug switch
 set -e
 
@@ -147,6 +148,14 @@ sudo systemctl daemon-reload
 # --- Reload udev ---
 echo "[*] Reloading udev rules..."
 sudo udevadm control --reload-rules
+
+# Check for already-plugged-in GPS devices and retrigger udev if found
+for dev in /dev/ttyUSB* /dev/ttyACM*; do
+    if [[ -e "$dev" ]]; then
+        echo "[*] Retriggering udev for $dev"
+        sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
+    fi
+done
 
 echo "[+] Install complete."
 

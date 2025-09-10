@@ -83,7 +83,11 @@ process_file() {
 
     [[ -n "${VISITED[$file]:-}" ]] && return
     VISITED["$file"]=1
-    [[ -f "$file" ]] || return
+
+    if [[ ! -f "$file" ]]; then
+        echo "Error: Config file '$file' not found." >&2
+        return 1
+    fi
 
     while IFS= read -r line; do
         line="${line#"${line%%[![:space:]]*}"}"

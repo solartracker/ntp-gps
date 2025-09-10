@@ -21,6 +21,7 @@
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 enter
+
 set -euo pipefail
 
 # Dynamically generate the configuration for NTP authentication keys
@@ -31,6 +32,7 @@ KEYS_DIR=$(dirname "$KEYS_PATH")
 CONF_AUTH_PATH="/run/ntpgps/keys.conf"
 CONF_AUTH_DIR=$(dirname "$CONF_AUTH_PATH")
 KEYID_FIRST=1001
+NTP_RESTART_NEEDED=0
 
 if [ ! -d "$KEYS_DIR" ]; then
     sudo mkdir -p "$KEYS_DIR"
@@ -64,6 +66,22 @@ ntp_keys_renumber() {
     sudo mv -f "$tmpfile" "$keysfile"
 }
 
+ntp_restart() {
+    # Ensure that NTP can find our root config file
+    for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
+        if [ -f "$conf" ]; then
+            if ! grep -q "includefile $CONF_PATH" "$conf"; then
+                echo "includefile $CONF_PATH" | sudo tee -a "$conf"
+            fi
+        fi
+    done
+
+    # Restart NTP if active
+    if systemctl is-active --quiet ntp.service; then
+        sudo systemctl restart --no-block ntp.service
+    fi
+}
+
 cd "$KEYS_DIR" || { echo "Failed to change directory to $KEYS_DIR"; exit 1; }
 
 # Create new NTP authentication keys if they do not exist
@@ -71,17 +89,17 @@ if [ ! -f "$KEYS_PATH" ]; then
     if command -v ntpkeygen >/dev/null 2>&1; then
         echo "Found ntpkeygen, generating keys..."
         sudo ntpkeygen
-        ntp_keys_renumber
-        sudo rm -f "$CONF_AUTH_PATH"
     elif command -v ntp-keygen >/dev/null 2>&1; then
         echo "Found ntp-keygen, generating MD5 keys..."
         sudo ntp-keygen -M
-        ntp_keys_renumber
-        sudo rm -f "$CONF_AUTH_PATH"
     else
         echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
         exit 1
     fi
+
+    ntp_keys_renumber
+    sudo rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
+    NTP_RESTART_NEEDED=1
 fi
 
 # Link the NTP authentication keys into our NTP configuration
@@ -100,21 +118,22 @@ if [ -f "$KEYS_PATH" ]; then
     fi
 
     if [ ! -f "$CONF_AUTH_PATH" ]; then
-        sudo cp -p /etc/ntpgps/template/keys.conf "$CONF_AUTH_PATH"
-        echo "keys /run/ntpgps/ntp.keys"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "trustedkey $(( KEYID_FIRST ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        echo "controlkey $(( KEYID_FIRST ))"  | sudo tee -a "$CONF_AUTH_PATH" >/dev/null
-        ########################################################################
-        # When you issue a control command ntpq(:config) to ntpd, the request
-        # must be authenticated with a control key.  Classic ntpd only
-        # implements MD5 for control message verification. SHA1 keys are ignored
-        # for control messages, which is why you get:
-        # "***Server disallowed request (authentication?)".
-        ########################################################################
+        sudo sed \
+            -e "s|%KEYS_PATH|$KEYS_PATH|g" \
+            -e "s|%KEYID_FIRST|$KEYID_FIRST|g" \
+            /etc/ntpgps/template/keys.conf \
+            | sudo tee "$CONF_AUTH_PATH" >/dev/null
+
+        NTP_RESTART_NEEDED=1
     fi
 
     if ! sudo grep -Fxq "includefile $CONF_AUTH_PATH" "$CONF_PATH"; then
       echo "includefile $CONF_AUTH_PATH" | sudo tee -a "$CONF_PATH" >/dev/null
+
+      NTP_RESTART_NEEDED=1
     fi
 fi
+
+# Restart NTP if needed
+[ $NTP_RESTART_NEEDED -eq 1 ] && ntp_restart
 

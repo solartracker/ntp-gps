@@ -18,8 +18,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { echo "Uninstall finished[$?]"; }
-trap finish EXIT
+#finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+#enter() { echo "[ENTERING] $(basename "$0")"; }
+#enter
 #set -x #debug switch
 set -e
 
