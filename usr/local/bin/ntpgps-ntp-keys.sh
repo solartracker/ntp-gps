@@ -22,6 +22,7 @@ finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap
 enter() { echo "[ENTERING] $(basename "$0")"; }
 enter
 
+#set -x #debug switch
 set -euo pipefail
 
 # Dynamically generate the configuration for NTP authentication keys
@@ -78,6 +79,7 @@ ntp_restart() {
 
     # Restart NTP if active
     if systemctl is-active --quiet ntp.service; then
+        echo "NTP authentication keys have changed. Restarting NTP..."
         sudo systemctl restart --no-block ntp.service
     fi
 }
@@ -135,5 +137,7 @@ if [ -f "$KEYS_PATH" ]; then
 fi
 
 # Restart NTP if needed
-[ $NTP_RESTART_NEEDED -eq 1 ] && ntp_restart
+if [ $NTP_RESTART_NEEDED -eq 1 ]; then
+    ntp_restart
+fi
 
