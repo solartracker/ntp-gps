@@ -47,20 +47,6 @@ setserial "$TTYDEV" low_latency
 
 echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
-# Helper to convert NTP "when" or "poll" to seconds
-convert_to_seconds() {
-    local VAL="$1"
-    if [[ "$VAL" == "-" ]]; then
-        echo 0
-    elif [[ "$VAL" == *m ]]; then
-        echo $(( ${VAL%m} * 60 ))
-    elif [[ "$VAL" == *h ]]; then
-        echo $(( ${VAL%h} * 3600 ))
-    else
-        echo "$VAL"
-    fi
-}
-
 if command -v systemctl >/dev/null; then
     NTP_STATE=$(systemctl is-active ntp.service || true)
     if [ "$NTP_STATE" != "active" ]; then
@@ -68,49 +54,7 @@ if command -v systemctl >/dev/null; then
         exit 0
     fi
 
-    echo "Checking NTP peers for NMEA/GPS reference clock 127.127.20.$GPSNUM"
-    TMP_NTPQ=$(mktemp)
-    ntpq -pn 2>/dev/null >$TMP_NTPQ
-
-    PEERLINE=$(grep -F "NMEA($GPSNUM)" $TMP_NTPQ || grep -F "127.127.20.$GPSNUM" $TMP_NTPQ || true)
-
-    if [ -z "$PEERLINE" ]; then
-        MSG="NTP does not see NMEA($GPSNUM), restarting NTP..."
-        echo "$MSG"
-        logger -t gps-setup "$MSG"
-        sudo systemctl restart ntp.service || true
-    else
-        # Extract type (4th column)
-        TYPE=$(echo "$PEERLINE" | awk '{print $4}')
-        if [ "$TYPE" != "l" ]; then
-            echo "Skipping NTP restart: peer type is '$TYPE', not local clock"
-            exit 0
-        fi
-
-        # Extract fields
-        WHEN_RAW=$(echo "$PEERLINE" | awk '{print $5}')
-        POLL_RAW=$(echo "$PEERLINE" | awk '{print $6}')
-        REACH=$(echo "$PEERLINE" | awk '{print $7}')
-
-        # Convert to integers in seconds
-        WHEN=$(convert_to_seconds "$WHEN_RAW")
-        POLL=$(convert_to_seconds "$POLL_RAW")
-
-        if [ "$WHEN" -gt "$POLL" ]; then
-            MSG="NMEA($GPSNUM) stuck (when=$WHEN_RAW > poll=$POLL_RAW), restarting NTP..."
-            echo "$MSG"
-            logger -t gps-setup "$MSG"
-            sudo systemctl restart ntp.service || true
-        elif [ "$REACH" -eq 0 ]; then
-            MSG="NMEA($GPSNUM) unreachable (reach=0), restarting NTP..."
-            echo "$MSG"
-            logger -t gps-setup "$MSG"
-            sudo systemctl restart ntp.service || true
-        else
-            echo "NMEA($GPSNUM) present and healthy (when=$WHEN_RAW, poll=$POLL_RAW, reach=$REACH)"
-        fi
-    fi
-
-    rm -f $TMP_NTPQ
+    # Add the refclock to the list of NTP network peers
+    /usr/local/bin/ntp-setconfig.sh 127.127.20.$GPSNUM
 fi
 

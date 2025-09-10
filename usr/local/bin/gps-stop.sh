@@ -2,10 +2,21 @@
 ################################################################################
 # gps-stop.sh
 #
-# Stop the GPS PPS service, clean up the device, and restart NTP safely.
-#
 # Copyright (C) 2025 Richard Elwell
-# Licensed under GPLv3 or later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
 ################################################################################
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
@@ -34,7 +45,6 @@ fi
 # Remove NTP references
 /usr/local/bin/ntp-remove.sh "$TTYNAME"
 
-# Restart NTP only if the GPS clock was active, in the background
 if command -v systemctl >/dev/null; then
     NTP_STATE=$(systemctl is-active ntp.service || true)
     if [ "$NTP_STATE" != "active" ]; then
@@ -42,17 +52,8 @@ if command -v systemctl >/dev/null; then
         exit 0
     fi
 
-    TMP_NTPQ=$(mktemp)
-    ntpq -pn 2>/dev/null >"$TMP_NTPQ"
-
-    if [ grep -Fq "NMEA($GPSNUM)" "$TMP_NTPQ" ] || [ grep -Fq "127.127.20.$GPSNUM" "$TMP_NTPQ" ]; then
-        echo "Restarting NTP in background."
-        sudo systemctl restart --no-block ntp.service
-    else
-        echo "No local reference clock found for /dev/gps$GPSNUM — NTP restart not needed."
-    fi
-
-    rm -f "$TMP_NTPQ"
+    # Remove the refclock from the list of NTP network peers
+    /usr/local/bin/ntp-setconfig.sh --unpeer 127.127.20.$GPSNUM
 fi
 
 # Kill the main process of the service (ldattach)

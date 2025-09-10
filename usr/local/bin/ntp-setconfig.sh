@@ -6,11 +6,28 @@
 # ignoring comments, stripping inline comments, following includefile directives,
 # and storing 'keys' and 'controlkey' values in variables.
 #
-# Usage: ./ntp-setconfig.sh [-n] [--force-passwd|--force-file] <refclock-address>
+# Usage: ./ntp-setconfig.sh [-n] [--force-passwd | --force-file] [--unpeer] <refclock-address>
 #
 #   -n              Dry run (print ntpq command but do not execute)
 #   --force-passwd  Force old authentication style (-c keyid / -c passwd)
 #   --force-file    Force new authentication style (-a / -k)
+#   --unpeer        Remove the refclock from NTP peers (ignore other config lines)
+#
+# Copyright (C) 2025 Richard Elwell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
 ################################################################################
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
@@ -22,6 +39,7 @@ CONFIG_FILE="/run/ntpgps/ntpgps.conf"
 
 DRYRUN=0
 FORCE_MODE=""
+UNPEER=0
 
 # parse options
 while [[ $# -gt 0 ]]; do
@@ -38,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_MODE="file"
             shift
             ;;
+        --unpeer)
+            UNPEER=1
+            shift
+            ;;
         -*)
             echo "Unknown option: $1"
             exit 1
@@ -49,7 +71,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 [-n] [--force-passwd|--force-file] <refclock-address>"
+    echo "Usage: $0 [-n] [--force-passwd|--force-file] [--unpeer] <refclock-address>"
     exit 1
 fi
 REFCLOCK_ADDR="$1"
@@ -92,7 +114,7 @@ process_file() {
             fi
         fi
 
-        if [[ "$line" == *"$REFCLOCK_ADDR"* ]]; then
+        if [[ "$UNPEER" -eq 0 && "$line" == *"$REFCLOCK_ADDR"* ]]; then
             MATCHING_LINES+=("$line")
         fi
     done < "$file"
@@ -124,19 +146,49 @@ if [[ "$AUTH_MODE" == "passwd" && -z "$NTP_PASSWD" ]]; then
     exit 1
 fi
 
-if [[ ${#MATCHING_LINES[@]} -gt 0 ]]; then
+if [[ $UNPEER -eq 1 ]]; then
+    # Build single unpeer command
+    if [[ "$AUTH_MODE" == "passwd" ]]; then
+        CMD=(sudo ntpq -c "keyid $NTP_CONTROL_KEY" -c "passwd $NTP_PASSWD" -c ":config unpeer $REFCLOCK_ADDR")
+        CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd $NTP_PASSWD\" -c \":config unpeer $REFCLOCK_ADDR\")
+    else
+        CMD=(sudo ntpq -a "$NTP_CONTROL_KEY" -k "$NTP_KEYS_FILE" -c ":config unpeer $REFCLOCK_ADDR")
+        CMD_DISPLAY=(sudo ntpq -a "$NTP_CONTROL_KEY" -k \"$NTP_KEYS_FILE\" -c \":config unpeer $REFCLOCK_ADDR\")
+    fi
+
+    echo "Auth mode: $AUTH_MODE ($AUTH_SOURCE)"
+
+    # Show proper quoting for the displayed command so the user can 
+    # copy-paste it into the shell without breaking.
+    echo "Command: ${CMD_DISPLAY[*]}"
+    echo
+
+    if [[ $DRYRUN -eq 0 ]]; then
+        "${CMD[@]}"
+    else
+        echo "[dry-run] Command not executed"
+    fi
+elif [[ ${#MATCHING_LINES[@]} -gt 0 ]]; then
     if [[ "$AUTH_MODE" == "passwd" ]]; then
         CMD=(sudo ntpq -c "keyid $NTP_CONTROL_KEY" -c "passwd $NTP_PASSWD")
+        CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd $NTP_PASSWD\")
     else
         CMD=(sudo ntpq -a "$NTP_CONTROL_KEY" -k "$NTP_KEYS_FILE")
+        CMD_DISPLAY=(sudo ntpq -a "$NTP_CONTROL_KEY" -k \"$NTP_KEYS_FILE\")
     fi
 
     for l in "${MATCHING_LINES[@]}"; do
         CMD+=(-c ":config $l")
+        CMD_DISPLAY+=(-c \":config $l\")
     done
 
     echo "Auth mode: $AUTH_MODE ($AUTH_SOURCE)"
-    echo "Command: ${CMD[*]}"
+
+    # Show proper quoting for the displayed command so the user can 
+    # copy-paste it into the shell without breaking.
+    echo "Command: ${CMD_DISPLAY[*]}"
+    echo
+
     if [[ $DRYRUN -eq 0 ]]; then
         "${CMD[@]}"
     else
