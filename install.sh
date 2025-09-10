@@ -138,6 +138,10 @@ for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     fi
 done
 
+# --- Generate NTP keys ---
+echo "[*] Generating NTP authentication keys..."
+sudo /usr/local/bin/ntp-keys.sh
+
 # --- Enable services ---
 echo "[*] Enabling services..."
 sudo systemctl daemon-reload
