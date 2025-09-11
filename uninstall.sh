@@ -24,6 +24,10 @@
 #set -x #debug switch
 set -e
 
+# Absolute path to this script
+SCRIPT_PATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
 # --- Check if the user can run sudo ---
 if ! sudo -n true 2>/dev/null; then
     echo "This script requires sudo privileges."
@@ -78,10 +82,12 @@ files=(
     /usr/local/bin/ntpgps-gps-setup.sh
     /usr/local/bin/ntpgps-ntp-configure.sh
     /usr/local/bin/ntpgps-gpsnum.sh
+    /etc/ntpgps/ntpgps.conf
     /etc/ntpgps/template/nmea-gps.conf
     /etc/ntpgps/template/nmea-gps-pps.conf
     /etc/ntpgps/template/keys.conf
     /etc/ntpgps/template/ntpgps.conf
+    /etc/ntpgps/template/99-ntpgps-usb.rules
     /etc/udev/rules.d/99-ntpgps-usb.rules
     /etc/modules-load.d/ntpgps-pps.conf
     /etc/systemd/system/ntpgps-gps-nopps@.service
@@ -108,7 +114,6 @@ echo "[*] Reloading udev rules..."
 sudo udevadm control --reload-rules
 
 # Purge .sync-system-filelist
-SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
 REPO_DIR="__REPO_DIR__"
 
 if [ -f "$SCRIPT_DIR/.sync-system-filelist" ]; then
@@ -119,6 +124,22 @@ elif [ -n "$REPO_DIR" ] && [ -f "$REPO_DIR/.sync-system-filelist" ]; then
     rm -vf "$REPO_DIR/.sync-system-filelist"
 else
     echo "[*] No .sync-system-filelist found to remove."
+fi
+
+# Only offer deletion if the script is in /usr/local/bin
+if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
+    read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
+    case "$answer" in
+        [Yy]* )
+            echo "[*] Deleting $SCRIPT_PATH ..."
+            sudo rm -vf -- "$SCRIPT_PATH"
+            ;;
+        * )
+            echo "[*] Leaving $SCRIPT_PATH in place."
+            ;;
+    esac
+else
+    echo "[*] Script is not in /usr/local/bin; skipping self-delete."
 fi
 
 echo "[+] Uninstall complete. Note: dependent packages (setserial, pps-tools) are still installed."

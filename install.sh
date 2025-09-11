@@ -77,6 +77,7 @@ install_dependencies() {
 
 backup_file() {
     local target_file="$1"
+    local new_file="$2"
     local timestamp backup_file
 
     if [ -f "$target_file" ]; then
@@ -89,8 +90,14 @@ backup_file() {
         fi
 
         backup_file="${target_file}.${timestamp}.bak"
-        echo "Backing up existing $target_file → $backup_file"
-        sudo cp -afv "$target_file" "$backup_file"
+
+        # Only back up if file differs from new content
+        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
+            echo "No changes in $target_file; skipping backup."
+        else
+            echo "Backing up existing $target_file → $backup_file"
+            sudo cp -afv "$target_file" "$backup_file"
+        fi
     fi
 }
 
@@ -284,7 +291,15 @@ fi
 # Generate UDEV rules
 ntpgps_generate_udev_rules "$selected" "$UDEV_FILE"
 
-echo "[*] UDEV rules written to $RULES_FILE"
+# Check for serial-number-specific options
+if [[ "$selected" =~ "3" || "$selected" =~ "4" ]]; then
+    RED='\033[0;31m'
+    NC='\033[0m' # No Color
+    echo -e "${RED}IMPORTANT:${NC} You must edit $UDEV_FILE"
+    echo -e "${RED}IMPORTANT:${NC} and set the correct ATTRS{serial} for your device."
+fi
+
+echo "[*] UDEV rules written to $UDEV_FILE"
 sudo udevadm control --reload-rules
 echo "[*] UDEV rules reloaded."
 

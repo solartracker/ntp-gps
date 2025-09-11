@@ -128,6 +128,7 @@ update_reference_file
 ################################################################################
 backup_file() {
     local target_file="$1"
+    local new_file="$2"
     local timestamp backup_file
 
     if [ -f "$target_file" ]; then
@@ -140,8 +141,14 @@ backup_file() {
         fi
 
         backup_file="${target_file}.${timestamp}.bak"
-        echo "Backing up existing $target_file → $backup_file"
-        sudo cp -afv "$target_file" "$backup_file"
+
+        # Only back up if file differs from new content
+        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
+            echo "No changes in $target_file; skipping backup."
+        else
+            echo "Backing up existing $target_file → $backup_file"
+            sudo cp -afv "$target_file" "$backup_file"
+        fi
     fi
 }
 
