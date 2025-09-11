@@ -48,13 +48,9 @@ setserial "$TTYDEV" low_latency
 echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
 if command -v systemctl >/dev/null; then
-    NTP_STATE=$(systemctl is-active ntp.service || true)
-    if [ "$NTP_STATE" != "active" ]; then
-        echo "NTP state is $NTP_STATE.  Exiting..."
-        exit 0
+    if systemctl is-active --quiet ntp.service; then
+        # Add the refclock to the list of NTP network peers
+        /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.20.$GPSNUM
     fi
-
-    # Add the refclock to the list of NTP network peers
-    /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.20.$GPSNUM
 fi
 
