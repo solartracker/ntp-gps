@@ -126,6 +126,25 @@ sudo rsync -azui --relative --ignore-missing-args --omit-dir-times \
 update_reference_file
 
 ################################################################################
+backup_file() {
+    local target_file="$1"
+    local timestamp backup_file
+
+    if [ -f "$target_file" ]; then
+        # Try GNU date -r first
+        if ! timestamp=$(date -r "$target_file" +"%Y%m%d%H%M%S" 2>/dev/null); then
+            # Fallback for BSD/macOS
+            local ts
+            ts=$(stat -c %Y "$target_file" 2>/dev/null || stat -f %m "$target_file")
+            timestamp=$(date -d @"$ts" +"%Y%m%d%H%M%S" 2>/dev/null || date -r "$ts" +"%Y%m%d%H%M%S")
+        fi
+
+        backup_file="${target_file}.${timestamp}.bak"
+        echo "Backing up existing $target_file → $backup_file"
+        sudo cp -afv "$target_file" "$backup_file"
+    fi
+}
+
 sync_file() {
     local src
     local repo_name
@@ -143,6 +162,8 @@ sync_file() {
     repo_tag="${3:-}"
 
     if [ -f "$src" ]; then
+        # Copy new file and backup old file
+        backup_file "$dest"
         sudo rsync -azui --ignore-missing-args --omit-dir-times \
             --out-format='[UPDATE] '$dest \
             --no-o --no-g \
@@ -160,3 +181,4 @@ sync_file() {
 
 # Custom one-way sync for specific top-level files
 sync_file uninstall.sh /usr/local/bin/uninstall-%PROJECT_NAME.sh __REPO_DIR__
+
