@@ -1,5 +1,5 @@
 ################################################################################
-# ntpgps-gps-pps@.service
+# ntpgps-ntp-keys.service
 # 
 # Copyright (C) 2025 Richard Elwell
 #
@@ -18,21 +18,14 @@
 #
 ################################################################################
 [Unit]
-Description=GPS PPS binding for %i
-BindsTo=dev-%i.device
-After=dev-%i.device ntp.service ntpsec.service
-Requires=ntp.service ntpsec.service
-
+Description=Initialize NTP GPS key files
+Before=ntp.service ntpsec.service
+DefaultDependencies=no
+After=local-fs.target
 
 [Service]
-Type=simple
-ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 1
-ExecStart=/usr/sbin/ldattach -d pps /dev/%i
-ExecStartPost=/usr/local/bin/ntpgps-gps-setup.sh %i 1
-ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 1
-KillMode=control-group
-TimeoutStopSec=10s
-Restart=no
+Type=oneshot
+ExecStart=/usr/local/bin/ntpgps-ntp-keys.sh
 StandardOutput=journal
 StandardError=journal
 

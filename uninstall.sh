@@ -37,6 +37,7 @@ services=(
     "ntpgps-gps-pps@*.service"
     "ntpgps-gps-nopps@*.service"
     "ntpgps-gps-ublox7-config@*.service"
+    "ntpgps-ntp-keys.service"
 )
 
 # Stop and disable services
@@ -86,6 +87,7 @@ files=(
     /etc/systemd/system/ntpgps-gps-nopps@.service
     /etc/systemd/system/ntpgps-gps-pps@.service
     /etc/systemd/system/ntpgps-gps-ublox7-config@.service
+    /etc/systemd/system/ntpgps-ntp-keys.service
 )
 
 for f in "${files[@]}"; do

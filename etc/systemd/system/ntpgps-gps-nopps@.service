@@ -20,8 +20,9 @@
 [Unit]
 Description=GPS binding for %i
 BindsTo=dev-%i.device
-After=dev-%i.device
-Before=ntp.service chronyd.service systemd-timesyncd.service
+After=dev-%i.device ntp.service ntpsec.service
+Requires=ntp.service ntpsec.service
+
 
 [Service]
 Type=oneshot

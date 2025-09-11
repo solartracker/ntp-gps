@@ -103,6 +103,7 @@ files=(
     "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-ublox7-config@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-ntp-keys.service /etc/systemd/system"
 )
 
 # --- Copy files, create directories, set permissions ---
@@ -145,6 +146,10 @@ sudo /usr/local/bin/ntpgps-ntp-keys.sh
 # --- Enable services ---
 echo "[*] Enabling services..."
 sudo systemctl daemon-reload
+#sudo systemctl enable ntpgps-gps-pps@.service
+#sudo systemctl enable ntpgps-gps-nopps@.service
+#sudo systemctl enable ntpgps-gps-ublox7-config@.service
+sudo systemctl enable ntpgps-ntp-keys.service
 
 # --- Reload udev ---
 echo "[*] Reloading udev rules..."
