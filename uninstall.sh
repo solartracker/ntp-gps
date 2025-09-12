@@ -58,6 +58,10 @@ for service_name in "${services[@]}"; do
         sudo systemctl disable "$svc" || true
     done
 done
+exit 0
+
+
+
 
 # Wait until all instances are fully inactive
 for svc in "${all_instances[@]}"; do
@@ -123,9 +127,9 @@ else
 fi
 
 # Remove the directories
-sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps
-sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template
-sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps
+sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps || true
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template || true
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
 
 # Clean NTP configs
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
