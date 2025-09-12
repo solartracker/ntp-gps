@@ -170,7 +170,7 @@ sync_file() {
 
     if [ -f "$src" ]; then
         # Copy new file and backup old file
-        backup_file "$dest"
+        backup_file "$dest" "$src"
         sudo rsync -azui --ignore-missing-args --omit-dir-times \
             --out-format='[UPDATE] '$dest \
             --no-o --no-g \

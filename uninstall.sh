@@ -58,10 +58,6 @@ for service_name in "${services[@]}"; do
         sudo systemctl disable "$svc" || true
     done
 done
-exit 0
-
-
-
 
 # Wait until all instances are fully inactive
 for svc in "${all_instances[@]}"; do
@@ -101,7 +97,7 @@ files=(
     /run/ntpgps/keys.conf
 )
 for f in "${files[@]}"; do
-    sudo rm -vf "$f"
+    sudo rm -vf "$f" || true
 done
 
 # Remove NTP authentication keys

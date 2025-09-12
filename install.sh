@@ -24,6 +24,33 @@ enter
 #set -x #debug switch
 set -e
 
+# --- Parse options ---
+NONINTERACTIVE=0
+GPS_OPTION=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --noninteractive)
+            NONINTERACTIVE=1
+            ;;
+        --gps-option=*)
+            GPS_OPTION="${1#*=}"
+            ;;
+        -h|--help)
+            echo "Usage: $0 [--noninteractive] [--gps-option=N]"
+            echo
+            echo "  --noninteractive       Run without prompting for input"
+            echo "  --gps-option=N         Preselect GPS option (1-9)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 # --- Check if the user can run sudo ---
 if ! sudo -n true 2>/dev/null; then
     echo "This script requires sudo privileges."
@@ -147,11 +174,11 @@ ntpgps_generate_udev_rules() {
     sed -i -E '/^#\[(RULE[0-9]+_START|RULE[0-9]+_END)\]$/d' "$tmp_file"
 
     if [[ -f "$output_file" ]]; then
-        backup_file "$output_file"
+        backup_file "$output_file" "$tmp_file"
     fi
 
     sudo mv -fv "$tmp_file" "$output_file"
-    sudo chown --reference=$(dirname "$output_file") "$output_file"
+    sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
     echo "UDEV rules written to $output_file"
 }
@@ -199,7 +226,7 @@ for entry in "${files[@]}"; do
     # Special rename for uninstall.sh
     if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
         dest_file="$dest/uninstall-ntpgps.sh"
-        backup_file "$dest_file"
+        backup_file "$dest_file" "$src"
         sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
         echo "[*] Binding $dest_file to repo directory $SCRIPT_DIR..."
         sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$dest_file"
@@ -238,20 +265,29 @@ echo "[*] Select GPS device type..."
 TEMPLATE="/etc/ntpgps/template/99-ntpgps-usb.rules"
 UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 
-# Display menu
-echo
-echo "Select GPS/USB device configuration:"
-echo " 1) FTDI GPS with PPS"
-echo " 2) FTDI GPS without PPS"
-echo " 3) FTDI GPS with S/N and PPS"
-echo " 4) FTDI GPS with S/N without PPS"
-echo " 5) CH340 GPS with PPS"
-echo " 6) CH340 GPS without PPS"
-echo " 7) VK172 USB GPS dongle"
-echo " 8) Do not configure GPS device (manual edit later)"
-echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
-
-read -rp "Enter option number: " opt
+if [[ $NONINTERACTIVE -eq 1 ]]; then
+    if [[ -z "$GPS_OPTION" ]]; then
+        echo "Error: --noninteractive requires --gps-option=N (1-9)"
+        exit 1
+    fi
+    opt="$GPS_OPTION"
+    echo "[*] Noninteractive mode: using GPS option $opt"
+else
+    # Display menu
+    echo
+    echo "Select GPS/USB device configuration:"
+    echo " 1) FTDI GPS with PPS"
+    echo " 2) FTDI GPS without PPS"
+    echo " 3) FTDI GPS with S/N and PPS"
+    echo " 4) FTDI GPS with S/N without PPS"
+    echo " 5) CH340 GPS with PPS"
+    echo " 6) CH340 GPS without PPS"
+    echo " 7) VK172 USB GPS dongle"
+    echo " 8) Do not configure GPS device (manual edit later)"
+    echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
+    echo
+    read -rp "Enter option number: " opt
+fi
 
 # Validate input
 if ! [[ "$opt" =~ ^[1-9]$ ]]; then
