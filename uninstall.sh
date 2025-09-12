@@ -18,9 +18,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-#finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
-#enter() { echo "[ENTERING] $(basename "$0")"; }
-#enter
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+enter() { echo "[ENTERING] $(basename "$0")"; }
+enter
 #set -x #debug switch
 set -e
 
@@ -96,27 +96,30 @@ files=(
     /run/ntpgps/ntpgps.conf
     /run/ntpgps/keys.conf
 )
-
 for f in "${files[@]}"; do
     sudo rm -vf "$f"
 done
 
 # Remove NTP authentication keys
 echo "[*] Removing NTP authentication keys..."
-NTP_KEYS_FILE="/run/ntpgps/ntp.keys"
-if [ -L "$NTP_KEYS_FILE" ]; then
-    # If it's a symlink, resolve the target
-    TARGET_FILE="$(readlink -f "$NTP_KEYS_FILE")"
-    if [ -f "$TARGET_FILE" ] && [[ "$(basename "$TARGET_FILE")" == ntpkey_* ]]; then
-        echo "[*] Removing target of $NTP_KEYS_FILE → $TARGET_FILE"
+NTP_KEYS="/run/ntpgps/ntp.keys"
+if [ -L "$NTP_KEYS" ]; then
+    # It's a symlink; get the target
+    TARGET_FILE=$(readlink -f "$NTP_KEYS")
+    # Only remove the target if its filename starts with ntpkey_
+    if [ -n "$TARGET_FILE" ] && [ -f "$TARGET_FILE" ] && [[ "$(basename "$TARGET_FILE")" == ntpkey_* ]]; then
+        echo "[*] Removing target of symlink: $TARGET_FILE"
         sudo rm -vf "$TARGET_FILE"
-    else
-        echo "[*] Target file $TARGET_FILE does not start with 'ntpkey_' or does not exist; skipping."
     fi
-fi
-if [ -e "$NTP_KEYS_FILE" ]; then
-    echo "[*] Removing $NTP_KEYS_FILE"
-    sudo rm -vf "$NTP_KEYS_FILE"
+    # Remove the symlink itself
+    echo "[*] Removing symlink: $NTP_KEYS"
+    sudo rm -vf "$NTP_KEYS"
+elif [ -f "$NTP_KEYS" ]; then
+    # Regular file at /run/ntpgps/ntp.keys — remove it directly
+    echo "[*] Removing regular file: $NTP_KEYS"
+    sudo rm -vf "$NTP_KEYS"
+else
+    echo "[*] No ntp keys file found at $NTP_KEYS"
 fi
 
 # Remove the directories
