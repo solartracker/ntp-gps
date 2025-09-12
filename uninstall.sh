@@ -82,7 +82,6 @@ files=(
     /usr/local/bin/ntpgps-gps-setup.sh
     /usr/local/bin/ntpgps-ntp-configure.sh
     /usr/local/bin/ntpgps-gpsnum.sh
-    /etc/ntpgps/ntpgps.conf
     /etc/ntpgps/template/nmea-gps.conf
     /etc/ntpgps/template/nmea-gps-pps.conf
     /etc/ntpgps/template/keys.conf
@@ -94,11 +93,35 @@ files=(
     /etc/systemd/system/ntpgps-gps-pps@.service
     /etc/systemd/system/ntpgps-gps-ublox7-config@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
+    /run/ntpgps/ntpgps.conf
+    /run/ntpgps/keys.conf
 )
 
 for f in "${files[@]}"; do
     sudo rm -vf "$f"
 done
+
+# Remove NTP authentication keys
+echo "[*] Removing NTP authentication keys..."
+NTP_KEYS_FILE="/run/ntpgps/ntp.keys"
+if [ -L "$NTP_KEYS_FILE" ]; then
+    # If it's a symlink, resolve the target
+    TARGET_FILE="$(readlink -f "$NTP_KEYS_FILE")"
+    if [ -f "$TARGET_FILE" ] && [[ "$(basename "$TARGET_FILE")" == ntpkey_* ]]; then
+        echo "[*] Removing target of $NTP_KEYS_FILE → $TARGET_FILE"
+        sudo rm -vf "$TARGET_FILE"
+    else
+        echo "[*] Target file $TARGET_FILE does not start with 'ntpkey_' or does not exist; skipping."
+    fi
+fi
+if [ -e "$NTP_KEYS_FILE" ]; then
+    echo "[*] Removing $NTP_KEYS_FILE"
+    sudo rm -vf "$NTP_KEYS_FILE"
+fi
+
+# Remove the directories
+sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps
 
 # Clean NTP configs
