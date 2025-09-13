@@ -1,5 +1,5 @@
 ################################################################################
-# ntpgps-shared.sh
+# shared.sh
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
 
