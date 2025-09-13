@@ -50,12 +50,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { echo "Sync complete[$?]"; }
-trap finish EXIT
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+enter() { echo "[ENTERING] $(basename "$0")"; }
+enter
 #set -x # debug switch
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$PROJECT_DIR/shared-utils.sh"
 REFERENCE_FILE="$PROJECT_DIR/.sync-system-filelist"
 MAX_FILES=20
 
@@ -126,31 +128,6 @@ sudo rsync -azui --relative --ignore-missing-args --omit-dir-times \
 update_reference_file
 
 ################################################################################
-backup_file() {
-    local target_file="$1"
-    local new_file="$2"
-    local timestamp backup_file
-
-    if [ -f "$target_file" ]; then
-        # Try GNU date -r first
-        if ! timestamp=$(date -r "$target_file" +"%Y%m%d%H%M%S" 2>/dev/null); then
-            # Fallback for BSD/macOS
-            local ts
-            ts=$(stat -c %Y "$target_file" 2>/dev/null || stat -f %m "$target_file")
-            timestamp=$(date -d @"$ts" +"%Y%m%d%H%M%S" 2>/dev/null || date -r "$ts" +"%Y%m%d%H%M%S")
-        fi
-
-        backup_file="${target_file}.${timestamp}.bak"
-
-        # Only back up if file differs from new content
-        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
-            echo "No changes in $target_file; skipping backup."
-        else
-            echo "Backing up existing $target_file → $backup_file"
-            sudo cp -afv "$target_file" "$backup_file"
-        fi
-    fi
-}
 
 sync_file() {
     local src
@@ -169,17 +146,19 @@ sync_file() {
     repo_tag="${3:-}"
 
     if [ -f "$src" ]; then
-        # Copy new file and backup old file
-        backup_file "$dest" "$src"
-        sudo rsync -azui --ignore-missing-args --omit-dir-times \
-            --out-format='[UPDATE] '$dest \
-            --no-o --no-g \
-            "$src" "$dest"
+        local tmpfile=$(mktemp)
+        bundle_script "$src" "$tmpfile" false "SCRIPT_DIR=$PROJECT_DIR"
+        set_repo_dir "$tmpfile" "$PROJECT_DIR" "$repo_tag"
 
-        if [ -n "$repo_tag" ]; then
-            if grep -q "$repo_tag" "$dest"; then
-                sudo sed -i "s|$repo_tag|$PROJECT_DIR|g" "$dest"
-            fi
+        # Copy new file and backup old file
+        backup_file "$dest" "$tmpfile"
+        if [ ! -f "$dest" ] || ! cmp -s "$tmpfile" "$dest"; then
+            sudo mv -f "$tmpfile" "$dest"
+            sudo chown root:root "$dest"
+            sudo chmod 755 "$dest"
+            echo "[UPDATE] $dest"
+        else
+            rm -f "$tmpfile"
         fi
     else
         echo "[!] $src not found, skipping."

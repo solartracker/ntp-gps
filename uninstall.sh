@@ -27,7 +27,7 @@ set -e
 # Absolute path to this script
 SCRIPT_PATH="$(realpath "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-source "$SCRIPT_DIR/shared.sh"
+source "$SCRIPT_DIR/shared-services.sh"
 
 # --- Check if the user can run sudo ---
 if ! sudo -n true 2>/dev/null; then

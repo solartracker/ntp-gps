@@ -30,7 +30,8 @@ GPS_OPTION=""
 
 # Absolute path to the directory where install.sh resides
 SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
-source "$SCRIPT_DIR/shared.sh"
+source "$SCRIPT_DIR/shared-services.sh"
+source "$SCRIPT_DIR/shared-utils.sh"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -182,25 +183,6 @@ ntpgps_generate_udev_rules() {
     echo "UDEV rules written to $output_file"
 }
 
-# Backup a file if it differs from new content
-backup_file() {
-    local target_file="$1"
-    local new_file="$2"
-    local timestamp backup_file
-
-    if [ -f "$target_file" ]; then
-        timestamp=$(date -r "$target_file" +"%Y%m%d%H%M%S" 2>/dev/null || date -d @"$(stat -c %Y "$target_file")" +"%Y%m%d%H%M%S")
-        backup_file="${target_file}.${timestamp}.bak"
-
-        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
-            echo "No changes in $target_file; skipping backup."
-        else
-            echo "Backing up existing $target_file → $backup_file"
-            sudo cp -afv "$target_file" "$backup_file"
-        fi
-    fi
-}
-
 # --- Dependencies ---
 echo "[*] Installing dependencies..."
 install_dependencies
@@ -246,11 +228,13 @@ for entry in "${files[@]}"; do
         dest_file="$dest/uninstall-ntpgps.sh"
         src_path="$SCRIPT_DIR/$src"
         tmpfile=$(mktemp)
-        $SCRIPT_DIR/bundle.sh "$src_path" "$tmpfile" true "SCRIPT_DIR=$SCRIPT_DIR"
+        bundle_script "$src_path" "$tmpfile" true "SCRIPT_DIR=$SCRIPT_DIR"
         sudo chown root:root "$tmpfile"
         sudo chmod 755 "$tmpfile"
+
         echo "[*] Binding $dest_file to repo directory $SCRIPT_DIR..."
-        sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$tmpfile"
+        set_repo_dir "$tmpfile" "$SCRIPT_DIR" "__REPO_DIR__"
+
         #backup_file "$dest_file" "$tmpfile"
         sudo mv -fv "$tmpfile" "$dest_file"
     else
