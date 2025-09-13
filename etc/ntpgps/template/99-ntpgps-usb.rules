@@ -84,6 +84,6 @@
 # Handles creation and removal of /dev/gpsppsN for NTP
 #
 ACTION=="add", SUBSYSTEM=="pps", \
-    PROGRAM="/usr/local/bin/gpspps-symlink.sh %k", \
+    PROGRAM="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
     SYMLINK+="%c"
 
