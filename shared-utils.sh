@@ -3,6 +3,7 @@
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
 
+################################################################################
 # Backup a file if it differs from new content
 backup_file() {
     local target_file="$1"
@@ -30,6 +31,9 @@ backup_file() {
     fi
 }
 
+################################################################################
+# Global search/replace on a tag within a file.  Does not change the file
+# modification time.
 set_repo_dir() {
     local target_file="$1"
     local repo_dir="$2"
@@ -49,9 +53,64 @@ set_repo_dir() {
     fi
 }
 
-# Recursively inlines all 'source' dependencies in a Bash script to produce
-# a single, self-contained output script. Removes original 'source' lines.
-# Also preserves the newest timestamp across all inlined files.
+################################################################################
+# bundle_script
+#
+# Usage:
+#   bundle_script <input_script> <output_script> [verbose] [VAR=VAL...]
+#
+# Purpose:
+#   Recursively inlines all `source` dependencies in a Bash script to produce
+#   a single, self-contained output script. Removes original `source` lines.
+#   Also preserves the newest timestamp across all inlined files.
+
+# Behavior:
+#   • Finds lines starting with `source "file"` (quoted paths supported).
+#   • Expands variables inside source paths (e.g., $VAR, ${VAR}).
+#   • Resolves relative paths based on the including script’s directory.
+#   • Recurses into each dependency once (cycles are skipped).
+#   • Preserves indentation when inlining.
+#   • Marks each inlined block with:
+#         # >>> begin inlined: filename
+#         ...contents...
+#         # <<< end inlined: filename
+#   • Tracks the most recent mtime across all inputs and applies it
+#     to the final bundled output file.
+#
+# Usage:
+#   bundle_script <input_script> <output_script> [verbose] [VAR1=value1 VAR2=value2 ...]
+#
+#   <input_script>   : Path to the script to bundle
+#   <output_script>  : Path for the bundled output script
+#   [verbose]        : Optional, 'true' or 'false' (default: false)
+#   [VAR=value ...]  : Optional variable assignments to expand in source paths
+#
+# Example:
+#   bundle_script uninstall.sh /usr/local/bin/uninstall.sh true "SCRIPT_DIR=/home/pi/ntp-gps"
+#
+# Verbose mode:
+#   • If `verbose=true`, progress messages print to stderr:
+#       - Which files are being exported and inlined
+#       - Which files are skipped (already inlined)
+#   • If `verbose=false`, bundling is silent except on errors.
+#
+# Workflow:
+#   1. Developer calls: bundle_script input.sh output.sh [verbose] [VAR=VAL...]
+#   2. Script is processed, with all sources inlined recursively.
+#   3. Output is a single standalone script — ready to install or deploy.
+#
+# Notes:
+#   • All `source` lines are removed.
+#   • Dependencies are expanded in place.
+#   • Script is now fully standalone and executable.
+#   • The function preserves the structure of inlined files, marking the
+#     beginning and end of each inlined section with comments:
+#         # >>> begin inlined: filename
+#         # <<< end inlined: filename
+#   • This makes the output script portable and independent of external
+#     shared scripts.
+#
+################################################################################
 bundle_script() {
     local input="$1"          # Input script to bundle
     local output="$2"         # Output file for bundled script

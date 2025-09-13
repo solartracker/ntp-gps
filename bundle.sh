@@ -2,18 +2,9 @@
 ################################################################################
 # bundle.sh
 #
-# Recursively inlines all `source` dependencies in a Bash script to produce
-# a single, self-contained output script. Removes original `source` lines.
-#
-# Features:
-#   - Recursively inlines scripts referenced via `source` (both quoted and unquoted)
-#   - Expands variables in `source` paths, e.g., $SCRIPT_DIR or ${LIB_DIR}
-#   - Accepts a list of variable assignments for expansion
-#   - Detects and prevents infinite loops from circular `source` references
-#   - Preserves formatting, indentation, blank lines, and comments
-#   - Removes original `source` lines so the output is truly self-contained
-#   - Optional verbose mode to show inlined and skipped files
-#   - Fails immediately if any referenced file is missing
+# Purpose:
+#   Recursively inlines all `source` dependencies in a Bash script to produce
+#   a single, self-contained output script. Removes original `source` lines.
 #
 # Usage:
 #   bundle_script <input_script> <output_script> [verbose] [VAR1=value1 VAR2=value2 ...]
@@ -24,14 +15,17 @@
 #   [VAR=value ...]  : Optional variable assignments to expand in source paths
 #
 # Example:
-#   bundle_script uninstall.sh /usr/local/bin/uninstall.sh true "SCRIPT_DIR=/tmp/scripts" "LIB_DIR=/tmp/lib"
+#   bundle_script uninstall.sh /usr/local/bin/uninstall.sh true "SCRIPT_DIR=/home/pi/ntp-gps"
 #
 # Notes:
-#   - The function preserves the structure of inlined files, marking the
+#   • All `source` lines are removed.
+#   • Dependencies are expanded in place.
+#   • Script is now fully standalone and executable.
+#   • The function preserves the structure of inlined files, marking the
 #     beginning and end of each inlined section with comments:
 #         # >>> begin inlined: filename
 #         # <<< end inlined: filename
-#   - This makes the output script portable and independent of external
+#   • This makes the output script portable and independent of external
 #     shared scripts.
 #
 # Copyright (C) 2025 Richard Elwell
