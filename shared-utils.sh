@@ -51,17 +51,18 @@ set_repo_dir() {
 
 # Recursively inlines all 'source' dependencies in a Bash script to produce
 # a single, self-contained output script. Removes original 'source' lines.
+# Also preserves the newest timestamp across all inlined files.
 bundle_script() {
-    local input="$1"
-    local output="$2"
-    local verbose="${3:-false}"   # optional verbose flag
+    local input="$1"          # Input script to bundle
+    local output="$2"         # Output file for bundled script
+    local verbose="${3:-false}" # Optional verbose flag
     shift 3
-    local varlist=("$@")          # remaining arguments are variable assignments
+    local varlist=("$@")      # Any remaining arguments are variable assignments to export
 
-    local -A seen=()
-    local newest=0                # epoch time of most recent file
+    local -A seen=()          # Associative array to track already inlined files (avoid recursion)
+    local newest=0            # Epoch time of the most recently modified file
 
-    # Export variables so they can be expanded inside eval
+    # Export variables so they are available for expansion inside 'source' lines
     for var in "${varlist[@]}"; do
         export "$var"
         if [[ "$verbose" == true ]]; then
@@ -69,22 +70,22 @@ bundle_script() {
         fi
     done
 
-    # Track newest time across files
+    # Internal helper: update 'newest' timestamp if this file is more recent
     _track_time() {
         local f="$1"
         local t
-        t=$(stat -c %Y "$f")
+        t=$(stat -c %Y "$f")   # Get last modification time in seconds
         if (( t > newest )); then
             newest=$t
         fi
     }
 
+    # Core recursion function: reads a file, inlines any 'source' dependencies
     _bundle_inner() {
         local file="$1"
-        local prefix="$2"
+        local prefix="$2"      # Indentation for nested files
 
-        # Prevent infinite recursion
-        # Already visited? Skip
+        # Skip files we've already processed (prevents infinite recursion)
         if [[ -v seen["$file"] ]]; then
             if [[ "$verbose" == true ]]; then
                 echo "${prefix}# !!! Skipping already inlined: $file" >&2
@@ -93,23 +94,24 @@ bundle_script() {
         fi
         seen["$file"]=1
 
-        _track_time "$file"  # update newest seen
+        _track_time "$file"  # Track newest modification time
 
         if [[ "$verbose" == true ]]; then
             echo "${prefix}# Inlining file: $file" >&2
         fi
 
+        # Process each line of the file
         while IFS= read -r line || [[ -n "$line" ]]; do
-            # Match source lines with either $VAR or ${VAR} inside quotes
+            # Match 'source' lines inside quotes
             if [[ "$line" =~ ^([[:space:]]*)source[[:space:]]+\"([^\"]+)\" ]]; then
                 local indent="${BASH_REMATCH[1]}"
                 local src="${BASH_REMATCH[2]}"
 
-                # Expand all shell variables ($VAR or ${VAR})
+                # Expand any shell variables in the source path ($VAR or ${VAR})
                 local resolved
                 resolved=$(eval echo "\"$src\"")
 
-                # Resolve relative to current file if necessary
+                # Resolve relative path based on current file if needed
                 local dir
                 dir="$(dirname "$file")"
                 if [[ ! -f "$resolved" && -f "$dir/$resolved" ]]; then
@@ -120,32 +122,34 @@ bundle_script() {
                     if [[ "$verbose" == true ]]; then
                         echo "${prefix}# >>> inlining $resolved" >&2
                     fi
+                    # Mark inlined section in the output
                     echo "${indent}# >>> begin inlined: $src"
-                    _bundle_inner "$resolved" "$indent"
+                    _bundle_inner "$resolved" "$indent"  # Recursive call
                     echo "${indent}# <<< end inlined: $src"
-                    # original `source` line removed
                 else
                     echo "ERROR: source file not found: $resolved" >&2
                     exit 1
                 fi
             else
-                # Print normal lines unchanged
+                # Normal line: just print as-is
                 echo "$line"
             fi
         done < "$file"
     }
 
+    # Run the recursive bundler and write output to $output
     {
         _bundle_inner "$input" ""
     } > "$output"
 
-    chmod +x "$output"
+    chmod +x "$output"  # Make the bundled script executable
 
-    # Apply newest timestamp to output
+    # Apply the newest timestamp across all inlined files to preserve modification time
     if (( newest > 0 )); then
         touch -d @"$newest" "$output"
     fi
 
+    # Optional verbose message
     if [[ "$verbose" == true ]]; then
         echo "Bundling complete: $output (timestamp set to newest source)" >&2
     fi
