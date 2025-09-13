@@ -27,6 +27,7 @@ set -e
 # Absolute path to this script
 SCRIPT_PATH="$(realpath "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+source "$SCRIPT_DIR/shared.sh"
 
 # --- Check if the user can run sudo ---
 if ! sudo -n true 2>/dev/null; then
@@ -35,39 +36,8 @@ if ! sudo -n true 2>/dev/null; then
     exit 1
 fi
 
-echo "[*] Stopping and disabling GPS services for all devices..."
-
-services=(
-    "ntpgps-gps-pps@*.service"
-    "ntpgps-gps-nopps@*.service"
-    "ntpgps-gps-ublox7-config@*.service"
-    "ntpgps-ntp-keys.service"
-)
-
-# Stop and disable services
-all_instances=()
-for service_name in "${services[@]}"; do
-    instances=$(systemctl list-units --type=service --state=running "$service_name" \
-        --no-legend --no-pager | awk '{print $1}')
-    for svc in $instances; do
-        all_instances+=("$svc")
-        echo "[*] Stopping $svc ..."
-        sudo systemctl stop "$svc" || true
-        sleep 0.5
-        echo "[*] Disabling $svc ..."
-        sudo systemctl disable "$svc" || true
-    done
-done
-
-# Wait until all instances are fully inactive
-for svc in "${all_instances[@]}"; do
-    while systemctl is-active --quiet "$svc"; do
-        sleep 0.5
-    done
-done
-
-sleep 2
-sudo systemctl daemon-reload
+echo "[*] Stopping and disabling GPS services..."
+stop_disable_services
 echo "[*] GPS services stopped and disabled."
 
 # Remove installed files
@@ -154,16 +124,16 @@ fi
 
 # Only offer deletion if the script is in /usr/local/bin
 if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
-    read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
-    case "$answer" in
-        [Yy]* )
+#    read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
+#    case "$answer" in
+#        [Yy]* )
             echo "[*] Deleting $SCRIPT_PATH ..."
             sudo rm -vf -- "$SCRIPT_PATH"
-            ;;
-        * )
-            echo "[*] Leaving $SCRIPT_PATH in place."
-            ;;
-    esac
+#            ;;
+#        * )
+#            echo "[*] Leaving $SCRIPT_PATH in place."
+#            ;;
+#    esac
 else
     echo "[*] Script is not in /usr/local/bin; skipping self-delete."
 fi

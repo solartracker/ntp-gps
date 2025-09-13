@@ -18,15 +18,19 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
-enter() { echo "[ENTERING] $(basename "$0")"; }
-enter
+#finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+#enter() { echo "[ENTERING] $(basename "$0")"; }
+#enter
 #set -x #debug switch
 set -e
 
 # --- Parse options ---
 NONINTERACTIVE=0
 GPS_OPTION=""
+
+# Absolute path to the directory where install.sh resides
+SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
+source "$SCRIPT_DIR/shared.sh"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -51,16 +55,34 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# --- Check if the user can run sudo ---
+# --- Check for sudo privileges early ---
 if ! sudo -n true 2>/dev/null; then
     echo "This script requires sudo privileges."
     echo "Please ensure your user can run sudo and try again."
     exit 1
 fi
 
-# Absolute path to the directory where install.sh resides
-SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
+# --- Clean slate: uninstall previous install if uninstall script exists ---
+if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
+    echo "[*] Uninstalling existing installation..."
+    /usr/local/bin/uninstall-ntpgps.sh
+    if [ $? -ne 0 ]; then
+        echo "[!] Existing uninstall failed. Aborting."
+        exit 1
+    fi
+    echo "[*] Finished uninstalling existing installation."
+else
+    # --- Stop any previously running GPS services if uninstall script not found ---
+    if declare -f stop_disable_services >/dev/null 2>&1; then
+        echo "[*] Stopping and disabling GPS services..."
+        stop_disable_services
+        echo "[*] GPS services stopped and disabled."
+    else
+        echo "[*] No uninstall script found, and stop_disable_services not defined. Skipping."
+    fi
+fi
 
+# --- Install dependencies ---
 install_dependencies() {
     local need_update=0
 
@@ -99,32 +121,6 @@ install_dependencies() {
         sudo apt-get install -y setserial pps-tools
     else
         echo "[*] All dependencies already satisfied."
-    fi
-}
-
-backup_file() {
-    local target_file="$1"
-    local new_file="$2"
-    local timestamp backup_file
-
-    if [ -f "$target_file" ]; then
-        # Try GNU date -r first
-        if ! timestamp=$(date -r "$target_file" +"%Y%m%d%H%M%S" 2>/dev/null); then
-            # Fallback for BSD/macOS
-            local ts
-            ts=$(stat -c %Y "$target_file" 2>/dev/null || stat -f %m "$target_file")
-            timestamp=$(date -d @"$ts" +"%Y%m%d%H%M%S" 2>/dev/null || date -r "$ts" +"%Y%m%d%H%M%S")
-        fi
-
-        backup_file="${target_file}.${timestamp}.bak"
-
-        # Only back up if file differs from new content
-        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
-            echo "No changes in $target_file; skipping backup."
-        else
-            echo "Backing up existing $target_file → $backup_file"
-            sudo cp -afv "$target_file" "$backup_file"
-        fi
     fi
 }
 
@@ -173,14 +169,33 @@ ntpgps_generate_udev_rules() {
     # Remove start/end tags in-place in tmp file
     sed -i -E '/^#\[(RULE[0-9]+_START|RULE[0-9]+_END)\]$/d' "$tmp_file"
 
-    if [[ -f "$output_file" ]]; then
-        backup_file "$output_file" "$tmp_file"
-    fi
+    #if [[ -f "$output_file" ]]; then
+    #    backup_file "$output_file" "$tmp_file"
+    #fi
 
     sudo mv -fv "$tmp_file" "$output_file"
     sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
     echo "UDEV rules written to $output_file"
+}
+
+# Backup a file if it differs from new content
+backup_file() {
+    local target_file="$1"
+    local new_file="$2"
+    local timestamp backup_file
+
+    if [ -f "$target_file" ]; then
+        timestamp=$(date -r "$target_file" +"%Y%m%d%H%M%S" 2>/dev/null || date -d @"$(stat -c %Y "$target_file")" +"%Y%m%d%H%M%S")
+        backup_file="${target_file}.${timestamp}.bak"
+
+        if [ -n "$new_file" ] && cmp -s "$target_file" "$new_file"; then
+            echo "No changes in $target_file; skipping backup."
+        else
+            echo "Backing up existing $target_file → $backup_file"
+            sudo cp -afv "$target_file" "$backup_file"
+        fi
+    fi
 }
 
 # --- Dependencies ---
@@ -217,7 +232,7 @@ files=(
 # --- Copy files, create directories, set permissions ---
 for entry in "${files[@]}"; do
     mode=${entry%% *}                  # First field
-    rest=${entry#* }                   
+    rest=${entry#* }
     src=${rest%% *}                    # Second field
     dest=${rest#* }                    # Third field
 
@@ -226,10 +241,15 @@ for entry in "${files[@]}"; do
     # Special rename for uninstall.sh
     if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
         dest_file="$dest/uninstall-ntpgps.sh"
-        backup_file "$dest_file" "$src"
-        sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
+        src_path="$SCRIPT_DIR/$src"
+        tmpfile=$(mktemp)
+        $SCRIPT_DIR/bundle.sh "$src_path" "$tmpfile" true "SCRIPT_DIR=$SCRIPT_DIR"
+        sudo chown root:root "$tmpfile"
+        sudo chmod 755 "$tmpfile"
         echo "[*] Binding $dest_file to repo directory $SCRIPT_DIR..."
-        sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$dest_file"
+        sudo sed -i "s|__REPO_DIR__|$SCRIPT_DIR|g" "$tmpfile"
+        #backup_file "$dest_file" "$tmpfile"
+        sudo mv -fv "$tmpfile" "$dest_file"
     else
         dest_file="$dest/$(basename "$src")"
         sudo cp -afv --no-preserve=ownership --remove-destination "$src" "$dest_file"
@@ -253,11 +273,7 @@ echo "[*] Generating NTP authentication keys..."
 sudo /usr/local/bin/ntpgps-ntp-keys.sh
 
 # --- Enable services ---
-echo "[*] Enabling services..."
-sudo systemctl daemon-reload
-#sudo systemctl enable ntpgps-gps-pps@.service
-#sudo systemctl enable ntpgps-gps-nopps@.service
-#sudo systemctl enable ntpgps-gps-ublox7-config@.service
+echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
 # --- GPS/UDEV configuration ---
