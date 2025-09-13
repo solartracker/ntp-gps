@@ -64,12 +64,23 @@ bundle_script() {
     local varlist=("$@")          # remaining arguments are variable assignments
 
     local -A seen=()
+    local newest=0                # epoch time of most recent file
 
     # Export variables so they can be expanded inside eval
     for var in "${varlist[@]}"; do
         export "$var"
         $verbose && echo "# Exported: $var" >&2
     done
+
+    # Track newest time across files
+    _track_time() {
+        local f="$1"
+        local t
+        t=$(stat -c %Y "$f")
+        if (( t > newest )); then
+            newest=$t
+        fi
+    }
 
     _bundle_inner() {
         local file="$1"
@@ -81,6 +92,8 @@ bundle_script() {
             return
         fi
         seen["$file"]=1
+
+        _track_time "$file"  # update newest seen
 
         $verbose && echo "${prefix}# Inlining file: $file" >&2
 
@@ -95,7 +108,8 @@ bundle_script() {
                 resolved=$(eval echo "\"$src\"")
 
                 # Resolve relative to current file if necessary
-                local dir="$(dirname "$file")"
+                local dir
+                dir="$(dirname "$file")"
                 if [[ ! -f "$resolved" && -f "$dir/$resolved" ]]; then
                     resolved="$dir/$resolved"
                 fi
@@ -105,7 +119,7 @@ bundle_script() {
                     echo "${indent}# >>> begin inlined: $src"
                     _bundle_inner "$resolved" "$indent"
                     echo "${indent}# <<< end inlined: $src"
-                    # original `source` line is removed
+                    # original `source` line removed
                 else
                     echo "ERROR: source file not found: $resolved" >&2
                     exit 1
@@ -123,7 +137,12 @@ bundle_script() {
 
     chmod +x "$output"
 
-    $verbose && echo "Bundling complete: $output" >&2
+    # Apply newest timestamp to output
+    if (( newest > 0 )); then
+        touch -d @"$newest" "$output"
+    fi
+
+    $verbose && echo "Bundling complete: $output (timestamp set to newest source)" >&2
 }
 
 if [[ $# -lt 2 ]]; then
