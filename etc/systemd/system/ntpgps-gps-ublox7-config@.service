@@ -18,7 +18,7 @@
 #
 ################################################################################
 [Unit]
-Description=GPS u-blox 7 USB binding for %i
+Description=NTP-GPS NMEA device hot config on %i
 BindsTo=dev-%i.device
 After=dev-%i.device ntp.service ntpsec.service
 Requires=ntp.service ntpsec.service

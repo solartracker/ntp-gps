@@ -18,7 +18,7 @@
 #
 ################################################################################
 [Unit]
-Description=GPS PPS binding for %i
+Description=NTP-GPS NMEA+PPS device on %i
 BindsTo=dev-%i.device
 After=dev-%i.device ntp.service ntpsec.service
 Requires=ntp.service ntpsec.service
