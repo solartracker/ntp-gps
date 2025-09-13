@@ -126,13 +126,14 @@ install_dependencies() {
 
 # Function to generate UDEV rules from template
 ntpgps_generate_udev_rules() {
-    local selected_rules=($1)
+    local selected_rules_str="$1"
     local output_file="$2"
     local tmp_file
     tmp_file="$(mktemp)"
 
+    # Build set of selected rules
     declare -A selected_set
-    for n in "${selected_rules[@]}"; do
+    for n in $selected_rules_str; do
         selected_set["$n"]=1
     done
 
@@ -156,8 +157,14 @@ ntpgps_generate_udev_rules() {
 
         if [[ $inside_rule == "yes" ]]; then
             if [[ ${selected_set[$rule_number]} ]]; then
-                echo "${line/#\#/}" >> "$tmp_file"
+                # Uncomment the rule line (but leave markers alone)
+                if [[ $line =~ ^# ]]; then
+                    echo "${line#\#}" >> "$tmp_file"
+                else
+                    echo "$line" >> "$tmp_file"
+                fi
             else
+                # Keep it commented
                 [[ $line =~ ^# ]] || line="#$line"
                 echo "$line" >> "$tmp_file"
             fi
@@ -166,12 +173,8 @@ ntpgps_generate_udev_rules() {
         fi
     done < "$TEMPLATE"
 
-    # Remove start/end tags in-place in tmp file
+    # Remove start/end tags
     sed -i -E '/^#\[(RULE[0-9]+_START|RULE[0-9]+_END)\]$/d' "$tmp_file"
-
-    #if [[ -f "$output_file" ]]; then
-    #    backup_file "$output_file" "$tmp_file"
-    #fi
 
     sudo mv -fv "$tmp_file" "$output_file"
     sudo chown root:root "$output_file"
