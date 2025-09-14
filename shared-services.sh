@@ -54,5 +54,7 @@ stop_disable_services() {
     done
 
     sudo systemctl daemon-reload
+
+    return 0
 }
 

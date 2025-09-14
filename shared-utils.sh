@@ -6,9 +6,41 @@
 ################################################################################
 # Backup a file if it differs from new content
 backup_file() {
-    local target_file="$1"
-    local new_file="$2"
-    local timestamp backup_file
+    local verbose=false
+    local target_file=""
+    local new_file=""
+    local timestamp=""
+    local backup_file=""
+
+    # --- Parse options ---
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            -*)
+                echo "backup_file: unknown option: $1" >&2
+                return 1
+                ;;
+            *)
+                if [ -z "$target_file" ]; then
+                    target_file="$1"
+                elif [ -z "$new_file" ]; then
+                    new_file="$1"
+                else
+                    echo "backup_file: too many arguments" >&2
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$target_file" ] || [ -z "$new_file" ]; then
+        echo "Usage: backup_file [-v] <target_file> <new_file>" >&2
+        return 1
+    fi
 
     if [ -f "$target_file" ]; then
         # Try GNU date -r first
@@ -23,13 +55,14 @@ backup_file() {
 
         # Only back up if file differs from new content
         if [ -n "$new_file" ] && ! cmp -s "$target_file" "$new_file"; then
-        #    echo "Backing up existing $target_file → $backup_file"
-        #    sudo cp -afv "$target_file" "$backup_file"
+            $verbose && echo "Backing up existing $target_file → $backup_file"
             sudo cp -af "$target_file" "$backup_file"
-        #else
-        #    echo "No changes in $target_file; skipping backup."
+        else
+            $verbose && echo "No changes in $target_file; skipping backup."
         fi
     fi
+
+    return 0
 }
 
 ################################################################################
@@ -52,6 +85,8 @@ set_repo_dir() {
             touch -d @"$timestamp" "$target_file"
         fi
     fi
+
+    return 0
 }
 
 ################################################################################
@@ -83,7 +118,7 @@ set_repo_dir() {
 #
 #   <input_script>   : Path to the script to bundle
 #   <output_script>  : Path for the bundled output script
-#   [verbose]        : Optional, 'true' or 'false' (default: false)
+#   [verbose]        : Optional, true or false (default: false)
 #   [VAR=value ...]  : Optional variable assignments to expand in source paths
 #
 # Example:
@@ -125,9 +160,7 @@ bundle_script() {
     # Export variables so they are available for expansion inside 'source' lines
     for var in "${varlist[@]}"; do
         export "$var"
-        if [[ "$verbose" == true ]]; then
-            echo "# Exported: $var" >&2
-        fi
+        $verbose && echo "# Exported: $var" >&2
     done
 
     # Internal helper: update 'newest' timestamp if this file is more recent
@@ -147,18 +180,14 @@ bundle_script() {
 
         # Skip files we've already processed (prevents infinite recursion)
         if [[ -v seen["$file"] ]]; then
-            if [[ "$verbose" == true ]]; then
-                echo "${prefix}# !!! Skipping already inlined: $file" >&2
-            fi
+            $verbose && echo "${prefix}# !!! Skipping already inlined: $file" >&2
             return 0
         fi
         seen["$file"]=1
 
         _track_time "$file"  # Track newest modification time
 
-        if [[ "$verbose" == true ]]; then
-            echo "${prefix}# Inlining file: $file" >&2
-        fi
+        $verbose && echo "${prefix}# Inlining file: $file" >&2
 
         # Process each line of the file
         while IFS= read -r line || [[ -n "$line" ]]; do
@@ -179,9 +208,7 @@ bundle_script() {
                 fi
 
                 if [[ -f "$resolved" ]]; then
-                    if [[ "$verbose" == true ]]; then
-                        echo "${prefix}# >>> inlining $resolved" >&2
-                    fi
+                    $verbose && echo "${prefix}# >>> inlining $resolved" >&2
                     # Mark inlined section in the output
                     echo "${indent}# >>> begin inlined: $src"
                     _bundle_inner "$resolved" "$indent"  # Recursive call
@@ -210,8 +237,8 @@ bundle_script() {
     fi
 
     # Optional verbose message
-    if [[ "$verbose" == true ]]; then
-        echo "Bundling complete: $output (timestamp set to newest source)" >&2
-    fi
+    $verbose && echo "Bundling complete: $output (timestamp set to newest source)" >&2
+
+    return 0
 }
 
