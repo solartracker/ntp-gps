@@ -24,6 +24,21 @@ enter
 #set -x #debug switch
 set -e
 
+# --- Parse options ---
+SELF_DELETE=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --self-delete)
+            SELF_DELETE=1
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
 # Absolute path to this script
 SCRIPT_PATH="$(realpath "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
@@ -124,16 +139,21 @@ fi
 
 # Only offer deletion if the script is in /usr/local/bin
 if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
-#    read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
-#    case "$answer" in
-#        [Yy]* )
+    if [ $SELF_DELETE -eq 1 ]; then
+        answer="Y"
+    else
+        read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
+    fi
+
+    case "$answer" in
+        [Yy]* )
             echo "[*] Deleting $SCRIPT_PATH ..."
             sudo rm -vf -- "$SCRIPT_PATH"
-#            ;;
-#        * )
-#            echo "[*] Leaving $SCRIPT_PATH in place."
-#            ;;
-#    esac
+            ;;
+        * )
+            echo "[*] Leaving $SCRIPT_PATH in place."
+            ;;
+    esac
 else
     echo "[*] Script is not in /usr/local/bin; skipping self-delete."
 fi
