@@ -24,6 +24,11 @@ enter
 #set -x #debug switch
 set -e
 
+# Absolute path to this script
+SCRIPT_PATH="$(realpath "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+source "$SCRIPT_DIR/shared-services.sh"
+
 # --- Parse options ---
 SELF_DELETE=0
 while [ $# -gt 0 ]; do
@@ -39,10 +44,17 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Absolute path to this script
-SCRIPT_PATH="$(realpath "$0")"
-SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-source "$SCRIPT_DIR/shared-services.sh"
+# --- Redirect to canonical uninstall script if not in /usr/local/bin ---
+if [ "$SCRIPT_DIR" != "/usr/local/bin" ]; then
+    ALT_SCRIPT="/usr/local/bin/uninstall-ntpgps.sh"
+    if [ -f "$ALT_SCRIPT" ] && [ -x "$ALT_SCRIPT" ]; then
+        echo "[*] Redirecting to $ALT_SCRIPT ..."
+        exec "$ALT_SCRIPT" "$@"
+        exit 0 # paranoid safety net
+    else
+        echo "[*] $ALT_SCRIPT not found; proceeding with current uninstall."
+    fi
+fi
 
 # --- Check if the user can run sudo ---
 if ! sudo -n true 2>/dev/null; then
