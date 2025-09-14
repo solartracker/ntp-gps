@@ -123,10 +123,12 @@ install_dependencies() {
     else
         echo "[*] All dependencies already satisfied."
     fi
+
+    return 0
 }
 
 # Function to generate UDEV rules from template
-ntpgps_generate_udev_rules() {
+generate_udev_rules() {
     local selected_rules_str="$1"
     local output_file="$2"
     local tmp_file
@@ -181,6 +183,8 @@ ntpgps_generate_udev_rules() {
     sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
     echo "UDEV rules written to $output_file"
+
+    return 0
 }
 
 # --- Dependencies ---
@@ -328,7 +332,7 @@ if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then
 fi
 
 # Generate UDEV rules
-ntpgps_generate_udev_rules "$selected" "$UDEV_FILE"
+generate_udev_rules "$selected" "$UDEV_FILE"
 
 # Check for serial-number-specific options
 if [[ "$selected" =~ "3" || "$selected" =~ "4" ]]; then
