@@ -192,6 +192,7 @@ echo "[*] Installing files..."
 
 # Format: "mode source destination"
 files=(
+    "755 uninstall.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-setconfig.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-stop.sh /usr/local/bin"
@@ -201,7 +202,6 @@ files=(
     "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-configure.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsnum.sh /usr/local/bin"
-    "755 uninstall.sh /usr/local/bin"
     "644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
@@ -229,13 +229,13 @@ for entry in "${files[@]}"; do
         src_path="$SCRIPT_DIR/$src"
         tmpfile=$(mktemp)
         bundle_script -v -DSCRIPT_DIR="$SCRIPT_DIR" "$src" "$tmpfile"
-        sudo chown root:root "$tmpfile"
-        sudo chmod 755 "$tmpfile"
 
         echo "[*] Binding $dest_file to repo directory $SCRIPT_DIR..."
         set_repo_dir "$tmpfile" "$SCRIPT_DIR" "__REPO_DIR__"
 
-        #backup_file "$dest_file" "$tmpfile"
+        #backup_file -v "$dest_file" "$tmpfile"
+        sudo chown root:root "$tmpfile"
+        sudo chmod 755 "$tmpfile"
         sudo mv -fv "$tmpfile" "$dest_file"
     else
         dest_file="$dest/$(basename "$src")"
