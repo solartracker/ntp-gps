@@ -23,8 +23,9 @@ backup_file() {
 
         # Only back up if file differs from new content
         if [ -n "$new_file" ] && ! cmp -s "$target_file" "$new_file"; then
-            echo "Backing up existing $target_file → $backup_file"
-            sudo cp -afv "$target_file" "$backup_file"
+        #    echo "Backing up existing $target_file → $backup_file"
+        #    sudo cp -afv "$target_file" "$backup_file"
+            sudo cp -af "$target_file" "$backup_file"
         #else
         #    echo "No changes in $target_file; skipping backup."
         fi
