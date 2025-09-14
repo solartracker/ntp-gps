@@ -93,150 +93,156 @@ set_repo_dir() {
 # bundle_script
 #
 # Usage:
-#   bundle_script <input_script> <output_script> [verbose] [VAR=VAL...]
+#   bundle_script [-v|--verbose] [-DVAR=VAL ...] <input_script> <output_script>
+#
+# Arguments:
+#   -v, --verbose     Optional. Enable verbose output (default: disabled).
+#   -DVAR=VAL         Optional. Export variables for expanding in source paths.
+#   <input_script>    Required. Path to the script to bundle.
+#   <output_script>   Required. Path for the bundled output script.
 #
 # Purpose:
 #   Recursively inlines all `source` dependencies in a Bash script to produce
-#   a single, self-contained output script. Removes original `source` lines.
-#   Also preserves the newest timestamp across all inlined files.
-
+#   a single, self-contained output script. The final script is executable and
+#   preserves the newest modification timestamp across all inlined files.
+#
 # Behavior:
-#   • Finds lines starting with `source "file"` (quoted paths supported).
-#   • Expands variables inside source paths (e.g., $VAR, ${VAR}).
+#   • Detects lines starting with `source "file"` (supports quoted paths).
+#   • Expands shell variables inside source paths ($VAR or ${VAR}).
 #   • Resolves relative paths based on the including script’s directory.
-#   • Recurses into each dependency once (cycles are skipped).
-#   • Preserves indentation when inlining.
-#   • Marks each inlined block with:
+#   • Recursively inlines each dependency once. Already-inlined files are skipped
+#     silently unless verbose mode is enabled.
+#   • Preserves indentation of inlined code.
+#   • Marks the start and end of each inlined block with comments:
 #         # >>> begin inlined: filename
 #         ...contents...
 #         # <<< end inlined: filename
-#   • Tracks the most recent mtime across all inputs and applies it
-#     to the final bundled output file.
-#
-# Usage:
-#   bundle_script <input_script> <output_script> [verbose] [VAR1=value1 VAR2=value2 ...]
-#
-#   <input_script>   : Path to the script to bundle
-#   <output_script>  : Path for the bundled output script
-#   [verbose]        : Optional, true or false (default: false)
-#   [VAR=value ...]  : Optional variable assignments to expand in source paths
-#
-# Example:
-#   bundle_script uninstall.sh /usr/local/bin/uninstall.sh true "SCRIPT_DIR=/home/pi/ntp-gps"
+#   • Tracks the newest modification time among all input and inlined files
+#     and applies it to the final bundled output script.
 #
 # Verbose mode:
-#   • If `verbose=true`, progress messages print to stderr:
-#       - Which files are being exported and inlined
-#       - Which files are skipped (already inlined)
-#   • If `verbose=false`, bundling is silent except on errors.
+#   • If verbose is enabled, progress messages are printed to stderr:
+#       - Files being inlined
+#       - Files skipped due to prior inclusion
+#       - Exported variable assignments
+#   • If verbose is not enabled, bundling is silent except on errors.
 #
-# Workflow:
-#   1. Developer calls: bundle_script input.sh output.sh [verbose] [VAR=VAL...]
-#   2. Script is processed, with all sources inlined recursively.
-#   3. Output is a single standalone script — ready to install or deploy.
+# Failure modes:
+#   • If a source file cannot be found, the script exits immediately with an error.
+#   • Nonexistent variables in paths are expanded as empty strings.
+#
+# Example:
+#   bundle_script -v -DSCRIPT_DIR=/home/pi/ntp-gps uninstall.sh \
+#       /usr/local/bin/uninstall.sh
 #
 # Notes:
-#   • All `source` lines are removed.
-#   • Dependencies are expanded in place.
-#   • Script is now fully standalone and executable.
-#   • The function preserves the structure of inlined files, marking the
-#     beginning and end of each inlined section with comments:
-#         # >>> begin inlined: filename
-#         # <<< end inlined: filename
-#   • This makes the output script portable and independent of external
-#     shared scripts.
+#   • All `source` lines are removed and replaced with inlined content.
+#   • Script becomes fully standalone and portable.
+#   • Preserves structure and readability by marking inlined sections.
 #
+# Copyright (C) 2025 Richard Elwell
+# Licensed under GPLv3 or later
 ################################################################################
 bundle_script() {
-    local input="$1"          # Input script to bundle
-    local output="$2"         # Output file for bundled script
-    local verbose="${3:-false}" # Optional verbose flag
-    shift 3
-    local varlist=("$@")      # Any remaining arguments are variable assignments to export
+    local input=""
+    local output=""
+    local verbose=false
+    local -a varlist=()   # For -DVAR=VAL style variable assignments
 
-    local -A seen=()          # Associative array to track already inlined files (avoid recursion)
-    local newest=0            # Epoch time of the most recently modified file
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            -D*)
+                varlist+=("${1#-D}")  # Strip the -D prefix
+                shift
+                ;;
+            --)  # End of options
+                shift
+                break
+                ;;
+            -*)  # Unknown option
+                echo "Unknown option: $1" >&2
+                return 1
+                ;;
+            *)  # Positional arguments
+                if [[ -z "$input" ]]; then
+                    input="$1"
+                elif [[ -z "$output" ]]; then
+                    output="$1"
+                else
+                    # Treat remaining as variable assignments (for backward compatibility)
+                    varlist+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
 
-    # Export variables so they are available for expansion inside 'source' lines
+    if [[ -z "$input" || -z "$output" ]]; then
+        echo "Usage: bundle_script [-v|--verbose] [-DVAR=VAL ...] <input_script> <output_script>" >&2
+        return 1
+    fi
+
+    local -A seen=()
+    local newest=0
+
+    # Export variables for source expansion
     for var in "${varlist[@]}"; do
         export "$var"
         $verbose && echo "# Exported: $var" >&2
     done
 
-    # Internal helper: update 'newest' timestamp if this file is more recent
     _track_time() {
         local f="$1"
         local t
-        t=$(stat -c %Y "$f")   # Get last modification time in seconds
-        if (( t > newest )); then
-            newest=$t
-        fi
+        t=$(stat -c %Y "$f")
+        (( t > newest )) && newest=$t
+        return 0
     }
 
-    # Core recursion function: reads a file, inlines any 'source' dependencies
     _bundle_inner() {
         local file="$1"
-        local prefix="$2"      # Indentation for nested files
+        local prefix="$2"
 
-        # Skip files we've already processed (prevents infinite recursion)
-        if [[ -v seen["$file"] ]]; then
-            $verbose && echo "${prefix}# !!! Skipping already inlined: $file" >&2
-            return 0
-        fi
+        [[ -v seen["$file"] ]] && { $verbose && echo "${prefix}# Skipping already inlined: $file" >&2; return 0; }
         seen["$file"]=1
 
-        _track_time "$file"  # Track newest modification time
+        _track_time "$file"
+        $verbose && echo "${prefix}# Inlining: $file" >&2
 
-        $verbose && echo "${prefix}# Inlining file: $file" >&2
-
-        # Process each line of the file
         while IFS= read -r line || [[ -n "$line" ]]; do
-            # Match 'source' lines inside quotes
             if [[ "$line" =~ ^([[:space:]]*)source[[:space:]]+\"([^\"]+)\" ]]; then
                 local indent="${BASH_REMATCH[1]}"
                 local src="${BASH_REMATCH[2]}"
-
-                # Expand any shell variables in the source path ($VAR or ${VAR})
                 local resolved
                 resolved=$(eval echo "\"$src\"")
-
-                # Resolve relative path based on current file if needed
                 local dir
                 dir="$(dirname "$file")"
-                if [[ ! -f "$resolved" && -f "$dir/$resolved" ]]; then
-                    resolved="$dir/$resolved"
-                fi
+                [[ ! -f "$resolved" && -f "$dir/$resolved" ]] && resolved="$dir/$resolved"
 
                 if [[ -f "$resolved" ]]; then
                     $verbose && echo "${prefix}# >>> inlining $resolved" >&2
-                    # Mark inlined section in the output
                     echo "${indent}# >>> begin inlined: $src"
-                    _bundle_inner "$resolved" "$indent"  # Recursive call
+                    _bundle_inner "$resolved" "$indent"
                     echo "${indent}# <<< end inlined: $src"
                 else
                     echo "ERROR: source file not found: $resolved" >&2
                     exit 1
                 fi
             else
-                # Normal line: just print as-is
                 echo "$line"
             fi
         done < "$file"
+        return 0
     }
 
-    # Run the recursive bundler and write output to $output
-    {
-        _bundle_inner "$input" ""
-    } > "$output"
-
-    chmod +x "$output"  # Make the bundled script executable
-
-    # Apply the newest timestamp across all inlined files to preserve modification time
-    if (( newest > 0 )); then
-        touch -d @"$newest" "$output"
-    fi
-
-    # Optional verbose message
+    { _bundle_inner "$input" ""; } > "$output"
+    chmod +x "$output"
+    (( newest > 0 )) && touch -d @"$newest" "$output"
     $verbose && echo "Bundling complete: $output (timestamp set to newest source)" >&2
 
     return 0

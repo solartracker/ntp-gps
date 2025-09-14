@@ -53,16 +53,5 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
 source "$SCRIPT_DIR/shared-utils.sh"
 
-if [[ $# -lt 2 ]]; then
-    echo "Usage: $0 <input_script> <output_script> [verbose] [VAR1=value1 VAR2=value2 ...]"
-    echo
-    echo "  <input_script>   : path to the script to bundle"
-    echo "  <output_script>  : path for the bundled output script"
-    echo "  [verbose]        : optional, 'true' or 'false' (default: false)"
-    echo "  [VAR=value ...]  : optional variable assignments to expand in source paths"
-    echo
-    exit 1
-fi
-
 bundle_script "$@"
 

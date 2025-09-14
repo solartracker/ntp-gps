@@ -147,7 +147,7 @@ sync_file() {
 
     if [ -f "$src" ]; then
         local tmpfile=$(mktemp)
-        bundle_script "$src" "$tmpfile" false "SCRIPT_DIR=$PROJECT_DIR"
+        bundle_script -DSCRIPT_DIR="$PROJECT_DIR" "$src" "$tmpfile"
         set_repo_dir "$tmpfile" "$PROJECT_DIR" "$repo_tag"
 
         # Copy new file and backup old file

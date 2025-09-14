@@ -228,7 +228,7 @@ for entry in "${files[@]}"; do
         dest_file="$dest/uninstall-ntpgps.sh"
         src_path="$SCRIPT_DIR/$src"
         tmpfile=$(mktemp)
-        bundle_script "$src_path" "$tmpfile" true "SCRIPT_DIR=$SCRIPT_DIR"
+        bundle_script -v -DSCRIPT_DIR="$SCRIPT_DIR" "$src" "$tmpfile"
         sudo chown root:root "$tmpfile"
         sudo chmod 755 "$tmpfile"
 
