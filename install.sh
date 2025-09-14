@@ -66,7 +66,7 @@ fi
 # --- Clean slate: uninstall previous install if uninstall script exists ---
 if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
     echo "[*] Uninstalling existing installation..."
-    /usr/local/bin/uninstall-ntpgps.sh
+    /usr/local/bin/uninstall-ntpgps.sh --self-delete
     if [ $? -ne 0 ]; then
         echo "[!] Existing uninstall failed. Aborting."
         exit 1
