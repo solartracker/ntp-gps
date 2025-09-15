@@ -18,9 +18,23 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-#finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
-#enter() { echo "[ENTERING] $(basename "$0")"; }
-#enter
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+enter() { echo "[ENTERING] $(basename "$0")"; }
+
+# --- Logging setup ---
+LOGFILE="/var/log/ntpgps-install.log"
+sudo mkdir -p "$(dirname "$LOGFILE")"
+sudo touch "$LOGFILE"
+sudo chown "$USER":"$USER" "$LOGFILE"
+
+# Redirect all output to log file and console, with timestamps
+exec > >(while IFS= read -r line; do
+            echo "$(date '+%F %T') $line"
+            echo "$(date '+%F %T') $line" >> "$LOGFILE"
+        done) 2>&1
+enter
+echo "[*] Starting NTP-GPS installation..."
+
 #set -x #debug switch
 set -e
 
@@ -66,7 +80,7 @@ fi
 # --- Clean slate: uninstall previous install if uninstall script exists ---
 if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
     echo "[*] Uninstalling existing installation..."
-    /usr/local/bin/uninstall-ntpgps.sh --self-delete
+    /usr/local/bin/uninstall-ntpgps.sh --no-log-redirect --self-delete
     if [ $? -ne 0 ]; then
         echo "[!] Existing uninstall failed. Aborting."
         exit 1

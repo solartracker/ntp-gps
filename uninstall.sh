@@ -20,7 +20,7 @@
 ################################################################################
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
-enter
+
 #set -x #debug switch
 set -e
 
@@ -31,10 +31,16 @@ source "$SCRIPT_DIR/shared-services.sh"
 
 # --- Parse options ---
 SELF_DELETE=0
+NO_LOG_REDIRECT=0
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --self-delete)
             SELF_DELETE=1
+            shift
+            ;;
+        --no-log-redirect)
+            NO_LOG_REDIRECT=1
             shift
             ;;
         *)
@@ -44,9 +50,26 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# --- Logging setup ---
+if [[ $NO_LOG_REDIRECT -eq 0 ]]; then
+    LOGFILE="/var/log/ntpgps-uninstall.log"
+    sudo mkdir -p "$(dirname "$LOGFILE")"
+    sudo touch "$LOGFILE"
+    sudo chown "$USER":"$USER" "$LOGFILE"
+
+    # Redirect all output to log file and console, with timestamps
+    exec > >(while IFS= read -r line; do
+                echo "$(date '+%F %T') $line"
+                echo "$(date '+%F %T') $line" >> "$LOGFILE"
+            done) 2>&1
+fi
+
+enter
+echo "[*] Starting NTP-GPS uninstallation..."
+
 # --- Redirect to canonical uninstall script if not in /usr/local/bin ---
 if [ "$SCRIPT_DIR" != "/usr/local/bin" ]; then
-    ALT_SCRIPT="/usr/local/bin/uninstall-ntpgps.sh"
+    ALT_SCRIPT="/usr/local/bin/uninstall-ntpgps.sh --no-log-redirect"
     if [ -f "$ALT_SCRIPT" ] && [ -x "$ALT_SCRIPT" ]; then
         echo "[*] Redirecting to $ALT_SCRIPT ..."
         exec "$ALT_SCRIPT" "$@"
