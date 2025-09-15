@@ -74,12 +74,11 @@ if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
     echo "[*] Finished uninstalling existing installation."
 else
     # --- Stop GPS services via UDEV remove triggers ---
-    echo "[*] Stopping GPS services via udev remove triggers..."
-    if declare -f stop_disable_services >/dev/null 2>&1; then
-        stop_disable_services
-        echo "[*] GPS services stopped and disabled."
+    echo "[*] Stopping and disabling GPS services via UDEV..."
+    if declare -f stop_disable_services_udev >/dev/null 2>&1; then
+        stop_disable_services_udev
     else
-        echo "[*] stop_disable_services function not defined; skipping service stop."
+        echo "[*] stop_disable_services_udev function not defined; skipping service stop."
     fi
 fi
 
@@ -266,7 +265,7 @@ sudo /usr/local/bin/ntpgps-ntp-keys.sh
 # --- Reload systemd to recognize new unit files ---
 sudo systemctl daemon-reload
 
-# --- Enable services ---
+# --- Enable NTP keys service (non-template) ---
 echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
@@ -344,29 +343,28 @@ while true; do
         continue
     fi
 
-    # Valid selection, break the loop
     break
 done
 
 # Generate UDEV rules
 generate_udev_rules "$selected" "$UDEV_FILE"
 
-# Alert for serial-number-specific rules
+# Warn if serial-number-specific rules were selected
 if [[ "$selected" =~ "3" || "$selected" =~ "4" ]]; then
-    RED='\033[0;31m'
-    NC='\033[0m' # No Color
-    echo -e "${RED}IMPORTANT:${NC} You must edit $UDEV_FILE"
-    echo -e "${RED}IMPORTANT:${NC} and set the correct ATTRS{serial} for your device."
+    RED='\033[0;31m'; NC='\033[0m'
+    echo -e "${RED}IMPORTANT:${NC} You must edit $UDEV_FILE and set the correct ATTRS{serial} for your device."
 fi
 
 echo "[*] UDEV rules written to $UDEV_FILE"
+
+# Reload UDEV rules
 sudo udevadm control --reload-rules
 echo "[*] UDEV rules reloaded."
 
-# Retrigger udev for already-plugged-in devices
+# Retrigger UDEV for already-plugged-in devices to start services
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
     [[ -e "$dev" ]] || continue
-    echo "[*] Retriggering udev for $dev"
+    echo "[*] Retriggering udev for $dev (start services)..."
     sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
 done
 
