@@ -267,12 +267,12 @@ sudo /usr/local/bin/ntpgps-ntp-keys.sh
 echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
-# Automatically enable all GPS systemd templates
+# Automatically enable dummy instance for all GPS systemd templates
 TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
 for tpl in "${TEMPLATES[@]}"; do
     if systemctl list-unit-files | grep -q "^$tpl"; then
-        echo "[*] Enabling systemd template $tpl..."
-        sudo systemctl enable "$tpl"
+        echo "[*] Enabling systemd template $tpl with dummy instance..."
+        sudo systemctl enable "${tpl}dummy.service" || true
     fi
 done
 
