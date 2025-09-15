@@ -3,58 +3,39 @@
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
 
-# Stop and disable GPS-related services (both template instances and single services)
+# Stop GPS-related services by simulating device removal via udev
 stop_disable_services() {
+    local dev
     local templates=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
     local singles=("ntpgps-ntp-keys.service")
-    local svc all_instances=()
 
-    # Handle template instances
-    for template in "${templates[@]}"; do
-        if systemctl list-unit-files | grep -q "^$template"; then
-            instances=$(systemctl list-units --type=service --all \
-                | awk '{print $1}' | grep "^$template" || true)
-            if [ -n "$instances" ]; then
-                for svc in $instances; do
-                    all_instances+=("$svc")
-                    if systemctl is-active --quiet "$svc"; then
-                        echo "[*] Stopping $svc ..."
-                        sudo systemctl stop "$svc" || true
-                    fi
-                    echo "[*] Disabling $svc ..."
-                    sudo systemctl disable "$svc" || true
-                done
-            else
-                echo "[*] Template $template installed but no active instances."
-            fi
-        else
-            echo "[*] Template $template not installed, skipping."
+    echo "[*] Triggering udev remove for GPS devices..."
+    for dev in /dev/ttyUSB* /dev/ttyACM*; do
+        [[ -e "$dev" ]] || continue
+        echo "[*] Removing $dev via udev..."
+        sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=remove
+    done
+
+    echo "[*] Disabling GPS systemd templates..."
+    for tpl in "${templates[@]}"; do
+        if systemctl list-unit-files | grep -q "^$tpl"; then
+            sudo systemctl disable "$tpl" || true
+            echo "[*] Disabled template $tpl"
         fi
     done
 
-    # Handle single services
+    echo "[*] Disabling single services..."
     for svc in "${singles[@]}"; do
         if systemctl list-unit-files | grep -q "^$svc"; then
-            if systemctl is-active --quiet "$svc"; then
-                echo "[*] Stopping $svc ..."
-                sudo systemctl stop "$svc" || true
-            fi
-            echo "[*] Disabling $svc ..."
             sudo systemctl disable "$svc" || true
-        else
-            echo "[*] $svc not installed, skipping."
+            echo "[*] Disabled service $svc"
         fi
     done
 
-    # Wait until all template instances are fully inactive
-    for svc in "${all_instances[@]}"; do
-        while systemctl is-active --quiet "$svc"; do
-            sleep 0.5
-        done
-    done
-
+    echo "[*] Reloading systemd daemon..."
     sudo systemctl daemon-reload
 
+    echo "[*] stop_disable_services completed."
     return 0
 }
 

@@ -73,13 +73,13 @@ if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
     fi
     echo "[*] Finished uninstalling existing installation."
 else
-    # --- Stop any previously running GPS services if uninstall script not found ---
+    # --- Stop GPS services via UDEV remove triggers ---
+    echo "[*] Stopping GPS services via udev remove triggers..."
     if declare -f stop_disable_services >/dev/null 2>&1; then
-        echo "[*] Stopping and disabling GPS services..."
         stop_disable_services
         echo "[*] GPS services stopped and disabled."
     else
-        echo "[*] No uninstall script found, and stop_disable_services not defined. Skipping."
+        echo "[*] stop_disable_services function not defined; skipping service stop."
     fi
 fi
 
