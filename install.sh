@@ -321,7 +321,8 @@ while true; do
         echo " 8) Do not configure GPS device (manual edit later)"
         echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
         echo
-        read -rp "Enter option number: " opt
+        printf "Enter option number: "
+        read -r opt
     fi
 
     # Validate number

@@ -17,7 +17,7 @@ stop_disable_services_udev() {
         else
             echo "    - Skipping $dev (not managed by ntpgps)"
             ((skipped_count++))
-        fi
+        fi || true
     done
 
     echo "[*] Disabling dummy template instances..."
@@ -27,7 +27,7 @@ stop_disable_services_udev() {
             echo "    - Disabling ${tpl}dummy.service"
             sudo systemctl disable "${tpl}dummy.service" || true
             ((dummy_disabled++))
-        fi
+        fi || true
         instances=$(systemctl list-units --type=service --all \
             | awk '{print $1}' | grep "^$tpl" || true)
         for svc in $instances; do
@@ -43,11 +43,11 @@ stop_disable_services_udev() {
                 echo "    - Stopping $svc"
                 sudo systemctl stop "$svc" || true
                 ((singles_stopped++))
-            fi
+            fi || true
             echo "    - Disabling $svc"
             sudo systemctl disable "$svc" || true
             ((singles_disabled++))
-        fi
+        fi || true
     done
 
     echo "[*] Waiting for template instances to fully stop..."

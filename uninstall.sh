@@ -69,10 +69,10 @@ echo "[*] Starting NTP-GPS uninstallation..."
 
 # --- Redirect to canonical uninstall script if not in /usr/local/bin ---
 if [ "$SCRIPT_DIR" != "/usr/local/bin" ]; then
-    ALT_SCRIPT="/usr/local/bin/uninstall-ntpgps.sh --no-log-redirect"
+    ALT_SCRIPT="/usr/local/bin/uninstall-ntpgps.sh"
     if [ -f "$ALT_SCRIPT" ] && [ -x "$ALT_SCRIPT" ]; then
         echo "[*] Redirecting to $ALT_SCRIPT ..."
-        exec "$ALT_SCRIPT" "$@"
+        exec "$ALT_SCRIPT" "--no-log-redirect" "$@"
         exit 0 # paranoid safety net
     else
         echo "[*] $ALT_SCRIPT not found; proceeding with current uninstall."
@@ -87,7 +87,7 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 echo "[*] Stopping and disabling GPS services..."
-stop_disable_services
+stop_disable_services_udev
 echo "[*] GPS services stopped and disabled."
 
 # Remove installed files
@@ -177,7 +177,8 @@ if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
     if [ $SELF_DELETE -eq 1 ]; then
         answer="Y"
     else
-        read -rp "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " answer
+        printf "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] "
+        read -r answer
     fi
 
     case "$answer" in
