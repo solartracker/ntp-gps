@@ -6,10 +6,16 @@
 stop_disable_services_udev() {
     echo "[*] Removing template services via UDEV remove action..."
     all_instances=()
+
     for dev in /dev/ttyUSB* /dev/ttyACM*; do
         [[ -e "$dev" ]] || continue
-        echo "    - Triggering udev remove for $dev"
-        sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=remove || true
+        # Check if our UDEV marker exists
+        if udevadm info --query=property --name="$dev" | grep -q '^ID_NTPGPS=1$'; then
+            echo "    - Triggering udev remove for $dev (ours)"
+            sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=remove || true
+        else
+            echo "    - Skipping $dev (not managed by ntpgps)"
+        fi
     done
 
     echo "[*] Disabling dummy template instances..."
