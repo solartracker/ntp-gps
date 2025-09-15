@@ -18,7 +18,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+finish() { 
+    local result=$?
+    echo "[EXITING]  $(basename "$0")[$result]"
+    sync && sleep 0.1
+}; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
 # --- Logging setup ---
@@ -308,6 +312,7 @@ while true; do
         opt="$GPS_OPTION"
         echo "[*] Noninteractive mode: using GPS option $opt"
     else
+        sync && sleep 0.1
         # Display menu
         echo
         echo "Select GPS/USB device configuration:"

@@ -18,7 +18,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; }; trap finish EXIT
+finish() { 
+    local result=$?
+    echo "[EXITING]  $(basename "$0")[$result]"
+    sync && sleep 0.1
+}; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
 #set -x #debug switch
@@ -177,8 +181,9 @@ if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
     if [ $SELF_DELETE -eq 1 ]; then
         answer="Y"
     else
-        printf "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] "
-        read -r answer
+        sync && sleep 0.1
+        printf "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " >/dev/tty
+        read -r answer </dev/tty
     fi
 
     case "$answer" in
