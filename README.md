@@ -116,7 +116,9 @@ Requires `sudo` privileges.
 - NTP control can be performed dynamically using `ntpq` with runtime keys. Example:
 
 ```bash
-ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config peer 127.127.20.100"
+ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config server 127.127.20.100 mode 24 prefer true"
+ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config fudge 127.127.20.100 time1 0.0 time2 0.0 stratum 0 refid GPS flag1 1 flag2 0 flag3 1 flag4 1"
+
 ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config unpeer 127.127.20.100"
 ```
 
