@@ -20,8 +20,8 @@
 [Unit]
 Description=NTP-GPS NMEA device on %i
 BindsTo=dev-%i.device
-After=dev-%i.device ntp.service ntpsec.service
-Requires=ntp.service ntpsec.service
+After=dev-%i.device ntp.service
+Requires=ntp.service
 
 
 [Service]
@@ -30,9 +30,10 @@ ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 0
 ExecStart=/usr/local/bin/ntpgps-gps-setup.sh %i 0
 ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 0
 RemainAfterExit=yes
+TimeoutStopSec=10s
+Restart=no
 StandardOutput=journal
 StandardError=journal
-#Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
