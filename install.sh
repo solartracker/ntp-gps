@@ -263,11 +263,15 @@ done
 echo "[*] Generating NTP authentication keys..."
 sudo /usr/local/bin/ntpgps-ntp-keys.sh
 
+# --- Reload systemd to recognize new unit files ---
+sudo systemctl daemon-reload
+
 # --- Enable services ---
 echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
-# Automatically enable dummy instance for all GPS systemd templates
+# Automatically enable dummy instance for all GPS systemd templates,
+# so systemd can create the symlinks
 TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
 for tpl in "${TEMPLATES[@]}"; do
     if systemctl list-unit-files | grep -q "^$tpl"; then
