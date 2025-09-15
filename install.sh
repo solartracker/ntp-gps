@@ -267,74 +267,87 @@ sudo /usr/local/bin/ntpgps-ntp-keys.sh
 echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
+# Automatically enable all GPS systemd templates
+TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
+for tpl in "${TEMPLATES[@]}"; do
+    if systemctl list-unit-files | grep -q "^$tpl"; then
+        echo "[*] Enabling systemd template $tpl..."
+        sudo systemctl enable "$tpl"
+    fi
+done
+
 # --- GPS/UDEV configuration ---
 echo "[*] Select GPS device type..."
 TEMPLATE="/etc/ntpgps/template/99-ntpgps-usb.rules"
 UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 
-if [[ $NONINTERACTIVE -eq 1 ]]; then
-    if [[ -z "$GPS_OPTION" ]]; then
-        echo "Error: --noninteractive requires --gps-option=N (1-9)"
-        exit 1
+# Loop until valid selection and no conflicts
+while true; do
+    if [[ $NONINTERACTIVE -eq 1 ]]; then
+        if [[ -z "$GPS_OPTION" ]]; then
+            echo "Error: --noninteractive requires --gps-option=N (1-9)"
+            exit 1
+        fi
+        opt="$GPS_OPTION"
+        echo "[*] Noninteractive mode: using GPS option $opt"
+    else
+        # Display menu
+        echo
+        echo "Select GPS/USB device configuration:"
+        echo " 1) FTDI GPS with PPS"
+        echo " 2) FTDI GPS without PPS"
+        echo " 3) FTDI GPS with S/N and PPS"
+        echo " 4) FTDI GPS with S/N without PPS"
+        echo " 5) CH340 GPS with PPS"
+        echo " 6) CH340 GPS without PPS"
+        echo " 7) VK172 USB GPS dongle"
+        echo " 8) Do not configure GPS device (manual edit later)"
+        echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
+        echo
+        read -rp "Enter option number: " opt
     fi
-    opt="$GPS_OPTION"
-    echo "[*] Noninteractive mode: using GPS option $opt"
-else
-    # Display menu
-    echo
-    echo "Select GPS/USB device configuration:"
-    echo " 1) FTDI GPS with PPS"
-    echo " 2) FTDI GPS without PPS"
-    echo " 3) FTDI GPS with S/N and PPS"
-    echo " 4) FTDI GPS with S/N without PPS"
-    echo " 5) CH340 GPS with PPS"
-    echo " 6) CH340 GPS without PPS"
-    echo " 7) VK172 USB GPS dongle"
-    echo " 8) Do not configure GPS device (manual edit later)"
-    echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
-    echo
-    read -rp "Enter option number: " opt
-fi
 
-# Validate input
-if ! [[ "$opt" =~ ^[1-9]$ ]]; then
-    echo "Error: invalid selection. Must be 1-9."
-    exit 1
-fi
+    # Validate number
+    if ! [[ "$opt" =~ ^[1-9]$ ]]; then
+        echo "Invalid selection. Must be a number 1-9."
+        [[ $NONINTERACTIVE -eq 1 ]] && exit 1
+        continue
+    fi
 
-# Map selection to rules
-declare -A RULE_MAP=(
-    [1]="1"
-    [2]="2"
-    [3]="3"
-    [4]="4"
-    [5]="5"
-    [6]="6"
-    [7]="7"
-    [8]=""          # none
-    [9]="2 6 7"
-)
+    # Map selection to rule numbers
+    declare -A RULE_MAP=(
+        [1]="1"
+        [2]="2"
+        [3]="3"
+        [4]="4"
+        [5]="5"
+        [6]="6"
+        [7]="7"
+        [8]=""          # none
+        [9]="2 6 7"
+    )
+    selected="${RULE_MAP[$opt]}"
 
-selected="${RULE_MAP[$opt]}"
+    # Check for conflicting selections
+    conflict=0
+    if [[ "$selected" =~ "1" && "$selected" =~ "2" ]]; then conflict=1; fi
+    if [[ "$selected" =~ "3" && "$selected" =~ "4" ]]; then conflict=1; fi
+    if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then conflict=1; fi
 
-# Prevent conflicting selections: e.g., both PPS and non-PPS for same device
-if [[ "$selected" =~ "1" && "$selected" =~ "2" ]]; then
-    echo "Error: cannot select PPS and non-PPS for the same device (FTDI)"
-    exit 1
-fi
-if [[ "$selected" =~ "3" && "$selected" =~ "4" ]]; then
-    echo "Error: cannot select PPS and non-PPS for the same device (FTDI with serial)"
-    exit 1
-fi
-if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then
-    echo "Error: cannot select PPS and non-PPS for the same device (CH340)"
-    exit 1
-fi
+    if [[ $conflict -eq 1 ]]; then
+        echo "Conflict detected: cannot select PPS and non-PPS for the same device."
+        [[ $NONINTERACTIVE -eq 1 ]] && exit 1
+        continue
+    fi
+
+    # Valid selection, break the loop
+    break
+done
 
 # Generate UDEV rules
 generate_udev_rules "$selected" "$UDEV_FILE"
 
-# Check for serial-number-specific options
+# Alert for serial-number-specific rules
 if [[ "$selected" =~ "3" || "$selected" =~ "4" ]]; then
     RED='\033[0;31m'
     NC='\033[0m' # No Color
@@ -346,12 +359,11 @@ echo "[*] UDEV rules written to $UDEV_FILE"
 sudo udevadm control --reload-rules
 echo "[*] UDEV rules reloaded."
 
-# Check for already-plugged-in GPS devices and retrigger udev if found
+# Retrigger udev for already-plugged-in devices
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
-    if [[ -e "$dev" ]]; then
-        echo "[*] Retriggering udev for $dev"
-        sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
-    fi
+    [[ -e "$dev" ]] || continue
+    echo "[*] Retriggering udev for $dev"
+    sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
 done
 
 echo "[+] Install complete."
