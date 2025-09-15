@@ -21,7 +21,7 @@
 Description=NTP-GPS NMEA+PPS device on %i
 BindsTo=dev-%i.device
 After=dev-%i.device ntp.service
-Requires=ntp.service
+Wants=ntp.service
 
 
 [Service]
