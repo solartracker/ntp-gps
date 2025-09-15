@@ -85,5 +85,6 @@
 #
 ACTION=="add", SUBSYSTEM=="pps", \
     PROGRAM="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
-    SYMLINK+="%c"
+    SYMLINK+="%c", \
+    MODE="0666"
 
