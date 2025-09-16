@@ -144,6 +144,8 @@ install_dependencies() {
 generate_udev_rules() {
     local selected_rules_str="$1"
     local output_file="$2"
+    local serial_number="${3:-}"
+    local serial_number_tag="\[RULE${selected_rules_str}_SERIAL\]"
     local tmp_file
     tmp_file="$(mktemp)"
 
@@ -192,6 +194,12 @@ generate_udev_rules() {
     # Remove start/end tags
     sed -i -E '/^#\[(RULE[0-9]+_START|RULE[0-9]+_END)\]$/d' "$tmp_file"
 
+    if [ -n "$serial_number" ]; then
+        sudo sed -i "s/$serial_number_tag/ATTRS{serial}==\"$serial_number\"/" "$tmp_file"
+    else
+        sudo sed -i "s/$serial_number_tag//" "$tmp_file"
+    fi
+
     sudo mv -fv "$tmp_file" "$output_file"
     sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
@@ -224,6 +232,7 @@ files=(
     "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/99-ntpgps-usb.rules /etc/ntpgps/template"
+    "644 etc/ntpgps/template/99-ntpgps-usb-detect.rules /etc/ntpgps/template"
     "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
     "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
@@ -295,11 +304,14 @@ done
 
 # --- GPS/UDEV configuration ---
 echo "[*] Select GPS device type..."
-TEMPLATE="/etc/ntpgps/template/99-ntpgps-usb.rules"
+TEMPLATE_UDEV="/etc/ntpgps/template/99-ntpgps-usb.rules"
+TEMPLATE_UDEV_DETECT="/etc/ntpgps/template/99-ntpgps-usb-detect.rules"
 UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 
 # Loop until valid selection and no conflicts
 while true; do
+    DETECTED=0
+
     if [[ $NONINTERACTIVE -eq 1 ]]; then
         if [[ -z "$GPS_OPTION" ]]; then
             echo "Error: --noninteractive requires --gps-option=N (1-9)"
@@ -317,13 +329,11 @@ while true; do
             echo "Select GPS/USB device configuration:"
             echo " 1) FTDI GPS with PPS"
             echo " 2) FTDI GPS without PPS"
-            echo " 3) FTDI GPS with S/N and PPS"
-            echo " 4) FTDI GPS with S/N without PPS"
-            echo " 5) CH340 GPS with PPS"
-            echo " 6) CH340 GPS without PPS"
-            echo " 7) VK172 USB GPS dongle"
-            echo " 8) Do not configure GPS device (manual edit later)"
-            echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
+            echo " 3) CH340 GPS with PPS"
+            echo " 4) CH340 GPS without PPS"
+            echo " 5) VK172 USB GPS dongle"
+            echo " 6) Do not configure GPS device (manual edit later)"
+            echo " 7) Enable options 2,4,5 (auto-detect multiple devices)"
             printf "Enter option number: "
         } >/dev/tty
 
@@ -332,8 +342,8 @@ while true; do
     fi
 
     # Validate number
-    if ! [[ "$opt" =~ ^[1-9]$ ]]; then
-        echo "Invalid selection. Must be a number 1-9."
+    if ! [[ "$opt" =~ ^[1-7]$ ]]; then
+        echo "Invalid selection. Must be a number 1-7."
         [[ $NONINTERACTIVE -eq 1 ]] && exit 1
         continue
     fi
@@ -345,10 +355,8 @@ while true; do
         [3]="3"
         [4]="4"
         [5]="5"
-        [6]="6"
-        [7]="7"
-        [8]=""          # none
-        [9]="2 6 7"
+        [6]=""          # none
+        [7]="2 4 5"
     )
     selected="${RULE_MAP[$opt]}"
 
@@ -356,7 +364,6 @@ while true; do
     conflict=0
     if [[ "$selected" =~ "1" && "$selected" =~ "2" ]]; then conflict=1; fi
     if [[ "$selected" =~ "3" && "$selected" =~ "4" ]]; then conflict=1; fi
-    if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then conflict=1; fi
 
     if [[ $conflict -eq 1 ]]; then
         echo "Conflict detected: cannot select PPS and non-PPS for the same device."
@@ -364,16 +371,61 @@ while true; do
         continue
     fi
 
+    # Only allow S/N auto-detect for FTDI (options 1 or 2)
+    if [[ "$opt" =~ ^[1-2]$ ]]; then
+        sync && sleep 0.1
+        printf "Do you want to auto-detect the serial number of the GPS device? [y/N]: " >/dev/tty
+        read autodetect </dev/tty
+
+        autodetect="${autodetect,,}"  # lowercase
+        if [[ "$autodetect" == "y" ]]; then
+            echo "[*] Generating detection-only UDEV rules..."
+            TEMPLATE=$TEMPLATE_UDEV_DETECT
+            generate_udev_rules "$selected" "$UDEV_FILE"
+            TEMPLATE=$TEMPLATE_UDEV
+    
+            echo "[*] Reloading UDEV rules for detection..."
+            sudo udevadm control --reload-rules
+            #sudo udevadm trigger --property-match="ID_NTPGPS=1" --action=add
+            sudo udevadm trigger --subsystem-match="tty" --action=add
+    
+            echo "[*] Enumerating GPS devices for serial number detection..."
+            for dev in /dev/ttyUSB* /dev/ttyACM*; do
+                [[ -e "$dev" ]] || continue
+                # Only pick devices with ID_NTPGPS=1
+                udev_id=$(udevadm info -q property -n "$dev" | grep '^ID_NTPGPS=1$') || true
+                [[ -n "$udev_id" ]] || continue
+    
+                # Extract the actual serial
+                serial=$(udevadm info -q property -n "$dev" | grep '^ID_SERIAL_SHORT=' | cut -d'=' -f2) || true
+                [[ -n "$serial" ]] || continue
+
+                echo "[*] Found GPS device $dev with serial: $serial"
+
+                # Replace placeholder serial in the real UDEV rules
+                generate_udev_rules "$selected" "$UDEV_FILE" "$serial"
+
+                echo "[*] Reloading UDEV rules..."
+                sudo udevadm control --reload-rules
+                sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
+
+                DETECTED=1
+                break
+            done
+
+            if [ $DETECTED -eq 0 ]; then
+                sudo rm -f "$UDEV_FILE"
+            fi
+            echo "[*] Serial number detection complete."
+        fi
+    fi
+
     break
 done
 
 # Generate UDEV rules
-generate_udev_rules "$selected" "$UDEV_FILE"
-
-# Warn if serial-number-specific rules were selected
-if [[ "$selected" =~ "3" || "$selected" =~ "4" ]]; then
-    RED='\033[0;31m'; NC='\033[0m'
-    echo -e "${RED}IMPORTANT:${NC} You must edit $UDEV_FILE and set the correct ATTRS{serial} for your device."
+if [ $DETECTED -eq 0 ]; then
+    generate_udev_rules "$selected" "$UDEV_FILE"
 fi
 
 echo "[*] UDEV rules written to $UDEV_FILE"

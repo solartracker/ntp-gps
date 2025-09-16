@@ -107,6 +107,7 @@ files=(
     /etc/ntpgps/template/keys.conf
     /etc/ntpgps/template/ntpgps.conf
     /etc/ntpgps/template/99-ntpgps-usb.rules
+    /etc/ntpgps/template/99-ntpgps-usb-detect.rules
     /etc/udev/rules.d/99-ntpgps-usb.rules
     /etc/modules-load.d/ntpgps-pps.conf
     /etc/systemd/system/ntpgps-gps-nopps@.service
