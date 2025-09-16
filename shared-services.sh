@@ -1,8 +1,9 @@
-################################################################################
+#!/bin/bash
+#-------------------------------------------------------------------------------
 # shared-services.sh
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
-
+#-------------------------------------------------------------------------------
 stop_disable_services_udev() {
     echo "[*] Removing template services via UDEV remove action..."
     all_instances=()

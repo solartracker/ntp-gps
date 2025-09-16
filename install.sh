@@ -18,11 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { 
-    local result=$?
-    echo "[EXITING]  $(basename "$0")[$result]"
-    sync && sleep 0.1
-}; trap finish EXIT
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; sync; sleep 0.1; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
 # --- Logging setup ---
@@ -312,22 +308,27 @@ while true; do
         opt="$GPS_OPTION"
         echo "[*] Noninteractive mode: using GPS option $opt"
     else
+        # Flush any buffered output first
         sync && sleep 0.1
-        # Display menu
-        echo
-        echo "Select GPS/USB device configuration:"
-        echo " 1) FTDI GPS with PPS"
-        echo " 2) FTDI GPS without PPS"
-        echo " 3) FTDI GPS with S/N and PPS"
-        echo " 4) FTDI GPS with S/N without PPS"
-        echo " 5) CH340 GPS with PPS"
-        echo " 6) CH340 GPS without PPS"
-        echo " 7) VK172 USB GPS dongle"
-        echo " 8) Do not configure GPS device (manual edit later)"
-        echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
-        echo
-        printf "Enter option number: "
-        read -r opt
+
+        # Display menu to terminal directly
+        {
+            echo
+            echo "Select GPS/USB device configuration:"
+            echo " 1) FTDI GPS with PPS"
+            echo " 2) FTDI GPS without PPS"
+            echo " 3) FTDI GPS with S/N and PPS"
+            echo " 4) FTDI GPS with S/N without PPS"
+            echo " 5) CH340 GPS with PPS"
+            echo " 6) CH340 GPS without PPS"
+            echo " 7) VK172 USB GPS dongle"
+            echo " 8) Do not configure GPS device (manual edit later)"
+            echo " 9) Enable options 2,6,7 (auto-detect multiple devices)"
+            printf "Enter option number: "
+        } >/dev/tty
+
+        # Read input from terminal
+        read -r opt </dev/tty
     fi
 
     # Validate number

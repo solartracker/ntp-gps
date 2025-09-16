@@ -18,11 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ################################################################################
-finish() { 
-    local result=$?
-    echo "[EXITING]  $(basename "$0")[$result]"
-    sync && sleep 0.1
-}; trap finish EXIT
+finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; sync; sleep 0.1; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
 #set -x #debug switch
@@ -177,8 +173,8 @@ else
 fi
 
 # Only offer deletion if the script is in /usr/local/bin
-if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
-    if [ $SELF_DELETE -eq 1 ]; then
+if [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]; then
+    if [[ $SELF_DELETE -eq 1 ]]; then
         answer="Y"
     else
         sync && sleep 0.1
@@ -186,17 +182,12 @@ if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
         read -r answer </dev/tty
     fi
 
-    case "$answer" in
-        [Yy]* )
-            echo "[*] Deleting $SCRIPT_PATH ..."
-            sudo rm -vf -- "$SCRIPT_PATH"
-            ;;
-        * )
-            echo "[*] Leaving $SCRIPT_PATH in place."
-            ;;
-    esac
-else
-    echo "[*] Script is not in /usr/local/bin; skipping self-delete."
+    if [[ "$answer" == "Y" ]]; then
+        echo "[*] Deleting $SCRIPT_PATH ..."
+        sudo rm -vf -- "$SCRIPT_PATH"
+    else
+        echo "[*] Leaving $SCRIPT_PATH in place."
+    fi
 fi
 
 echo "[+] Uninstall complete. Note: dependent packages (setserial, pps-tools) are still installed."

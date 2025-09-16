@@ -1,9 +1,10 @@
-################################################################################
+#!/bin/bash
+#-------------------------------------------------------------------------------
 # shared-utils.sh
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
+#-------------------------------------------------------------------------------
 
-################################################################################
 # Backup a file if it differs from new content
 backup_file() {
     local verbose=false
@@ -65,7 +66,6 @@ backup_file() {
     return 0
 }
 
-################################################################################
 # Global search/replace on a tag within a file.  Does not change the file
 # modification time.
 set_repo_dir() {
