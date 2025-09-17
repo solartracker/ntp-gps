@@ -140,74 +140,6 @@ install_dependencies() {
     return 0
 }
 
-# Function to generate UDEV rules from template
-generate_udev_rules() {
-    local selected_rules_str="$1"
-    local output_file="$2"
-    local serial_number="${3:-}"
-    local serial_number_tag="\[RULE${selected_rules_str}_SERIAL\]"
-    local tmp_file
-    tmp_file="$(mktemp)"
-
-    # Build set of selected rules
-    declare -A selected_set
-    for n in $selected_rules_str; do
-        selected_set["$n"]=1
-    done
-
-    local inside_rule=""
-    local rule_number=""
-
-    while IFS= read -r line; do
-        if [[ $line =~ ^#\[(RULE([0-9]+)_START)\] ]]; then
-            inside_rule="yes"
-            rule_number="${BASH_REMATCH[2]}"
-            echo "$line" >> "$tmp_file"
-            continue
-        fi
-
-        if [[ $line =~ ^#\[(RULE([0-9]+)_END)\] ]]; then
-            inside_rule=""
-            rule_number=""
-            echo "$line" >> "$tmp_file"
-            continue
-        fi
-
-        if [[ $inside_rule == "yes" ]]; then
-            if [[ ${selected_set[$rule_number]} ]]; then
-                # Uncomment the rule line (but leave markers alone)
-                if [[ $line =~ ^# ]]; then
-                    echo "${line#\#}" >> "$tmp_file"
-                else
-                    echo "$line" >> "$tmp_file"
-                fi
-            else
-                # Keep it commented
-                [[ $line =~ ^# ]] || line="#$line"
-                echo "$line" >> "$tmp_file"
-            fi
-        else
-            echo "$line" >> "$tmp_file"
-        fi
-    done < "$TEMPLATE"
-
-    # Remove start/end tags
-    sed -i -E '/^#\[(RULE[0-9]+_START|RULE[0-9]+_END)\]$/d' "$tmp_file"
-
-    if [ -n "$serial_number" ]; then
-        sudo sed -i "s/$serial_number_tag/ATTRS{serial}==\"$serial_number\"/" "$tmp_file"
-    else
-        sudo sed -i "s/$serial_number_tag//" "$tmp_file"
-    fi
-
-    sudo mv -fv "$tmp_file" "$output_file"
-    sudo chown root:root "$output_file"
-    sudo chmod 644 "$output_file"
-    echo "UDEV rules written to $output_file"
-
-    return 0
-}
-
 # --- Dependencies ---
 echo "[*] Installing dependencies..."
 install_dependencies
@@ -232,7 +164,6 @@ files=(
     "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/99-ntpgps-usb.rules /etc/ntpgps/template"
-    "644 etc/ntpgps/template/99-ntpgps-usb-detect.rules /etc/ntpgps/template"
     "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
     "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
@@ -302,28 +233,157 @@ for tpl in "${TEMPLATES[@]}"; do
     fi
 done
 
+generate_udev_rules() {
+    local selected_device_types="$1"
+    local autodetect_sn="$2"
+    local output_file="$3"
+    local template_file="$4"
+
+    local tmp_file
+    tmp_file="$(mktemp)"
+
+    # Restore default globbing behavior
+    shopt -u nullglob
+    shopt -u failglob
+
+    # scan all plugged in USB devices, filter on our device types and 
+    # read the serial numbers of those devices
+    for DEV_NUM in "${selected_device_types[@]}"; do
+        # Read filters for this block
+        filters=()
+        while read -r line; do
+            [[ "$line" =~ ^Filter:(.*) ]] && filters+=("${BASH_REMATCH[1]}")
+            [[ "$line" =~ ^\[End:$DEV_NUM\] ]] && break
+        done < "$template_file"
+
+        # Scan devices
+        serials=()
+        for dev in /dev/ttyUSB* /dev/ttyACM*; do
+            [[ -e "$dev" ]] || continue  # skip if no matching device
+            props=$(udevadm info -q property -n "$dev")
+            match=true
+            for f in "${filters[@]}"; do
+                key="${f%%=*}"
+                val="${f#*=}"
+                if ! grep -q "^$key=$val\$" <<< "$props"; then
+                    match=false
+                    break
+                fi
+            done
+            if $match; then
+                if [ "$autodetect_sn" == "y" ]; then
+                    serials+=("$(grep '^ID_SERIAL_SHORT=' <<< "$props" | cut -d= -f2)")
+                fi
+            fi
+        done
+
+        BLOCK_SERIALS[$DEV_NUM]="${serials[*]}"
+    done
+
+    in_block=0
+    block_num=""
+    block_lines=()
+    declare -A block_filters  # holds key/value filters for current block
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^\[Begin:([0-9]+)\]$ ]]; then
+            in_block=1
+            block_num="${BASH_REMATCH[1]}"
+            block_lines=()
+            block_filters=()
+            continue
+        elif [[ "$line" =~ ^\[End:([0-9]+)\]$ ]]; then
+            in_block=0
+            val="${BLOCK_SERIALS[$block_num]+isset}"
+            serials="${BLOCK_SERIALS[$block_num]}"
+
+            # Process block
+            if [[ -z "$val" ]]; then
+                # Block not selected → comment out all lines except description, drop serial and filters
+                for l in "${block_lines[@]}"; do
+                    if [[ "$l" == \#* ]]; then
+                        echo "$l" >> "$tmp_file"
+                    elif [[ "$l" == "__SERIAL__" ]] || [[ "$l" == Filter:* ]]; then
+                        continue
+                    else
+                        echo "#$l" >> "$tmp_file"
+                    fi
+                done
+
+            elif [[ -z "$serials" ]]; then
+                # Block selected but no serial detected → drop __SERIAL__ and filters
+                for l in "${block_lines[@]}"; do
+                    [[ "$l" == "__SERIAL__" ]] && continue
+                    [[ "$l" == Filter:* ]] && continue
+                    echo "$l" >> "$tmp_file"
+                done
+
+            else
+                # Block selected, one or more serials → duplicate block per serial
+                first_block=1
+                for s in $serials; do
+                    [ $first_block -eq 0 ] && echo "" >> "$tmp_file" || first_block=0
+                    for l in "${block_lines[@]}"; do
+                        if [[ "$l" == "__SERIAL__" ]]; then
+                            echo "    ATTRS{serial}==\"$s\", \\" >> "$tmp_file"
+                        elif [[ "$l" == Filter:* ]]; then
+                            continue
+                        else
+                            echo "$l" >> "$tmp_file"
+                        fi
+                    done
+                done
+            fi
+
+            block_num=""
+            block_lines=()
+            continue
+        fi
+
+        if (( in_block )); then
+            if [[ "$line" == Filter:* ]]; then
+                keyval="${line#Filter:}"
+                key="${keyval%%=*}"
+                val="${keyval#*=}"
+                block_filters["$key"]="$val"
+                continue
+            fi
+            block_lines+=("$line")
+        else
+            # Outside a block → copy directly, drop Filter lines
+            [[ "$line" == Filter:* ]] && continue
+            echo "$line" >> "$tmp_file"
+        fi
+    done < "$template_file"
+
+    sudo mv -fv "$tmp_file" "$output_file"
+    sudo chown root:root "$output_file"
+    sudo chmod 644 "$output_file"
+    echo "UDEV rules written to $output_file"
+
+    echo "[*] UDEV rules written to $output_file"
+    sudo udevadm control --reload-rules
+
+    return 0
+}
+
 # --- GPS/UDEV configuration ---
 echo "[*] Select GPS device type..."
 TEMPLATE_UDEV="/etc/ntpgps/template/99-ntpgps-usb.rules"
-TEMPLATE_UDEV_DETECT="/etc/ntpgps/template/99-ntpgps-usb-detect.rules"
 UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 
-# Loop until valid selection and no conflicts
 while true; do
     DETECTED=0
 
     if [[ $NONINTERACTIVE -eq 1 ]]; then
         if [[ -z "$GPS_OPTION" ]]; then
-            echo "Error: --noninteractive requires --gps-option=N (1-9)"
+            echo "Error: --noninteractive requires --gps-option=N (1-7)"
             exit 1
         fi
         opt="$GPS_OPTION"
         echo "[*] Noninteractive mode: using GPS option $opt"
     else
-        # Flush any buffered output first
         sync && sleep 0.1
-
-        # Display menu to terminal directly
         {
             echo
             echo "Select GPS/USB device configuration:"
@@ -336,31 +396,28 @@ while true; do
             echo " 7) Enable options 2,4,5 (auto-detect multiple devices)"
             printf "Enter option number: "
         } >/dev/tty
-
-        # Read input from terminal
         read -r opt </dev/tty
     fi
 
-    # Validate number
+    # Validate input
     if ! [[ "$opt" =~ ^[1-7]$ ]]; then
         echo "Invalid selection. Must be a number 1-7."
         [[ $NONINTERACTIVE -eq 1 ]] && exit 1
         continue
     fi
 
-    # Map selection to rule numbers
     declare -A RULE_MAP=(
         [1]="1"
         [2]="2"
         [3]="3"
         [4]="4"
         [5]="5"
-        [6]=""          # none
+        [6]=""
         [7]="2 4 5"
     )
     selected="${RULE_MAP[$opt]}"
 
-    # Check for conflicting selections
+    # Check conflicts
     conflict=0
     if [[ "$selected" =~ "1" && "$selected" =~ "2" ]]; then conflict=1; fi
     if [[ "$selected" =~ "3" && "$selected" =~ "4" ]]; then conflict=1; fi
@@ -376,69 +433,21 @@ while true; do
         sync && sleep 0.1
         printf "Do you want to auto-detect the serial number of the GPS device? [y/N]: " >/dev/tty
         read autodetect </dev/tty
-
         autodetect="${autodetect,,}"  # lowercase
-        if [[ "$autodetect" == "y" ]]; then
-            echo "[*] Generating detection-only UDEV rules..."
-            TEMPLATE=$TEMPLATE_UDEV_DETECT
-            generate_udev_rules "$selected" "$UDEV_FILE"
-            TEMPLATE=$TEMPLATE_UDEV
-    
-            echo "[*] Reloading UDEV rules for detection..."
-            sudo udevadm control --reload-rules
-            #sudo udevadm trigger --property-match="ID_NTPGPS=1" --action=add
-            sudo udevadm trigger --subsystem-match="tty" --action=add
-    
-            echo "[*] Enumerating GPS devices for serial number detection..."
-            for dev in /dev/ttyUSB* /dev/ttyACM*; do
-                [[ -e "$dev" ]] || continue
-                # Only pick devices with ID_NTPGPS=1
-                udev_id=$(udevadm info -q property -n "$dev" | grep '^ID_NTPGPS=1$') || true
-                [[ -n "$udev_id" ]] || continue
-    
-                # Extract the actual serial
-                serial=$(udevadm info -q property -n "$dev" | grep '^ID_SERIAL_SHORT=' | cut -d'=' -f2) || true
-                [[ -n "$serial" ]] || continue
 
-                echo "[*] Found GPS device $dev with serial: $serial"
-
-                # Replace placeholder serial in the real UDEV rules
-                generate_udev_rules "$selected" "$UDEV_FILE" "$serial"
-
-                echo "[*] Reloading UDEV rules..."
-                sudo udevadm control --reload-rules
-                sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
-
-                DETECTED=1
-                break
-            done
-
-            if [ $DETECTED -eq 0 ]; then
-                sudo rm -f "$UDEV_FILE"
-            fi
-            echo "[*] Serial number detection complete."
-        fi
+        generate_udev_rules "$selected" "$autodetect" "$UDEV_FILE" "$TEMPLATE_UDEV"
+    else
+        generate_udev_rules "$selected" "n" "$UDEV_FILE" "$TEMPLATE_UDEV"
     fi
 
     break
 done
 
-# Generate UDEV rules
-if [ $DETECTED -eq 0 ]; then
-    generate_udev_rules "$selected" "$UDEV_FILE"
-fi
-
-echo "[*] UDEV rules written to $UDEV_FILE"
-
-# Reload UDEV rules
-sudo udevadm control --reload-rules
-echo "[*] UDEV rules reloaded."
-
-# Retrigger UDEV for already-plugged-in devices to start services
+# Retrigger UDEV for the currently plugged in USB devices
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
     [[ -e "$dev" ]] || continue
-    echo "[*] Retriggering udev for $dev (start services)..."
-    sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=add
+    echo "[*] Retriggering udev for $dev..."
+    sudo udevadm trigger --name-match="$(basename "$dev")" --action=add
 done
 
 echo "[+] Install complete."
