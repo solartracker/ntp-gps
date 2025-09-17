@@ -24,7 +24,7 @@
 Filter:ID_VENDOR_ID=0403
 Filter:ID_MODEL_ID=6001
 # FTDI USB-to-Serial converter, connected to GPS module with PPS
-SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
@@ -36,7 +36,7 @@ __SERIAL__
 Filter:ID_VENDOR_ID=0403
 Filter:ID_MODEL_ID=6001
 # FTDI USB-to-Serial converter, connected to GPS module
-SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
