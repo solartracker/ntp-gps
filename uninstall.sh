@@ -159,6 +159,14 @@ done
 echo "[*] Reloading udev rules..."
 sudo udevadm control --reload-rules
 
+# Retrigger UDEV for the currently plugged in USB devices
+for dev in /dev/ttyUSB* /dev/ttyACM*; do
+    [[ -e "$dev" ]] || continue
+    echo "[*] Retriggering udev for $dev..."
+    sudo udevadm trigger --name-match="$(basename "$dev")" --action=add
+done
+udevadm settle
+
 # Purge .sync-system-filelist
 REPO_DIR="__REPO_DIR__"
 

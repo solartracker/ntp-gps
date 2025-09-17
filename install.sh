@@ -38,6 +38,10 @@ echo "[*] Starting NTP-GPS installation..."
 #set -x #debug switch
 set -e
 
+# Restore default globbing behavior
+shopt -u nullglob
+shopt -u failglob
+
 # --- Parse options ---
 NONINTERACTIVE=0
 GPS_OPTION=""
@@ -234,21 +238,18 @@ for tpl in "${TEMPLATES[@]}"; do
 done
 
 generate_udev_rules() {
-    local selected_device_types="$1"
-    local autodetect_sn="$2"
-    local output_file="$3"
-    local template_file="$4"
+    local all_blocks="$1"
+    local selected_device_types="$2"
+    local autodetect_sn="$3"
+    local output_file="$4"
+    local template_file="$5"
 
     local tmp_file
     tmp_file="$(mktemp)"
 
-    # Restore default globbing behavior
-    shopt -u nullglob
-    shopt -u failglob
-
     # scan all plugged in USB devices, filter on our device types and 
     # read the serial numbers of those devices
-    for DEV_NUM in "${selected_device_types[@]}"; do
+    for DEV_NUM in $selected_device_types; do
         # Read filters for this block
         filters=()
         while read -r line; do
@@ -260,7 +261,7 @@ generate_udev_rules() {
         serials=()
         for dev in /dev/ttyUSB* /dev/ttyACM*; do
             [[ -e "$dev" ]] || continue  # skip if no matching device
-            props=$(udevadm info -q property -n "$dev")
+            props="$(udevadm info -q property -n $dev)"
             match=true
             for f in "${filters[@]}"; do
                 key="${f%%=*}"
@@ -278,6 +279,17 @@ generate_udev_rules() {
         done
 
         BLOCK_SERIALS[$DEV_NUM]="${serials[*]}"
+    done
+
+    echo "[*] Detected serial numbers per block:"
+    for blk in $all_blocks; do
+        if [[ ! ${BLOCK_SERIALS[$blk]+_} ]]; then
+            echo "Block $blk: UNSET (not selected)"
+        elif [[ -z "${BLOCK_SERIALS[$blk]}" ]]; then
+            echo "Block $blk: ENABLED (no serial)"
+        else
+            echo "Block $blk: ${BLOCK_SERIALS[$blk]}"
+        fi
     done
 
     in_block=0
@@ -415,6 +427,17 @@ while true; do
         [6]=""
         [7]="2 4 5"
     )
+    ALL_BLOCKS_STR=""
+    i=1
+    while :; do
+        [[ ! -v RULE_MAP[$i] ]] && break  # stop at unset key
+        val="${RULE_MAP[$i]}"
+        [[ -z "$val" ]] && break           # stop at empty value
+        [[ "$val" == *" "* ]] && echo "ERROR: RULE_MAP[$i] contains a space: '$val'" >&2 && exit 1
+        [ -n "$ALL_BLOCKS_STR" ] && ALL_BLOCKS_STR+=" $val" || ALL_BLOCKS_STR="$val"
+        ((i++))
+    done
+
     selected="${RULE_MAP[$opt]}"
 
     # Check conflicts
@@ -428,18 +451,17 @@ while true; do
         continue
     fi
 
-    # Only allow S/N auto-detect for FTDI (options 1 or 2)
-    if [[ "$opt" =~ ^[1-2]$ ]]; then
+    if [[ "$opt" =~ 6 ]]; then
+        autodetect="n"
+    else
         sync && sleep 0.1
         printf "Do you want to auto-detect the serial number of the GPS device? [y/N]: " >/dev/tty
         read autodetect </dev/tty
         autodetect="${autodetect,,}"  # lowercase
-
-        generate_udev_rules "$selected" "$autodetect" "$UDEV_FILE" "$TEMPLATE_UDEV"
-    else
-        generate_udev_rules "$selected" "n" "$UDEV_FILE" "$TEMPLATE_UDEV"
     fi
 
+    # Generate UDEV rules
+    generate_udev_rules "$ALL_BLOCKS_STR" "$selected" "$autodetect" "$UDEV_FILE" "$TEMPLATE_UDEV"
     break
 done
 
