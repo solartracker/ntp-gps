@@ -23,6 +23,11 @@
 PPSNAME=$1
 TTYDEV=$(cat /sys/class/pps/$PPSNAME/path)
 TTYNAME=${TTYDEV##*/}
+ENV_NTPGPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS=1$')
+if [ -z "$ENV_NTPGPS" ]; then
+    # the PPS device is not ours
+    exit 0
+fi
 GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
 [ -n "$GPSNUM" ] && echo "gpspps$GPSNUM" || echo ""
 
