@@ -389,7 +389,7 @@ while true; do
 
     if [[ $NONINTERACTIVE -eq 1 ]]; then
         if [[ -z "$GPS_OPTION" ]]; then
-            echo "Error: --noninteractive requires --gps-option=N (1-11)"
+            echo "Error: --noninteractive requires --gps-option=N (1-10)"
             exit 1
         fi
         opt="$GPS_OPTION"
@@ -409,15 +409,15 @@ while true; do
             echo " 8) PL2303 GPS"
             echo " 9) VK172 USB GPS dongle (u-blox)"
             echo "10) Do not configure GPS device (manual edit later)"
-            echo "11) Enable options 2,4,6,8,9 (auto-detect multiple devices)"
+            #echo "11) Enable options 2,4,6,8,9 (auto-detect multiple devices)"
             printf "Enter option number: "
         } >/dev/tty
         read -r opt </dev/tty
     fi
 
-    # Validate input (must be 1–11)
-    if (( opt < 1 || opt > 11 )); then
-        echo "Invalid selection: '$opt'. Must be a number 1-11."
+    # Validate input (must be 1–10)
+    if (( opt < 1 || opt > 10 )); then
+        echo "Invalid selection: '$opt'. Must be a number 1-10."
         [[ $NONINTERACTIVE -eq 1 ]] && exit 1
         continue
     fi
