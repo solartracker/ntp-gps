@@ -389,7 +389,7 @@ while true; do
 
     if [[ $NONINTERACTIVE -eq 1 ]]; then
         if [[ -z "$GPS_OPTION" ]]; then
-            echo "Error: --noninteractive requires --gps-option=N (1-7)"
+            echo "Error: --noninteractive requires --gps-option=N (1-11)"
             exit 1
         fi
         opt="$GPS_OPTION"
@@ -400,20 +400,24 @@ while true; do
             echo
             echo "Select GPS/USB device configuration:"
             echo " 1) FTDI GPS with PPS"
-            echo " 2) FTDI GPS without PPS"
+            echo " 2) FTDI GPS"
             echo " 3) CH340 GPS with PPS"
-            echo " 4) CH340 GPS without PPS"
-            echo " 5) VK172 USB GPS dongle"
-            echo " 6) Do not configure GPS device (manual edit later)"
-            echo " 7) Enable options 2,4,5 (auto-detect multiple devices)"
+            echo " 4) CH340 GPS"
+            echo " 5) CP210x GPS with PPS"
+            echo " 6) CP210x GPS"
+            echo " 7) PL2303 GPS with PPS"
+            echo " 8) PL2303 GPS"
+            echo " 9) VK172 USB GPS dongle (u-blox)"
+            echo "10) Do not configure GPS device (manual edit later)"
+            echo "11) Enable options 2,4,6,8,9 (auto-detect multiple devices)"
             printf "Enter option number: "
         } >/dev/tty
         read -r opt </dev/tty
     fi
 
-    # Validate input
-    if ! [[ "$opt" =~ ^[1-7]$ ]]; then
-        echo "Invalid selection. Must be a number 1-7."
+    # Validate input (must be 1–11)
+    if (( opt < 1 || opt > 11 )); then
+        echo "Invalid selection: '$opt'. Must be a number 1-11."
         [[ $NONINTERACTIVE -eq 1 ]] && exit 1
         continue
     fi
@@ -424,15 +428,19 @@ while true; do
         [3]="3"
         [4]="4"
         [5]="5"
-        [6]=""
-        [7]="2 4 5"
+        [6]="6"
+        [7]="7"
+        [8]="8"
+        [9]="9"
+        [10]=""
+        [11]="2 4 6 8 9"
     )
     ALL_BLOCKS_STR=""
     i=1
     while :; do
         [[ ! -v RULE_MAP[$i] ]] && break  # stop at unset key
         val="${RULE_MAP[$i]}"
-        [[ -z "$val" ]] && break           # stop at empty value
+        [[ -z "$val" ]] && break          # stop at empty value
         [[ "$val" == *" "* ]] && echo "ERROR: RULE_MAP[$i] contains a space: '$val'" >&2 && exit 1
         [ -n "$ALL_BLOCKS_STR" ] && ALL_BLOCKS_STR+=" $val" || ALL_BLOCKS_STR="$val"
         ((i++))
@@ -444,6 +452,8 @@ while true; do
     conflict=0
     if [[ "$selected" =~ "1" && "$selected" =~ "2" ]]; then conflict=1; fi
     if [[ "$selected" =~ "3" && "$selected" =~ "4" ]]; then conflict=1; fi
+    if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then conflict=1; fi
+    if [[ "$selected" =~ "7" && "$selected" =~ "8" ]]; then conflict=1; fi
 
     if [[ $conflict -eq 1 ]]; then
         echo "Conflict detected: cannot select PPS and non-PPS for the same device."
@@ -451,7 +461,7 @@ while true; do
         continue
     fi
 
-    if [[ "$opt" =~ 6 ]]; then
+    if (( opt == 10 )); then
         autodetect="n"
     else
         sync && sleep 0.1

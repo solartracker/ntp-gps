@@ -119,7 +119,7 @@ __SERIAL__
 [Begin:9]
 Filter:ID_VENDOR_ID=1546
 Filter:ID_MODEL_ID=01a7
-# u-blox USB GNSS (GPS) receiver (VK172 USB GPS dongle)
+# VK172 USB GPS dongle (u-blox USB GPS receiver)
 SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
