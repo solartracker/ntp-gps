@@ -28,9 +28,9 @@ set -euo pipefail
 # Dynamically generate the configuration for NTP authentication keys
 CONF_PATH="/run/ntpgps/ntpgps.conf"
 CONF_DIR=$(dirname "$CONF_PATH")
-KEYS_PATH="/run/ntpgps/ntp.keys"
+KEYS_PATH="/etc/ntpgps/ntp.keys"
 KEYS_DIR=$(dirname "$KEYS_PATH")
-CONF_AUTH_PATH="/run/ntpgps/keys.conf"
+CONF_AUTH_PATH="/etc/ntpgps/keys.conf"
 CONF_AUTH_DIR=$(dirname "$CONF_AUTH_PATH")
 KEYID_FIRST=1001
 NTP_RESTART_NEEDED=0
