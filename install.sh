@@ -81,6 +81,25 @@ if ! sudo -n true 2>/dev/null; then
     exit 1
 fi
 
+# --- Configure logrotate for ntpgps logs ---
+LOGROTATE_CONF="/etc/logrotate.d/ntpgps"
+
+echo "[*] Setting up log rotation in $LOGROTATE_CONF"
+
+sudo tee "$LOGROTATE_CONF" >/dev/null <<'EOF'
+/home/pi/ntpgps-*.log {
+    size 200k
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
+echo "[*] Logrotate configuration installed."
+
 # --- Clean slate: uninstall previous install if uninstall script exists ---
 if [ -f "/usr/local/bin/uninstall-ntpgps.sh" ]; then
     echo "[*] Uninstalling existing installation..."
