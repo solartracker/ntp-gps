@@ -31,7 +31,7 @@
 ################################################################################
 set -euo pipefail
 
-CONFIG_FILE="/run/ntpgps/ntpgps.conf"
+CONFIG_FILE="/etc/ntpgps/ntpgps.conf"
 
 DRYRUN=0
 FORCE_MODE=""

@@ -43,7 +43,7 @@ fi
 /usr/local/bin/ntpgps-ntp-keys.sh
 
 # Dynamically generate the NTP device configuration
-CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
+CONF_TMP_PATH="/etc/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 CONF_TEMPLATE=""

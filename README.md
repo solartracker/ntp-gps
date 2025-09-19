@@ -29,7 +29,7 @@ Accurate time on the gateway is critical because the controller relies on it to 
 - Minimal changes to system configuration:
   - Only one line is added to `/etc/ntp.conf`:
     ```conf
-    includefile /run/ntpgps/ntpgps.conf
+    includefile /etc/ntpgps/ntpgps.conf
     ```
 
 ---
@@ -112,17 +112,17 @@ Requires `sudo` privileges.
 
 ## Notes for Developers
 
-- Runtime configuration is managed through `/run/ntpgps/ntpgps.conf`.  
+- Runtime configuration is managed through `/etc/ntpgps/ntpgps.conf`.  
 - NTP control can be performed dynamically using `ntpq` with runtime keys. Example:
 
 ```bash
-ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config server 127.127.20.100 mode 24 prefer true"
-ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config fudge 127.127.20.100 time1 0.0 time2 0.0 stratum 0 refid GPS flag1 1 flag2 0 flag3 1 flag4 1"
+ntpq -a 1 -k /etc/ntpgps/ntp.keys -c ":config server 127.127.20.100 mode 24 prefer true"
+ntpq -a 1 -k /etc/ntpgps/ntp.keys -c ":config fudge 127.127.20.100 time1 0.0 time2 0.0 stratum 0 refid GPS flag1 1 flag2 0 flag3 1 flag4 1"
 
-ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config unpeer 127.127.20.100"
+ntpq -a 1 -k /etc/ntpgps/ntp.keys -c ":config unpeer 127.127.20.100"
 ```
 
-- Keys are regenerated at runtime — if no GPS is connected at boot, `/run/ntpgps/ntp.keys` will not exist.
+- Keys are regenerated at runtime — if no GPS is connected at boot, `/etc/ntpgps/ntp.keys` will not exist.
 
 ---
 
@@ -131,11 +131,11 @@ ntpq -a 1 -k /run/ntpgps/ntp.keys -c ":config unpeer 127.127.20.100"
 - There is only one `includefile` line added to `/etc/ntp.conf`:
 
 ```conf
-includefile /run/ntpgps/ntpgps.conf
+includefile /etc/ntpgps/ntpgps.conf
 ```
 
 - This hook allows NTP to pick up all GPS device configuration dynamically.  
-- The configuration starts in `/run` because of how USB plug-and-play works, making runtime management simpler.
+- The configuration starts in `/etc` because of how USB plug-and-play works, making runtime management simpler.
 
 ---
 

@@ -113,8 +113,8 @@ files=(
     /etc/systemd/system/ntpgps-gps-pps@.service
     /etc/systemd/system/ntpgps-gps-ublox7-config@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
-    /run/ntpgps/ntpgps.conf
-    /run/ntpgps/keys.conf
+    /etc/ntpgps/ntpgps.conf
+    /etc/ntpgps/keys.conf
 )
 for f in "${files[@]}"; do
     sudo rm -vf "$f" || true
@@ -122,7 +122,7 @@ done
 
 # Remove NTP authentication keys
 echo "[*] Removing NTP authentication keys..."
-NTP_KEYS="/run/ntpgps/ntp.keys"
+NTP_KEYS="/etc/ntpgps/ntp.keys"
 if [ -L "$NTP_KEYS" ]; then
     # It's a symlink; get the target
     TARGET_FILE=$(readlink -f "$NTP_KEYS")
@@ -135,7 +135,7 @@ if [ -L "$NTP_KEYS" ]; then
     echo "[*] Removing symlink: $NTP_KEYS"
     sudo rm -vf "$NTP_KEYS"
 elif [ -f "$NTP_KEYS" ]; then
-    # Regular file at /run/ntpgps/ntp.keys — remove it directly
+    # Regular file at /etc/ntpgps/ntp.keys — remove it directly
     echo "[*] Removing regular file: $NTP_KEYS"
     sudo rm -vf "$NTP_KEYS"
 else
@@ -143,7 +143,7 @@ else
 fi
 
 # Remove the directories
-sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps || true
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template || true
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
 
@@ -151,7 +151,7 @@ sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        sudo sed -i '/includefile \/run\/ntpgps\/ntpgps.conf/d' "$conf"
+        sudo sed -i '/includefile \/etc\/ntpgps\/ntpgps.conf/d' "$conf"
     fi
 done
 
