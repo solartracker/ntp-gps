@@ -31,7 +31,7 @@ if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]
   exit 1
 fi
 
-CONF_TMP_PATH="/etc/ntpgps/ntpgps.conf"
+CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 

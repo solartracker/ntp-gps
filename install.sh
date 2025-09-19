@@ -229,8 +229,8 @@ done
 echo "[*] Patching NTP config..."
 for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
     if [ -f "$conf" ]; then
-        if ! grep -q "includefile /etc/ntpgps/ntpgps.conf" "$conf"; then
-            echo "includefile /etc/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
+        if ! grep -q "includefile /run/ntpgps/ntpgps.conf" "$conf"; then
+            echo "includefile /run/ntpgps/ntpgps.conf" | sudo tee -a "$conf"
         fi
     fi
 done
