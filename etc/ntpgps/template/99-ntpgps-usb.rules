@@ -133,7 +133,6 @@ __SERIAL__
 #
 ACTION=="add", SUBSYSTEM=="pps", \
     IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
-    ENV{GPSNUM}!="", \
-    SYMLINK+="gpspps$env{GPSNUM}", \
-    MODE="0666", ENV{ID_NTPGPS}="1"
+    SYMLINK+="$env{GPSPPSNAME}", \
+    MODE="0666"
 

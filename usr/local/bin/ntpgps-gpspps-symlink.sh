@@ -29,6 +29,7 @@ if [ -n "$ENV_NTPGPS" ]; then
     if [ -n "$GPSNUM" ]; then
         echo "GPSDEV=$TTYDEV"
         echo "GPSNUM=$GPSNUM"
+        echo "GPSPPSNAME=gpspps$GPSNUM"
     fi
 fi
 
