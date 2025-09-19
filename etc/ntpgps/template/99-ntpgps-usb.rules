@@ -132,7 +132,8 @@ __SERIAL__
 # Handles creation and removal of /dev/gpsppsN for NTP
 #
 ACTION=="add", SUBSYSTEM=="pps", \
-    PROGRAM="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
-    SYMLINK+="%c", \
+    IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
+    ENV{GPSNUM}=="*", \
+    SYMLINK+="gpspps$env{GPSNUM}", \
     MODE="0666", ENV{ID_NTPGPS}="1"
 
