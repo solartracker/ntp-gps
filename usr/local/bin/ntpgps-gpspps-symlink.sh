@@ -27,7 +27,7 @@ ENV_NTPGPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS=1$')
 if [ -n "$ENV_NTPGPS" ]; then
     GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
     if [ -n "$GPSNUM" ]; then
-        echo "TTYDEV=$TTYDEV"
+        echo "GPSDEV=$TTYDEV"
         echo "GPSNUM=$GPSNUM"
     fi
 fi
