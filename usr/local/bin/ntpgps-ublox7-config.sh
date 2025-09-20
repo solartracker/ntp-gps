@@ -38,71 +38,87 @@ if [ -z "$TTYNAME" ]; then
   exit 1
 fi
 
-sudo stty -F $TTYDEV raw ispeed 9600 ospeed 9600 cs8 -ignpar -cstopb eol 255 eof 255
+# Send UBX hex string to a device
+send_ubx() {
+    local hexstring="$1"
+    local ttydev=$TTYDEV
 
-# UBX -> CFG(Config) -> PRT(Ports): Target: 1-UART1, Protocol out: NEMA
-sudo printf "\xB5\x62\x06\x00\x14\x00\x01\x00\x00\x00\xD0\x08\x00\x00\x80\x25\x00\x00\x07\x00\x02\x00\x00\x00\x00\x00\xA1\xAF" | sudo tee $TTYDEV >/dev/null
+    if [[ -z "$hexstring" ]]; then
+        echo "Usage: send_ubx \"<hex bytes separated by spaces>\""
+        return 1
+    fi
 
-# UBX -> CFG(Config) -> TP(Timepulse): Rising edge, UTC time
-sudo printf "\xB5\x62\x06\x07\x14\x00\x40\x42\x0F\x00\xA0\x86\x01\x00\x01\x00\x00\x00\x34\x03\x00\x00\x00\x00\x00\x00\x11\x86" | sudo tee $TTYDEV >/dev/null
+    # Convert space-separated hex to \xHH format
+    local escaped_hex
+    escaped_hex=$(echo "$hexstring" | sed 's/\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g' | tr -d ' ')
 
-# UBX -> CFG(Config) -> TP5(Timepulse 5): UTC time
-sudo printf "\xB5\x62\x06\x31\x20\x00\x00\x01\x00\x00\x32\x00\x00\x00\x40\x42\x0F\x00\x40\x42\x0F\x00\x00\x00\x00\x00\xA0\x86\x01\x00\x00\x00\x00\x00\x77\x00\x00\x00\x4A\xB6" | sudo tee $TTYDEV >/dev/null
+    # Send directly to device
+    sudo printf "$escaped_hex" | sudo tee "$ttydev" >/dev/null
+}
 
-# UBX -> CFG(Config) -> RATE(Rates): UTC time
-sudo printf "\xB5\x62\x06\x08\x06\x00\xE8\x03\x01\x00\x00\x00\x00\x37" | sudo tee $TTYDEV >/dev/null
+# UBX -> CFG(Config) -> PRT(Ports): Target: 3-USB, Protocol out: NMEA
+send_ubx "B5 62 06 00 14 00 03 00 00 00 00 00 00 00 00 00 00 00 07 00 02 00 00 00 00 00 26 C8"
+
+# UBX -> CFG(Config) -> TP(Timepulse): Rising edge, GPS time
+send_ubx "B5 62 06 07 14 00 40 42 0F 00 A0 86 01 00 01 01 00 00 34 03 00 00 00 00 00 00 12 91"
+
+# UBX -> CFG(Config) -> TP5(Timepulse 5): GPS time
+send_ubx "B5 62 06 31 20 00 00 01 00 00 32 00 00 00 40 42 0F 00 40 42 0F 00 00 00 00 00 A0 86 01 00 00 00 00 00 F7 00 00 00 CA B6"
+
+# UBX -> CFG(Config) -> RATE(Rates): GPS time, 1Hz
+send_ubx "B5 62 06 08 06 00 E8 03 01 00 01 00 01 39"
 
 # UBX -> CFG(Config) -> GNSS(GNSS Config): GPS=on, SBAS=on, Galileo=off, BeiDou=off, IMES=off, QZSS=on, GLONASS=off
-sudo printf "\xB5\x62\x06\x3E\x24\x00\x00\x00\x16\x04\x00\x04\xFF\x00\x01\x00\x00\x01\x01\x01\x03\x00\x01\x00\x00\x01\x05\x00\x03\x00\x01\x00\x00\x01\x06\x08\xFF\x00\x00\x00\x00\x01\xA6\x45" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 3E 24 00 00 00 16 04 00 04 FF 00 01 00 00 01 01 01 03 00 01 00 00 01 05 00 03 00 01 00 00 01 06 08 FF 00 00 00 00 01 A6 45"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-00 NMEA GxGGA, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x00\x00\x00\x00\x00\x00\x01\x00\x24" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 00 00 00 00 00 00 01 00 24"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-01 NMEA GxGLL, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x01\x00\x00\x00\x00\x00\x01\x01\x2B" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 01 00 00 00 00 00 01 01 2B"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-02 NMEA GxGSA, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x02\x00\x00\x00\x00\x00\x01\x02\x32" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 02 00 00 00 00 00 01 02 32"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-03 NMEA GxGSV, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x03\x00\x00\x00\x00\x00\x01\x03\x39" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 03 00 00 00 00 00 01 03 39"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-04 NMEA GxRMC, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x04\x00\x00\x00\x00\x00\x01\x04\x40" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 04 00 00 00 00 00 01 04 40"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-05 NMEA GxVTG, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x05\x00\x00\x00\x00\x00\x01\x05\x47" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 05 00 00 00 00 00 01 05 47"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-06 NMEA GxGRS, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x06\x00\x00\x00\x00\x00\x00\x05\x4D" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 06 00 00 00 00 00 00 05 4D"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-07 NMEA GxGST, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x07\x00\x00\x00\x00\x00\x00\x06\x54" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 07 00 00 00 00 00 00 06 54"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-08 NMEA GxZDA, I2C=on, UART1=on, UART2=on, USB=on, SPI=on
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x08\x01\x01\x01\x01\x01\x00\x0C\x6F" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 08 01 01 01 01 01 00 0C 6F"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-09 NMEA GxGBS, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x09\x00\x00\x00\x00\x00\x00\x08\x62" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 09 00 00 00 00 00 00 08 62"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-0A NMEA GxDTM, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x0A\x00\x00\x00\x00\x00\x00\x09\x69" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 0A 00 00 00 00 00 00 09 69"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-0D NMEA GxGNS, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x0D\x00\x00\x00\x00\x00\x00\x0C\x7E" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 0D 00 00 00 00 00 00 0C 7E"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-0E NMEA GxTHS, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x0E\x00\x00\x00\x00\x00\x00\x0D\x85" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 0E 00 00 00 00 00 00 0D 89"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-0F NMEA GxVLW, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x0F\x00\x00\x00\x00\x00\x00\x0E\x8C" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 0F 00 00 00 00 00 00 0E 94"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-10 NMEA GxUTC, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x10\x00\x00\x00\x00\x00\x00\x0F\x93" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 10 00 00 00 00 00 00 0F 9F"
 
 # UBX -> CFG(Config) -> MSG(Messages): F0-0B NMEA GxRLM, I2C=off, UART1=off, UART2=off, USB=off, SPI=off
-sudo printf "\xB5\x62\x06\x01\x08\x00\xF0\x0B\x00\x00\x00\x00\x00\x00\x0A\x70" | sudo tee $TTYDEV >/dev/null
+send_ubx "B5 62 06 01 08 00 F0 0B 00 00 00 00 00 00 0A 70"
 
 # UBX -> CFG(Config) -> CFG(Configuration): Save configuration to BBR,FLASH
-#sudo printf "\xB5\x62\x06\x09\x0D\x00\x00\x00\x00\x00\xFF\xFF\x00\x00\x00\x00\x00\x00\x03\x1D\xAB" | sudo tee $TTYDEV >/dev/null
+#send_ubx "B5 62 06 09 04 00 00 05 00 00 1C 17"
 
