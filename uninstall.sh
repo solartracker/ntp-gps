@@ -86,6 +86,21 @@ if ! sudo -n true 2>/dev/null; then
     exit 1
 fi
 
+cleanup_empty_dirs() {
+    for dir in "$@"; do
+        current="$dir"
+        while [ "$current" != "/" ]; do
+            if [ -d "$current" ]; then
+                if sudo rmdir "$current" >/dev/null 2>/dev/null; then
+                    echo "[*] Removed empty directory: $current"
+                fi
+            fi
+            current=$(dirname "$current")
+        done
+    done
+    return 0
+}
+
 echo "[*] Stopping and disabling GPS services..."
 stop_disable_services_udev
 echo "[*] GPS services stopped and disabled."
@@ -145,20 +160,21 @@ else
 fi
 
 # Check for any remaining ntpkey_ files
-remaining_keys=$(find "$keys_dir" -maxdepth 1 -type f -name "ntpkey_*")
-if [ -n "$remaining_keys" ]; then
-    echo "[!] Warning: the following ntpkey_ files still exist in $keys_dir:"
-    echo "$remaining_keys"
+if [ -d "$keys_dir" ]; then
+    remaining_keys=$(find "$keys_dir" -maxdepth 1 -type f -name "ntpkey_*")
+    if [ -n "$remaining_keys" ]; then
+        echo "[!] Warning: the following ntpkey_ files still exist in $keys_dir:"
+        echo "$remaining_keys"
+    else
+        echo "[*] No leftover ntpkey_ files found."
+    fi
 else
-    echo "[*] No leftover ntpkey_ files found."
+    echo "[*] Directory $keys_dir does not exist; nothing to check for leftover keys."
 fi
 '
 
 # Remove the directories
-sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps || true
-sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/keys || true
-sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template || true
-sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
+cleanup_empty_dirs /run/ntpgps /etc/ntpgps/keys /etc/ntpgps/template
 
 # Clean NTP configs
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
