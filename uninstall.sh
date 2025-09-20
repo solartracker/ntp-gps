@@ -114,7 +114,7 @@ files=(
     /etc/systemd/system/ntpgps-gps-ublox7-config@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
     /run/ntpgps/ntpgps.conf
-    /etc/ntpgps/keys.conf
+    /run/ntpgps/keys.conf
 )
 for f in "${files[@]}"; do
     sudo rm -vf "$f" || true
@@ -122,28 +122,41 @@ done
 
 # Remove NTP authentication keys
 echo "[*] Removing NTP authentication keys..."
-NTP_KEYS="/etc/ntpgps/ntp.keys"
+NTP_KEYS="/etc/ntpgps/keys/ntp.keys"
+sudo NTP_KEYS="$NTP_KEYS" bash -c '
+keys_dir=$(dirname "$NTP_KEYS")
 if [ -L "$NTP_KEYS" ]; then
-    # It's a symlink; get the target
-    TARGET_FILE=$(readlink -f "$NTP_KEYS")
+    # Symlink; get the target
+    target_file=$(readlink -f "$NTP_KEYS")
     # Only remove the target if its filename starts with ntpkey_
-    if [ -n "$TARGET_FILE" ] && [ -f "$TARGET_FILE" ] && [[ "$(basename "$TARGET_FILE")" == ntpkey_* ]]; then
-        echo "[*] Removing target of symlink: $TARGET_FILE"
-        sudo rm -vf "$TARGET_FILE"
+    if [ -n "$target_file" ] && [ -f "$target_file" ] && [[ "$(basename "$target_file")" == ntpkey_* ]]; then
+        echo "[*] Removing target of symlink: $target_file"
+        sudo rm -vf "$target_file"
     fi
     # Remove the symlink itself
     echo "[*] Removing symlink: $NTP_KEYS"
     sudo rm -vf "$NTP_KEYS"
 elif [ -f "$NTP_KEYS" ]; then
-    # Regular file at /etc/ntpgps/ntp.keys — remove it directly
+    # Regular file at /etc/ntpgps/keys/ntp.keys — remove it directly
     echo "[*] Removing regular file: $NTP_KEYS"
     sudo rm -vf "$NTP_KEYS"
 else
     echo "[*] No ntp keys file found at $NTP_KEYS"
 fi
 
+# Check for any remaining ntpkey_ files
+remaining_keys=$(find "$keys_dir" -maxdepth 1 -type f -name "ntpkey_*")
+if [ -n "$remaining_keys" ]; then
+    echo "[!] Warning: the following ntpkey_ files still exist in $keys_dir:"
+    echo "$remaining_keys"
+else
+    echo "[*] No leftover ntpkey_ files found."
+fi
+'
+
 # Remove the directories
 sudo rmdir -v --ignore-fail-on-non-empty /run/ntpgps || true
+sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/keys || true
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps/template || true
 sudo rmdir -v --ignore-fail-on-non-empty /etc/ntpgps || true
 

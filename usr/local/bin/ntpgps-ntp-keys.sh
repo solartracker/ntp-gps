@@ -2,6 +2,8 @@
 ################################################################################
 # ntpgps-ntp-keys.sh
 #
+# This script must run as root user.
+#
 # Copyright (C) 2025 Richard Elwell
 #
 # This program is free software: you can redistribute it and/or modify
@@ -28,15 +30,17 @@ set -euo pipefail
 # Dynamically generate the configuration for NTP authentication keys
 CONF_PATH="/run/ntpgps/ntpgps.conf"
 CONF_DIR=$(dirname "$CONF_PATH")
-KEYS_PATH="/etc/ntpgps/ntp.keys"
+KEYS_PATH="/etc/ntpgps/keys/ntp.keys"
 KEYS_DIR=$(dirname "$KEYS_PATH")
-CONF_AUTH_PATH="/etc/ntpgps/keys.conf"
+CONF_AUTH_PATH="/run/ntpgps/keys.conf"
 CONF_AUTH_DIR=$(dirname "$CONF_AUTH_PATH")
 KEYID_FIRST=1001
+KEYID_CONTROL=0
 NTP_RESTART_NEEDED=0
+MAX_RETRIES_KEYGEN=20
 
 if [ ! -d "$KEYS_DIR" ]; then
-    sudo mkdir -p "$KEYS_DIR"
+    mkdir -p "$KEYS_DIR"
 fi
 
 # Renumber our keys so they don't conflict with others
@@ -51,11 +55,11 @@ ntpkeys_renumber() {
         keysfile="$KEYS_PATH"
     fi
 
-    tmpfile=$(sudo mktemp)
-    sudo chown --reference="$keysfile" "$tmpfile"
-    sudo chmod --reference="$keysfile" "$tmpfile"
+    tmpfile=$(mktemp)
+    chown --reference="$keysfile" "$tmpfile"
+    chmod --reference="$keysfile" "$tmpfile"
 
-    sudo awk -v base="$KEYID_FIRST" '
+    awk -v base="$KEYID_FIRST" '
       /^#/ { print; next }                    # keep comments
       /^[[:space:]]*[0-9]+/ {
         $1 = base++                           # sequential IDs
@@ -63,26 +67,8 @@ ntpkeys_renumber() {
         next
       }
       { print }                               # other lines unchanged
-    ' "$keysfile" | sudo tee "$tmpfile" >/dev/null
-    sudo mv -f "$tmpfile" "$keysfile"
-    return 0
-}
-
-ntp_restart() {
-    # Ensure that NTP can find our root config file
-    for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
-        if [ -f "$conf" ]; then
-            if ! grep -q "includefile $CONF_PATH" "$conf"; then
-                echo "includefile $CONF_PATH" | sudo tee -a "$conf"
-            fi
-        fi
-    done
-
-    # Restart NTP if active
-    if systemctl is-active --quiet ntp.service; then
-        echo "NTP authentication keys have changed. Restarting NTP..."
-        sudo systemctl restart --no-block ntp.service
-    fi
+    ' "$keysfile" | tee "$tmpfile" >/dev/null
+    mv -f "$tmpfile" "$keysfile"
     return 0
 }
 
@@ -90,7 +76,17 @@ secure_ntpkeys() {
     local target_file target_dir
 
     if [ -L "$KEYS_PATH" ]; then
-        target_file=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
+        target_file=$(realpath -e "$KEYS_PATH")
+        if [ -z "$target_file" ]; then
+            echo "Error: cannot resolve $KEYS_PATH"
+            return 1
+        elif [ ! -f "$target_file" ]; then
+            echo "Error: not a real file $target_file"
+            return 1
+        elif [[ "$(basename "$target_file")" != ntpkey_* ]]; then
+            echo "Error: incorrect filename $target_file"
+            return 1
+        fi
     else
         target_file="$KEYS_PATH"
     fi
@@ -103,33 +99,127 @@ secure_ntpkeys() {
     target_dir=$(dirname "$target_file")
 
     # Secure the directory
-    sudo chown root:root "$target_dir"
-    sudo chmod 750 "$target_dir"
+    chown root:root "$target_dir"
+    chmod 750 "$target_dir"
 
     # Secure the key file
-    sudo chown root:root "$target_file"
-    sudo chmod 640 "$target_file"
+    chown root:root "$target_file"
+    chmod 640 "$target_file"
 
     return 0
 }
 
-cd "$KEYS_DIR" || { echo "Failed to change directory to $KEYS_DIR"; exit 1; }
+remove_ntpkeys() {
+    local target_file
+
+    if [ -L "$KEYS_PATH" ]; then
+        # It's a symlink; get the target
+        target_file=$(readlink -f "$KEYS_PATH")
+        # Only remove the target if its filename starts with ntpkey_
+        if [ -n "$target_file" ] && [ -f "$target_file" ] && [[ "$(basename "$target_file")" == ntpkey_* ]]; then
+            rm -vf "$target_file"
+        fi
+        # Remove the symlink itself
+        rm -vf "$KEYS_PATH"
+    elif [ -f "$KEYS_PATH" ]; then
+        # Regular file at /etc/ntpgps/ntp.keys — remove it directly
+        rm -vf "$KEYS_PATH"
+    fi
+    return 0
+}
+
+find_valid_md5_keyid() {
+    local keyid
+
+    # Look for MD5 keys, ignore commented lines, exclude any containing a double-quote
+    keyid=$(awk '/^[0-9]+[[:space:]]+MD5[[:space:]]+/ {
+                    if ($3 !~ /"/) {
+                        print $1;
+                        exit;
+                    }
+                 }' "$KEYS_PATH")
+
+    if [[ -z "$keyid" ]]; then
+        echo "0"
+    else
+        echo "$keyid"
+    fi
+    return 0
+}
+
+ntp_restart() {
+    # Ensure that NTP can find our root config file
+    for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
+        if [ -f "$conf" ]; then
+            if ! grep -q "includefile $CONF_PATH" "$conf"; then
+                echo "includefile $CONF_PATH" | tee -a "$conf"
+            fi
+        fi
+    done
+
+    # Restart NTP if active
+    if systemctl is-active --quiet ntp.service; then
+        echo "NTP authentication keys have changed. Restarting NTP..."
+        systemctl restart --no-block ntp.service
+    fi
+    return 0
+}
+
+legacy_ntp_keygen() {
+    # Work-around to avoid using an MD5 key containing an embedded double-quote character
+    for attempt in $(seq 1 $MAX_RETRIES_KEYGEN); do
+        echo "[*] Attempt $attempt of $MAX_RETRIES_KEYGEN"
+        if cd "$KEYS_DIR"; then
+            ntp-keygen -M
+        else
+            echo "Failed to change directory to $KEYS_DIR"
+            exit 1
+        fi
+        ntpkeys_renumber
+        KEYID_CONTROL=$(find_valid_md5_keyid)
+
+        if [[ "$KEYID_CONTROL" != "0" ]]; then
+            echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
+            break
+        fi
+
+        echo "[-] No valid MD5 key found. Retrying..."
+        remove_ntpkeys
+    done
+
+    if [[ "$KEYID_CONTROL" == "0" ]]; then
+        echo "[!] ERROR: Could not generate a valid MD5 control key after $MAX_RETRIES attempts."
+        exit 1
+    fi
+    return 0
+}
+
+ntpsec_keygen() {
+    if cd "$KEYS_DIR"; then
+        ntpkeygen
+    else
+        echo "Failed to change directory to $KEYS_DIR"
+        exit 1
+    fi
+    ntpkeys_renumber
+    KEYID_CONTROL=$KEYID_FIRST
+    return 0
+}
 
 # Create new NTP authentication keys if they do not exist
 if [ ! -f "$KEYS_PATH" ]; then
     if command -v ntpkeygen >/dev/null 2>&1; then
         echo "Found ntpkeygen, generating keys..."
-        sudo ntpkeygen
+        ntpsec_keygen
     elif command -v ntp-keygen >/dev/null 2>&1; then
         echo "Found ntp-keygen, generating MD5 keys..."
-        sudo ntp-keygen -M
+        legacy_ntp_keygen
     else
         echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
         exit 1
     fi
 
-    ntpkeys_renumber
-    sudo rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
+    rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
     NTP_RESTART_NEEDED=1
 else
     secure_ntpkeys
@@ -139,29 +229,35 @@ fi
 if [ -f "$KEYS_PATH" ]; then
 
     if [ ! -d "$CONF_DIR" ]; then
-        sudo mkdir -p "$CONF_DIR"
+        mkdir -p "$CONF_DIR"
     fi
 
     if [ ! -f "$CONF_PATH" ]; then
-        sudo cp -p /etc/ntpgps/template/ntpgps.conf "$CONF_PATH"
+        cp -p /etc/ntpgps/template/ntpgps.conf "$CONF_PATH"
     fi
 
     if [ ! -d "$CONF_AUTH_DIR" ]; then
-        sudo mkdir -p "$CONF_AUTH_DIR"
+        mkdir -p "$CONF_AUTH_DIR"
     fi
 
     if [ ! -f "$CONF_AUTH_PATH" ]; then
-        sudo sed \
+        tmpfile=$(mktemp "$CONF_AUTH_PATH.XXXXXX")
+        sed \
             -e "s|%KEYS_PATH|$KEYS_PATH|g" \
-            -e "s|%KEYID_FIRST|$KEYID_FIRST|g" \
+            -e "s|%KEYID|$KEYID_CONTROL|g" \
             /etc/ntpgps/template/keys.conf \
-            | sudo tee "$CONF_AUTH_PATH" >/dev/null
+            | tee "$tmpfile" >/dev/null
 
-        NTP_RESTART_NEEDED=1
+        if [ ! -f "$CONF_AUTH_PATH" ] || ! cmp -s "$tmpfile" "$CONF_AUTH_PATH"; then
+            mv -vf "$tmpfile" "$CONF_AUTH_PATH"
+            NTP_RESTART_NEEDED=1
+        else
+          mv -vf "$tmpfile" "$CONF_AUTH_PATH"   rm -f "$tmpfile"
+        fi
     fi
 
-    if ! sudo grep -Fxq "includefile $CONF_AUTH_PATH" "$CONF_PATH"; then
-      echo "includefile $CONF_AUTH_PATH" | sudo tee -a "$CONF_PATH" >/dev/null
+    if ! grep -Fxq "includefile $CONF_AUTH_PATH" "$CONF_PATH"; then
+      echo "includefile $CONF_AUTH_PATH" | tee -a "$CONF_PATH" >/dev/null
 
       NTP_RESTART_NEEDED=1
     fi
