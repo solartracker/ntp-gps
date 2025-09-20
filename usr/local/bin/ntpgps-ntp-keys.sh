@@ -45,30 +45,27 @@ fi
 
 # Renumber our keys so they don't conflict with others
 ntpkeys_renumber() {
-    local tmpfile
-    local keysfile
+    local tmpfile keysfile
 
-    # Follow link to real file if it's a symlink, otherwise keep as-is
-    if [ -L "$KEYS_PATH" ]; then
-        keysfile=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
-    else
-        keysfile="$KEYS_PATH"
-    fi
+    keysfile=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
 
-    tmpfile=$(mktemp)
+    tmpfile=$(mktemp "$keysfile.XXXXXX")
+    trap '
+        if [ -n "${tmpfile:-}" ]; then
+            rm -vf "$tmpfile"
+        fi
+    ' RETURN
+
     chown --reference="$keysfile" "$tmpfile"
     chmod --reference="$keysfile" "$tmpfile"
 
     awk -v base="$KEYID_FIRST" '
-      /^#/ { print; next }                    # keep comments
-      /^[[:space:]]*[0-9]+/ {
-        $1 = base++                           # sequential IDs
-        print
-        next
-      }
-      { print }                               # other lines unchanged
-    ' "$keysfile" | tee "$tmpfile" >/dev/null
-    mv -f "$tmpfile" "$keysfile"
+      /^#/ { print; next }
+      /^[[:space:]]*[0-9]+/ { $1 = base++; print; next }
+      { print }
+    ' "$keysfile" > "$tmpfile"
+
+    mv -vf "$tmpfile" "$keysfile"
     return 0
 }
 
@@ -252,7 +249,7 @@ if [ -f "$KEYS_PATH" ]; then
             mv -vf "$tmpfile" "$CONF_AUTH_PATH"
             NTP_RESTART_NEEDED=1
         else
-          mv -vf "$tmpfile" "$CONF_AUTH_PATH"   rm -f "$tmpfile"
+            rm -f "$tmpfile"
         fi
     fi
 
