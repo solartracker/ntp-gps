@@ -40,7 +40,7 @@ if [ ! -d "$KEYS_DIR" ]; then
 fi
 
 # Renumber our keys so they don't conflict with others
-ntp_keys_renumber() {
+ntpkeys_renumber() {
     local tmpfile
     local keysfile
 
@@ -48,7 +48,7 @@ ntp_keys_renumber() {
     if [ -L "$KEYS_PATH" ]; then
         keysfile=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
     else
-        keysfile="$KEYSPATH"
+        keysfile="$KEYS_PATH"
     fi
 
     tmpfile=$(sudo mktemp)
@@ -65,6 +65,7 @@ ntp_keys_renumber() {
       { print }                               # other lines unchanged
     ' "$keysfile" | sudo tee "$tmpfile" >/dev/null
     sudo mv -f "$tmpfile" "$keysfile"
+    return 0
 }
 
 ntp_restart() {
@@ -82,6 +83,34 @@ ntp_restart() {
         echo "NTP authentication keys have changed. Restarting NTP..."
         sudo systemctl restart --no-block ntp.service
     fi
+    return 0
+}
+
+secure_ntpkeys() {
+    local target_file target_dir
+
+    if [ -L "$KEYS_PATH" ]; then
+        target_file=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
+    else
+        target_file="$KEYS_PATH"
+    fi
+
+    if [ ! -e "$target_file" ]; then
+        echo "Error: $target_file does not exist"
+        return 1
+    fi
+
+    target_dir=$(dirname "$target_file")
+
+    # Secure the directory
+    sudo chown root:root "$target_dir"
+    sudo chmod 750 "$target_dir"
+
+    # Secure the key file
+    sudo chown root:root "$target_file"
+    sudo chmod 640 "$target_file"
+
+    return 0
 }
 
 cd "$KEYS_DIR" || { echo "Failed to change directory to $KEYS_DIR"; exit 1; }
@@ -99,9 +128,11 @@ if [ ! -f "$KEYS_PATH" ]; then
         exit 1
     fi
 
-    ntp_keys_renumber
+    ntpkeys_renumber
     sudo rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
     NTP_RESTART_NEEDED=1
+else
+    secure_ntpkeys
 fi
 
 # Link the NTP authentication keys into our NTP configuration
