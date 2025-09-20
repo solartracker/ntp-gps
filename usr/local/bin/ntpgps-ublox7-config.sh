@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ################################################################################
 # ntpgps-ublox7-config.sh
 #
@@ -40,20 +40,21 @@ fi
 
 # Send UBX hex string to a device
 send_ubx() {
-    local hexstring="$1"
-    local ttydev=$TTYDEV
+    hexstring="$1"
+    ttydev="$TTYDEV"
 
-    if [[ -z "$hexstring" ]]; then
+    if [ -z "$hexstring" ]; then
         echo "Usage: send_ubx \"<hex bytes separated by spaces>\""
         return 1
     fi
 
     # Convert space-separated hex to \xHH format
-    local escaped_hex
     escaped_hex=$(echo "$hexstring" | sed 's/\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g' | tr -d ' ')
 
     # Send directly to device
     sudo printf "$escaped_hex" | sudo tee "$ttydev" >/dev/null
+
+    return 0
 }
 
 # UBX -> CFG(Config) -> PRT(Ports): Target: 3-USB, Protocol out: NMEA
