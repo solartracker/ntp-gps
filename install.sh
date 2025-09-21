@@ -123,10 +123,10 @@ fi
 install_dependencies() {
     local need_update=0
 
-    # Check setserial version (minimum 2.17-53)
+    # Check setserial version (minimum 2.17-52)
     if dpkg-query -W -f='${Version}' setserial 2>/dev/null | grep -q '.'; then
         installed_version=$(dpkg-query -W -f='${Version}' setserial)
-        if dpkg --compare-versions "$installed_version" ge "2.17-53"; then
+        if dpkg --compare-versions "$installed_version" ge "2.17-52"; then
             echo "[*] setserial $installed_version is OK."
         else
             echo "[*] setserial $installed_version is too old."
@@ -137,10 +137,10 @@ install_dependencies() {
         need_update=1
     fi
 
-    # Check pps-tools version (minimum 1.0.2-2)
+    # Check pps-tools version (minimum 1.0.2-1)
     if dpkg-query -W -f='${Version}' pps-tools 2>/dev/null | grep -q '.'; then
         installed_version=$(dpkg-query -W -f='${Version}' pps-tools)
-        if dpkg --compare-versions "$installed_version" ge "1.0.2-2"; then
+        if dpkg --compare-versions "$installed_version" ge "1.0.2-1"; then
             echo "[*] pps-tools $installed_version is OK."
         else
             echo "[*] pps-tools $installed_version is too old."
