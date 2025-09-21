@@ -38,7 +38,7 @@ FORCE_MODE=""
 UNPEER=0
 
 # parse options
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case "$1" in
         -n)
             DRYRUN=1
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ $# -lt 1 ]]; then
+if [ $# -lt 1 ]; then
     echo "Usage: $0 [-n] [--force-passwd|--force-file] [--unpeer] <refclock-address>"
     exit 1
 fi
@@ -81,10 +81,10 @@ MATCHING_LINES=()
 process_file() {
     local file="$1"
 
-    [[ -n "${VISITED[$file]:-}" ]] && return
+    [ -n "${VISITED[$file]:-}" ] && return
     VISITED["$file"]=1
 
-    if [[ ! -f "$file" ]]; then
+    if [ ! -f "$file" ]; then
         echo "Error: Config file '$file' not found." >&2
         return 1
     fi
@@ -92,7 +92,9 @@ process_file() {
     while IFS= read -r line; do
         line="${line#"${line%%[![:space:]]*}"}"
         line="${line%"${line##*[![:space:]]}"}"
-        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        if [ -z "$line" ] || [[ "$line" =~ ^# ]]; then
+            continue
+        fi
 
         if [[ "$line" =~ ^includefile[[:space:]]+(.+) ]]; then
             for include in ${BASH_REMATCH[1]}; do
@@ -103,36 +105,37 @@ process_file() {
 
         line="${line%%#*}"
         line="${line%"${line##*[![:space:]]}"}"
-        [[ -z "$line" ]] && continue
+        [ -z "$line" ] && continue
 
         if [[ "$line" =~ ^keys[[:space:]]+(.+) ]]; then
             NTP_KEYS_FILE="${BASH_REMATCH[1]}"
         elif [[ "$line" =~ ^controlkey[[:space:]]+([0-9]+) ]]; then
             NTP_CONTROL_KEY="${BASH_REMATCH[1]}"
-            if [[ -n "$NTP_KEYS_FILE" ]]; then
+            if [ -n "$NTP_KEYS_FILE" ]; then
                 NTP_PASSWD="$(sudo awk -v key="$NTP_CONTROL_KEY" '$1==key {print $3}' "$NTP_KEYS_FILE")"
             fi
         fi
 
-        if [[ "$UNPEER" -eq 0 && "$line" == *"$REFCLOCK_ADDR"* ]]; then
+        if [ "$UNPEER" -eq 0 ] && [[ "$line" == *"$REFCLOCK_ADDR"* ]]; then
             MATCHING_LINES+=("$line")
         fi
     done < "$file"
+    return 0
 }
 
 process_file "$CONFIG_FILE"
 
-if [[ -z "$NTP_KEYS_FILE" ]]; then
+if [ -z "$NTP_KEYS_FILE" ]; then
     echo "Error: missing 'keys' directive in config."
     exit 1
 fi
-if [[ -z "$NTP_CONTROL_KEY" ]]; then
+if [ -z "$NTP_CONTROL_KEY" ]; then
     echo "Error: missing 'controlkey' directive in config."
     exit 1
 fi
 
 # auto-detect unless forced
-if [[ -n "$FORCE_MODE" ]]; then
+if [ -n "$FORCE_MODE" ]; then
     AUTH_MODE="$FORCE_MODE"
     AUTH_SOURCE="forced"
 else
@@ -145,15 +148,15 @@ else
     fi
 fi
 
-if [[ "$AUTH_MODE" == "passwd" && -z "$NTP_PASSWD" ]]; then
+if [ "$AUTH_MODE" == "passwd" ] && [ -z "$NTP_PASSWD" ]; then
     echo "Error: passwd mode required but password not found."
     exit 1
 fi
 
-if [[ $UNPEER -eq 1 || ${#MATCHING_LINES[@]} -gt 0 ]]; then
+if [ $UNPEER -eq 1 ] || [ ${#MATCHING_LINES[@]} -gt 0 ]; then
 
     # Build authentication
-    if [[ "$AUTH_MODE" == "passwd" ]]; then
+    if [ "$AUTH_MODE" == "passwd" ]; then
         CMD=(sudo ntpq -c "keyid $NTP_CONTROL_KEY" -c "passwd $NTP_PASSWD")
         CMD_DISPLAY=(sudo ntpq -c \"keyid $NTP_CONTROL_KEY\" -c \"passwd \$\(sudo awk \'\$1==\"$NTP_CONTROL_KEY\" {print \$3}\' $NTP_KEYS_FILE\)\")
     else
@@ -162,7 +165,7 @@ if [[ $UNPEER -eq 1 || ${#MATCHING_LINES[@]} -gt 0 ]]; then
     fi
 
     # Build control commands
-    if [[ $UNPEER -eq 1 ]]; then
+    if [ $UNPEER -eq 1 ]; then
         CMD+=(-c ":config unpeer $REFCLOCK_ADDR")
         CMD_DISPLAY+=(-c \":config unpeer $REFCLOCK_ADDR\")
     else
@@ -177,7 +180,7 @@ if [[ $UNPEER -eq 1 || ${#MATCHING_LINES[@]} -gt 0 ]]; then
     echo "Command: ${CMD_DISPLAY[*]}"
     echo
 
-    if [[ $DRYRUN -eq 0 ]]; then
+    if [ $DRYRUN -eq 0 ]; then
         "${CMD[@]}"
     else
         echo "[dry-run] Command not executed"

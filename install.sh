@@ -51,7 +51,7 @@ SCRIPT_DIR="$(cd "$(dirname -- "$0")" && pwd)"
 source "$SCRIPT_DIR/shared-services.sh"
 source "$SCRIPT_DIR/shared-utils.sh"
 
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case "$1" in
         --noninteractive)
             NONINTERACTIVE=1
@@ -204,7 +204,7 @@ for entry in "${files[@]}"; do
     sudo mkdir -vp "$dest"
 
     # Special rename for uninstall.sh
-    if [[ "$(basename "$src")" == "uninstall.sh" ]]; then
+    if [ "$(basename "$src")" == "uninstall.sh" ]; then
         dest_file="$dest/uninstall-ntpgps.sh"
         src_path="$SCRIPT_DIR/$src"
         tmpfile=$(mktemp)
@@ -279,7 +279,7 @@ generate_udev_rules() {
         # Scan devices
         serials=()
         for dev in /dev/ttyUSB* /dev/ttyACM*; do
-            [[ -e "$dev" ]] || continue  # skip if no matching device
+            [ -e "$dev" ] || continue  # skip if no matching device
             props="$(udevadm info -q property -n $dev)"
             match=true
             for f in "${filters[@]}"; do
@@ -304,7 +304,7 @@ generate_udev_rules() {
     for blk in $all_blocks; do
         if [[ ! ${BLOCK_SERIALS[$blk]+_} ]]; then
             echo "Block $blk: UNSET (not selected)"
-        elif [[ -z "${BLOCK_SERIALS[$blk]}" ]]; then
+        elif [ -z "${BLOCK_SERIALS[$blk]}" ]; then
             echo "Block $blk: ENABLED (no serial)"
         else
             echo "Block $blk: ${BLOCK_SERIALS[$blk]}"
@@ -316,7 +316,7 @@ generate_udev_rules() {
     block_lines=()
     declare -A block_filters  # holds key/value filters for current block
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line || [ -n "$line" ]; do
         if [[ "$line" =~ ^\[Begin:([0-9]+)\]$ ]]; then
             in_block=1
             block_num="${BASH_REMATCH[1]}"
@@ -329,22 +329,22 @@ generate_udev_rules() {
             serials="${BLOCK_SERIALS[$block_num]}"
 
             # Process block
-            if [[ -z "$val" ]]; then
+            if [ -z "$val" ]; then
                 # Block not selected → comment out all lines except description, drop serial and filters
                 for l in "${block_lines[@]}"; do
                     if [[ "$l" == \#* ]]; then
                         echo "$l" >> "$tmp_file"
-                    elif [[ "$l" == "__SERIAL__" ]] || [[ "$l" == Filter:* ]]; then
+                    elif [ "$l" == "__SERIAL__" ] || [[ "$l" == Filter:* ]]; then
                         continue
                     else
                         echo "#$l" >> "$tmp_file"
                     fi
                 done
 
-            elif [[ -z "$serials" ]]; then
+            elif [ -z "$serials" ]; then
                 # Block selected but no serial detected → drop __SERIAL__ and filters
                 for l in "${block_lines[@]}"; do
-                    [[ "$l" == "__SERIAL__" ]] && continue
+                    [ "$l" == "__SERIAL__" ] && continue
                     [[ "$l" == Filter:* ]] && continue
                     echo "$l" >> "$tmp_file"
                 done
@@ -355,7 +355,7 @@ generate_udev_rules() {
                 for s in $serials; do
                     [ $first_block -eq 0 ] && echo "" >> "$tmp_file" || first_block=0
                     for l in "${block_lines[@]}"; do
-                        if [[ "$l" == "__SERIAL__" ]]; then
+                        if [ "$l" == "__SERIAL__" ]; then
                             echo "    ATTRS{serial}==\"$s\", \\" >> "$tmp_file"
                         elif [[ "$l" == Filter:* ]]; then
                             continue
@@ -406,8 +406,8 @@ UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 while true; do
     DETECTED=0
 
-    if [[ $NONINTERACTIVE -eq 1 ]]; then
-        if [[ -z "$GPS_OPTION" ]]; then
+    if [ $NONINTERACTIVE -eq 1 ]; then
+        if [ -z "$GPS_OPTION" ]; then
             echo "Error: --noninteractive requires --gps-option=N (1-10)"
             exit 1
         fi
@@ -437,7 +437,7 @@ while true; do
     # Validate input (must be 1–10)
     if (( opt < 1 || opt > 10 )); then
         echo "Invalid selection: '$opt'. Must be a number 1-10."
-        [[ $NONINTERACTIVE -eq 1 ]] && exit 1
+        [ $NONINTERACTIVE -eq 1 ] && exit 1
         continue
     fi
 
@@ -457,9 +457,9 @@ while true; do
     ALL_BLOCKS_STR=""
     i=1
     while :; do
-        [[ ! -v RULE_MAP[$i] ]] && break  # stop at unset key
+        [ ! -v RULE_MAP[$i] ] && break  # stop at unset key
         val="${RULE_MAP[$i]}"
-        [[ -z "$val" ]] && break          # stop at empty value
+        [ -z "$val" ] && break          # stop at empty value
         [[ "$val" == *" "* ]] && echo "ERROR: RULE_MAP[$i] contains a space: '$val'" >&2 && exit 1
         [ -n "$ALL_BLOCKS_STR" ] && ALL_BLOCKS_STR+=" $val" || ALL_BLOCKS_STR="$val"
         ((i++))
@@ -474,9 +474,9 @@ while true; do
     if [[ "$selected" =~ "5" && "$selected" =~ "6" ]]; then conflict=1; fi
     if [[ "$selected" =~ "7" && "$selected" =~ "8" ]]; then conflict=1; fi
 
-    if [[ $conflict -eq 1 ]]; then
+    if [ $conflict -eq 1 ]; then
         echo "Conflict detected: cannot select PPS and non-PPS for the same device."
-        [[ $NONINTERACTIVE -eq 1 ]] && exit 1
+        [ $NONINTERACTIVE -eq 1 ] && exit 1
         continue
     fi
 
@@ -496,7 +496,7 @@ done
 
 # Retrigger UDEV for the currently plugged in USB devices
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
-    [[ -e "$dev" ]] || continue
+    [ -e "$dev" ] || continue
     echo "[*] Retriggering udev for $dev..."
     sudo udevadm trigger --name-match="$(basename "$dev")" --action=add
 done

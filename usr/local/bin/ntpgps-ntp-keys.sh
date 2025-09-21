@@ -47,25 +47,68 @@ fi
 ntpkeys_renumber() {
     local tmpfile keysfile
 
-    keysfile=$(realpath -e "$KEYS_PATH") || { echo "Error: can't resolve $KEYS_PATH"; return 1; }
+    # Check KEYID_FIRST
+    if [ -z "$KEYID_FIRST" ]; then
+        echo "Error: KEYID_FIRST is empty" >&2
+        return 1
+    fi
 
-    tmpfile=$(mktemp "$keysfile.XXXXXX")
+    # Resolve keys file
+    keysfile=$(realpath -e "$KEYS_PATH") || {
+        echo "Error: can't resolve $KEYS_PATH" >&2
+        return 1
+    }
+
+    # Ensure the file is writable
+    if [ ! -w "$keysfile" ]; then
+        echo "Error: $keysfile is not writable" >&2
+        return 1
+    fi
+
+    # Create temporary file
+    tmpfile=$(mktemp "$keysfile.XXXXXX") || {
+        echo "Error: cannot create temporary file" >&2
+        return 1
+    }
+
+    # Safe cleanup on exit
     trap '
         if [ -n "${tmpfile:-}" ]; then
             rm -vf "$tmpfile"
         fi
-    ' RETURN
+    ' EXIT
 
+    # Match ownership and permissions
     chown --reference="$keysfile" "$tmpfile"
     chmod --reference="$keysfile" "$tmpfile"
 
-    awk -v base="$KEYID_FIRST" '
-      /^#/ { print; next }
-      /^[[:space:]]*[0-9]+/ { $1 = base++; print; next }
-      { print }
-    ' "$keysfile" > "$tmpfile"
+    # Renumber keys
+    awk -v base="${KEYID_FIRST:=1001}" '
+      {
+        line = $0
+        # comment lines -> unchanged
+        if (line ~ /^[ \t\r\v\f]*#/) { print; next }
 
+        # lines starting with a number -> renumber
+        if (line ~ /^[ \t\r\v\f]*[0-9]+/) {
+            # skip leading whitespace entirely; match the original number
+            match(line, /^[ \t\r\v\f]*[0-9]+/)
+            num_len = RLENGTH
+            rest_after = substr(line, num_len + 1)
+
+            # print number flush-left
+            printf "%d%s\n", base++, rest_after
+            next
+        }
+
+        # everything else -> unchanged
+        print
+      }
+    ' "$keysfile" >"$tmpfile"
+
+    # Move temporary file into place
     mv -vf "$tmpfile" "$keysfile"
+
     return 0
 }
 
@@ -128,19 +171,35 @@ remove_ntpkeys() {
 find_valid_md5_keyid() {
     local keyid
 
-    # Look for MD5 keys, ignore commented lines, exclude any containing a double-quote
-    keyid=$(awk '/^[0-9]+[[:space:]]+MD5[[:space:]]+/ {
-                    if ($3 !~ /"/) {
-                        print $1;
-                        exit;
-                    }
-                 }' "$KEYS_PATH")
+    keyid=$(awk '
+    /^[ \t\r\v\f]*#/ { next }   # skip comment lines
 
-    if [[ -z "$keyid" ]]; then
+    /^[ \t\r\v\f]*[0-9]+[ \t\r\v\f]+MD5[ \t\r\v\f]+/ {
+        # Extract the key ID
+        match($0, /^[ \t\r\v\f]*[0-9]+/)
+        id = substr($0, RSTART, RLENGTH)
+
+        # Remove ID and MD5 label
+        rest = substr($0, RLENGTH + 1)
+        sub(/^[ \t\r\v\f]+MD5[ \t\r\v\f]+/, "", rest)
+
+        # First word is the key
+        match(rest, /^[^ \t\r\v\f]+/)
+        key = substr(rest, RSTART, RLENGTH)
+
+        if (key !~ /"/) {
+            print id
+            exit
+        }
+    }
+    ' "$KEYS_PATH")
+
+    if [ -z "$keyid" ]; then
         echo "0"
     else
         echo "$keyid"
     fi
+
     return 0
 }
 
@@ -175,7 +234,7 @@ legacy_ntp_keygen() {
         ntpkeys_renumber
         KEYID_CONTROL=$(find_valid_md5_keyid)
 
-        if [[ "$KEYID_CONTROL" != "0" ]]; then
+        if [ "$KEYID_CONTROL" != "0" ]; then
             echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
             break
         fi
@@ -184,7 +243,7 @@ legacy_ntp_keygen() {
         remove_ntpkeys
     done
 
-    if [[ "$KEYID_CONTROL" == "0" ]]; then
+    if [ "$KEYID_CONTROL" == "0" ]; then
         echo "[!] ERROR: Could not generate a valid MD5 control key after $MAX_RETRIES attempts."
         exit 1
     fi

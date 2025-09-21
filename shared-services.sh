@@ -9,8 +9,9 @@ stop_disable_services_udev() {
     all_instances=()
     local removed_count=0 skipped_count=0 dummy_disabled=0 singles_stopped=0 singles_disabled=0
 
+    # 1. Trigger udev remove for devices tagged ID_NTPGPS=1
     for dev in /dev/ttyUSB* /dev/ttyACM*; do
-        [[ -e "$dev" ]] || continue
+        [ -e "$dev" ] || continue
         if udevadm info --query=property --name="$dev" | grep -q '^ID_NTPGPS=1$'; then
             echo "    - Triggering udev remove for $dev (ours)"
             sudo udevadm trigger --sysname-match="$(basename "$dev")" --action=remove || true
@@ -21,6 +22,7 @@ stop_disable_services_udev() {
         fi || true
     done
 
+    # 2. Disable dummy template instances
     echo "[*] Disabling dummy template instances..."
     TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
     for tpl in "${TEMPLATES[@]}"; do
@@ -29,6 +31,8 @@ stop_disable_services_udev() {
             sudo systemctl disable "${tpl}dummy.service" || true
             ((dummy_disabled++))
         fi || true
+
+        # List template instances (unit names only, no legend/pager)
         instances=$(systemctl list-units --type=service --all \
             | awk '{print $1}' | grep "^$tpl" || true)
         for svc in $instances; do
@@ -36,6 +40,7 @@ stop_disable_services_udev() {
         done
     done
 
+    # 3. Stop + disable single non-template services
     echo "[*] Stopping and disabling single (non-template) services..."
     singles=("ntpgps-ntp-keys.service")
     for svc in "${singles[@]}"; do
@@ -51,6 +56,7 @@ stop_disable_services_udev() {
         fi || true
     done
 
+    # 4. Wait for template instances to stop (stop is usually blocking, but safe)
     echo "[*] Waiting for template instances to fully stop..."
     for svc in "${all_instances[@]}"; do
         while systemctl is-active --quiet "$svc"; do
@@ -58,8 +64,17 @@ stop_disable_services_udev() {
         done
     done
 
+    # 5. Reload systemd state
     sudo systemctl daemon-reload
 
+    # 6. Sanity check: warn if any ntpgps services remain active
+    remaining=$(systemctl list-units --type=service --no-legend --no-pager | cut -d' ' -f1 | grep '^ntpgps-' || true)
+    if [ -n "$remaining" ]; then
+        echo "[!] WARNING: Some ntpgps services are still active:"
+        echo "$remaining"
+    fi
+
+    # Summary
     echo "[*] All GPS services stopped and disabled."
     echo "------------------------------------------------------------"
     echo " Summary:"

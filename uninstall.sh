@@ -27,6 +27,7 @@ set -e
 # Absolute path to this script
 SCRIPT_PATH="$(realpath "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+source "$SCRIPT_DIR/shared-posix.sh"
 source "$SCRIPT_DIR/shared-services.sh"
 
 # --- Parse options ---
@@ -51,7 +52,7 @@ while [ $# -gt 0 ]; do
 done
 
 # --- Logging setup ---
-if [[ $NO_LOG_REDIRECT -eq 0 ]]; then
+if [ $NO_LOG_REDIRECT -eq 0 ]; then
     LOGFILE="/var/log/ntpgps-uninstall.log"
     sudo mkdir -p "$(dirname "$LOGFILE")"
     sudo touch "$LOGFILE"
@@ -144,7 +145,7 @@ if [ -L "$NTP_KEYS" ]; then
     # Symlink; get the target
     target_file=$(readlink -f "$NTP_KEYS")
     # Only remove the target if its filename starts with ntpkey_
-    if [ -n "$target_file" ] && [ -f "$target_file" ] && [[ "$(basename "$target_file")" == ntpkey_* ]]; then
+    if [ -n "$target_file" ] && [ -f "$target_file" ] && matchfile "$target_file" "ntpkey_*"; then
         echo "[*] Removing target of symlink: $target_file"
         sudo rm -vf "$target_file"
     fi
@@ -190,7 +191,7 @@ sudo udevadm control --reload-rules
 
 # Retrigger UDEV for the currently plugged in USB devices
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
-    [[ -e "$dev" ]] || continue
+    [ -e "$dev" ] || continue
     echo "[*] Retriggering udev for $dev..."
     sudo udevadm trigger --name-match="$(basename "$dev")" --action=add
 done
@@ -210,8 +211,8 @@ else
 fi
 
 # Only offer deletion if the script is in /usr/local/bin
-if [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]; then
-    if [[ $SELF_DELETE -eq 1 ]]; then
+if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
+    if [ $SELF_DELETE -eq 1 ]; then
         answer="Y"
     else
         sync && sleep 0.1
@@ -219,7 +220,7 @@ if [[ "$SCRIPT_DIR" == "/usr/local/bin" ]]; then
         read -r answer </dev/tty
     fi
 
-    if [[ "$answer" == "Y" ]]; then
+    if [ "$(toupper "$answer")" == "Y" ]; then
         echo "[*] Deleting $SCRIPT_PATH ..."
         sudo rm -vf -- "$SCRIPT_PATH"
     else

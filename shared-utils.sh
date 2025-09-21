@@ -14,7 +14,7 @@ backup_file() {
     local backup_file=""
 
     # --- Parse options ---
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case "$1" in
             -v|--verbose)
                 verbose=true
@@ -150,7 +150,7 @@ bundle_script() {
     local -a varlist=()   # For -DVAR=VAL style variable assignments
 
     # Parse options
-    while [[ $# -gt 0 ]]; do
+    while [ $# -gt 0 ]; do
         case "$1" in
             -v|--verbose)
                 verbose=true
@@ -169,9 +169,9 @@ bundle_script() {
                 return 1
                 ;;
             *)  # Positional arguments
-                if [[ -z "$input" ]]; then
+                if [ -z "$input" ]; then
                     input="$1"
-                elif [[ -z "$output" ]]; then
+                elif [ -z "$output" ]; then
                     output="$1"
                 else
                     # Treat remaining as variable assignments (for backward compatibility)
@@ -182,7 +182,7 @@ bundle_script() {
         esac
     done
 
-    if [[ -z "$input" || -z "$output" ]]; then
+    if [ -z "$input" ] || [ -z "$output" ]; then
         echo "Usage: bundle_script [-v|--verbose] [-DVAR=VAL ...] <input_script> <output_script>" >&2
         return 1
     fi
@@ -214,7 +214,7 @@ bundle_script() {
         _track_time "$file"
         $verbose && echo "${prefix}# Inlining: $file" >&2
 
-        while IFS= read -r line || [[ -n "$line" ]]; do
+        while IFS= read -r line || [ -n "$line" ]; do
             if [[ "$line" =~ ^([[:space:]]*)source[[:space:]]+\"([^\"]+)\" ]]; then
                 local indent="${BASH_REMATCH[1]}"
                 local src="${BASH_REMATCH[2]}"
@@ -222,9 +222,9 @@ bundle_script() {
                 resolved=$(eval echo "\"$src\"")
                 local dir
                 dir="$(dirname "$file")"
-                [[ ! -f "$resolved" && -f "$dir/$resolved" ]] && resolved="$dir/$resolved"
+                [ ! -f "$resolved" ] && [ -f "$dir/$resolved" ] && resolved="$dir/$resolved"
 
-                if [[ -f "$resolved" ]]; then
+                if [ -f "$resolved" ]; then
                     $verbose && echo "${prefix}# >>> inlining $resolved" >&2
                     echo "${indent}# >>> begin inlined: $src"
                     _bundle_inner "$resolved" "$indent"
