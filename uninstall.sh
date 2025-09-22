@@ -24,11 +24,10 @@ enter() { echo "[ENTERING] $(basename "$0")"; }
 #set -x #debug switch
 set -e
 
-# Absolute path to this script
 SCRIPT_PATH="$(realpath "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-source "$SCRIPT_DIR/shared-posix.sh"
 source "$SCRIPT_DIR/shared-services.sh"
+toupper() { printf "%s" "$1" | tr a-z A-Z; return 0; }
 
 # --- Parse options ---
 SELF_DELETE=0
@@ -145,7 +144,7 @@ if [ -L "$NTP_KEYS" ]; then
     # Symlink; get the target
     target_file=$(readlink -f "$NTP_KEYS")
     # Only remove the target if its filename starts with ntpkey_
-    if [ -n "$target_file" ] && [ -f "$target_file" ] && matchfile "$target_file" "ntpkey_*"; then
+    if [ -n "$target_file" ] && [ -f "$target_file" ] && [[ "$(basename "$target_file")" == ntpkey_* ]]; then
         echo "[*] Removing target of symlink: $target_file"
         sudo rm -vf "$target_file"
     fi
