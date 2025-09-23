@@ -168,7 +168,6 @@ LEAP_FILE="/usr/share/zoneinfo/leap-seconds.list"
 LEAP_URL="https://data.iana.org/time-zones/data/leap-seconds.list"
 
 if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
-    sync && sleep 0.1
     echo "[WARNING] Leap-seconds file appears expired."
 
     if [ "$NONINTERACTIVE" -eq 1 ]; then
@@ -180,6 +179,7 @@ if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
             echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
         fi
     else
+        sync && sleep 0.1
         printf "Do you want to update the leap-seconds file now? [y/N] " >/dev/tty
         read -r reply </dev/tty
         if [[ "$reply" =~ ^[Yy]$ ]]; then
