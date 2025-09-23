@@ -21,6 +21,10 @@
 finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; sync; sleep 0.1; }; trap finish EXIT
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
+# --- Constants ---
+LEAP_FILE="/usr/share/zoneinfo/leap-seconds.list"
+LEAP_URL="https://data.iana.org/time-zones/data/leap-seconds.list"
+
 # --- Logging setup ---
 LOGFILE="/var/log/ntpgps-install.log"
 sudo mkdir -p "$(dirname "$LOGFILE")"
@@ -164,9 +168,6 @@ install_dependencies() {
 }
 
 # --- Check leap-seconds file ---
-LEAP_FILE="/usr/share/zoneinfo/leap-seconds.list"
-LEAP_URL="https://data.iana.org/time-zones/data/leap-seconds.list"
-
 if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
     echo "[WARNING] Leap-seconds file appears expired."
 
