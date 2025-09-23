@@ -203,6 +203,28 @@ find_valid_md5_keyid() {
     return 0
 }
 
+get_first_keyid() {
+    local keytype="$1"
+    local keyid
+
+    keyid=$(awk -v kt="$keytype" '
+        BEGIN { FS = "[ \t\r\v\f]+" }
+        {
+            sub(/\r$/, "")                            # strip possible CR
+            if ($0 ~ /^[ \t\r\v\f]*#/ || NF < 2) next # skip comments/blank
+            if ($2 == kt) { print $1; exit }
+        }
+    ' "$KEYS_PATH")
+
+    if [ -z "$keyid" ]; then
+        echo "0"
+    else
+        echo "$keyid"
+    fi
+
+    return 0
+}
+
 ntp_restart() {
     # Ensure that NTP can find our root config file
     for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
@@ -221,21 +243,50 @@ ntp_restart() {
     return 0
 }
 
+# Work-around to avoid using an MD5 key containing an embedded double-quote character
 legacy_ntp_keygen() {
-    # Work-around to avoid using an MD5 key containing an embedded double-quote character
+    local keyid
+
+    if [ -f "$KEYS_PATH" ]; then
+        first_keyid="$(get_first_keyid MD5)"
+        if [ "$first_keyid" == "$KEYID_FIRST" ]; then
+            keyid=$(find_valid_md5_keyid)
+
+            if [ "$keyid" != "0" ]; then
+                KEYID_CONTROL=$keyid
+                echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
+                secure_ntpkeys
+                return 0
+            else
+                echo "[-] No valid MD5 key found."
+                remove_ntpkeys
+            fi
+        elif [ "$first_keyid" == "1" ]; then
+            echo "[-] Found existing ntp.keys that is not ours. Removing ntp.keys..."
+            remove_ntpkeys
+        else
+            echo "[-] Unexpected MD5 keyid $first_keyid found in ntp.keys. Removing ntp.keys..."
+            remove_ntpkeys
+        fi
+    fi
+
     for attempt in $(seq 1 $MAX_RETRIES_KEYGEN); do
         echo "[*] Attempt $attempt of $MAX_RETRIES_KEYGEN"
+
         if cd "$KEYS_DIR"; then
             ntp-keygen -M
         else
             echo "Failed to change directory to $KEYS_DIR"
-            exit 1
+            return 1
         fi
-        ntpkeys_renumber
-        KEYID_CONTROL=$(find_valid_md5_keyid)
 
-        if [ "$KEYID_CONTROL" != "0" ]; then
+        ntpkeys_renumber
+        keyid=$(find_valid_md5_keyid)
+
+        if [ "$keyid" != "0" ]; then
+            KEYID_CONTROL=keyid
             echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
+            secure_ntpkeys
             break
         fi
 
@@ -245,41 +296,60 @@ legacy_ntp_keygen() {
 
     if [ "$KEYID_CONTROL" == "0" ]; then
         echo "[!] ERROR: Could not generate a valid MD5 control key after $MAX_RETRIES attempts."
-        exit 1
+        return 1
     fi
+
     return 0
 }
 
 ntpsec_keygen() {
+    local keyid
+
+    if [ -f "$KEYS_PATH" ]; then
+        first_keyid="$(get_first_keyid AES)"
+        if [ "$first_keyid" == "$KEYID_FIRST" ]; then
+            KEYID_CONTROL=$KEYID_FIRST
+            echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
+            secure_ntpkeys
+            return 0
+        elif [ "$first_keyid" == "1" ]; then
+            echo "[-] Found existing ntp.keys that is not ours. Removing ntp.keys..."
+            remove_ntpkeys
+        else
+            echo "[-] Unexpected AES keyid $first_keyid found in ntp.keys. Removing ntp.keys..."
+            remove_ntpkeys
+        fi
+    fi
+
     if cd "$KEYS_DIR"; then
         ntpkeygen
     else
         echo "Failed to change directory to $KEYS_DIR"
-        exit 1
+        return 1
     fi
+
     ntpkeys_renumber
     KEYID_CONTROL=$KEYID_FIRST
+    secure_ntpkeys
+
     return 0
 }
 
-# Create new NTP authentication keys if they do not exist
-if [ ! -f "$KEYS_PATH" ]; then
-    if command -v ntpkeygen >/dev/null 2>&1; then
-        echo "Found ntpkeygen, generating keys..."
-        ntpsec_keygen
-    elif command -v ntp-keygen >/dev/null 2>&1; then
-        echo "Found ntp-keygen, generating MD5 keys..."
-        legacy_ntp_keygen
-    else
-        echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
-        exit 1
-    fi
-
-    rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
-    NTP_RESTART_NEEDED=1
+# Create new NTP authentication keys if they do not exist, or
+# use existing ntp.keys
+if command -v ntpkeygen >/dev/null 2>&1; then
+    echo "Found ntpkeygen"
+    ntpsec_keygen
+elif command -v ntp-keygen >/dev/null 2>&1; then
+    echo "Found legacy ntp-keygen"
+    legacy_ntp_keygen
 else
-    secure_ntpkeys
+    echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
+    exit 1
 fi
+
+rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
+NTP_RESTART_NEEDED=1
 
 # Link the NTP authentication keys into our NTP configuration
 if [ -f "$KEYS_PATH" ]; then
@@ -297,7 +367,10 @@ if [ -f "$KEYS_PATH" ]; then
     fi
 
     if [ ! -f "$CONF_AUTH_PATH" ]; then
+
         tmpfile=$(mktemp "$CONF_AUTH_PATH.XXXXXX")
+        sudo chown root:root "$tmpfile"
+        sudo chmod 644 "$tmpfile"
         sed \
             -e "s|%KEYS_PATH|$KEYS_PATH|g" \
             -e "s|%KEYID|$KEYID_CONTROL|g" \
