@@ -284,7 +284,7 @@ legacy_ntp_keygen() {
         keyid=$(find_valid_md5_keyid)
 
         if [ "$keyid" != "0" ]; then
-            KEYID_CONTROL=keyid
+            KEYID_CONTROL=$keyid
             echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
             secure_ntpkeys
             break
