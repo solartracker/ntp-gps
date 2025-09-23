@@ -163,6 +163,40 @@ install_dependencies() {
     return 0
 }
 
+# --- Check leap-seconds file ---
+LEAP_FILE="/usr/share/zoneinfo/leap-seconds.list"
+LEAP_URL="https://data.iana.org/time-zones/data/leap-seconds.list"
+
+if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
+    sync && sleep 0.1
+    echo "[WARNING] Leap-seconds file appears expired."
+
+    if [ "$NONINTERACTIVE" -eq 1 ]; then
+        echo "[INFO] Non-interactive mode: automatically updating leap-seconds file..."
+        if sudo wget -q -O "$LEAP_FILE" "$LEAP_URL"; then
+            echo "[INFO] Leap-seconds file updated successfully."
+            sudo systemctl restart ntp || true
+        else
+            echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
+        fi
+    else
+        printf "Do you want to update the leap-seconds file now? [y/N] " >/dev/tty
+        read -r reply </dev/tty
+        if [[ "$reply" =~ ^[Yy]$ ]]; then
+            if sudo wget -q -O "$LEAP_FILE" "$LEAP_URL"; then
+                echo "[INFO] Leap-seconds file updated successfully."
+                sudo systemctl restart ntp || true
+            else
+                echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
+            fi
+        else
+            echo "[INFO] Skipped updating leap-seconds file."
+        fi
+    fi
+else
+    echo "[INFO] Leap-seconds file is up to date."
+fi
+
 # --- Dependencies ---
 echo "[*] Installing dependencies..."
 install_dependencies
