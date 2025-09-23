@@ -22,6 +22,8 @@ finish() { local result=$?; echo "[EXITING]  $(basename "$0")[$result]"; sync; s
 enter() { echo "[ENTERING] $(basename "$0")"; }
 
 # --- Constants ---
+TEMPLATE_UDEV="/etc/ntpgps/template/99-ntpgps-usb.rules"
+UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 LEAP_FILE="/usr/share/zoneinfo/leap-seconds.list"
 LEAP_URL="https://data.iana.org/time-zones/data/leap-seconds.list"
 
@@ -435,8 +437,6 @@ generate_udev_rules() {
 
 # --- GPS/UDEV configuration ---
 echo "[*] Select GPS device type..."
-TEMPLATE_UDEV="/etc/ntpgps/template/99-ntpgps-usb.rules"
-UDEV_FILE="/etc/udev/rules.d/99-ntpgps-usb.rules"
 
 while true; do
     DETECTED=0
