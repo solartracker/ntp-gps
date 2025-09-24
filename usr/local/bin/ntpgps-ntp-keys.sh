@@ -309,14 +309,14 @@ ntpsec_keygen() {
         first_keyid="$(get_first_keyid AES)"
         if [ "$first_keyid" == "$KEYID_FIRST" ]; then
             KEYID_CONTROL=$KEYID_FIRST
-            echo "[+] Found valid MD5 control key: $KEYID_CONTROL"
+            echo "[+] Found valid control key: $KEYID_CONTROL"
             secure_ntpkeys
             return 0
         elif [ "$first_keyid" == "1" ]; then
             echo "[-] Found existing ntp.keys that is not ours. Removing ntp.keys..."
             remove_ntpkeys
         else
-            echo "[-] Unexpected AES keyid $first_keyid found in ntp.keys. Removing ntp.keys..."
+            echo "[-] Unexpected keyid $first_keyid found in ntp.keys. Removing ntp.keys..."
             remove_ntpkeys
         fi
     fi
