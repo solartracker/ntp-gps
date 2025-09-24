@@ -24,7 +24,7 @@ stop_disable_services_udev() {
 
     # 2. Disable dummy template instances
     echo "[*] Disabling dummy template instances..."
-    TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
+    TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7@")
     for tpl in "${TEMPLATES[@]}"; do
         if systemctl is-enabled "${tpl}dummy.service" >/dev/null 2>&1; then
             echo "    - Disabling ${tpl}dummy.service"

@@ -109,6 +109,7 @@ echo "[*] GPS services stopped and disabled."
 echo "[*] Removing installed files..."
 files=(
     /usr/local/bin/ntpgps-ublox7-config.sh
+    /usr/local/bin/ntpgps-ublox7-override-gpsd.sh
     /usr/local/bin/ntpgps-ntp-setconfig.sh
     /usr/local/bin/ntpgps-gps-stop.sh
     /usr/local/bin/ntpgps-gpspps-symlink.sh
@@ -126,7 +127,7 @@ files=(
     /etc/modules-load.d/ntpgps-pps.conf
     /etc/systemd/system/ntpgps-gps-nopps@.service
     /etc/systemd/system/ntpgps-gps-pps@.service
-    /etc/systemd/system/ntpgps-gps-ublox7-config@.service
+    /etc/systemd/system/ntpgps-gps-ublox7@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
     /run/ntpgps/ntpgps.conf
     /run/ntpgps/keys.conf

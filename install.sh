@@ -211,6 +211,7 @@ echo "[*] Installing files..."
 files=(
     "755 uninstall.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-ublox7-override-gpsd.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-setconfig.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-stop.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpspps-symlink.sh /usr/local/bin"
@@ -227,7 +228,7 @@ files=(
     "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
     "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
-    "644 etc/systemd/system/ntpgps-gps-ublox7-config@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-gps-ublox7@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-ntp-keys.service /etc/systemd/system"
 )
 
@@ -285,7 +286,7 @@ sudo systemctl enable ntpgps-ntp-keys.service
 
 # Automatically enable dummy instance for all GPS systemd templates,
 # so systemd can create the symlinks
-TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7-config@")
+TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7@")
 for tpl in "${TEMPLATES[@]}"; do
     if systemctl list-unit-files | grep -q "^$tpl"; then
         echo "[*] Enabling systemd template $tpl with dummy instance..."
