@@ -211,7 +211,6 @@ echo "[*] Installing files..."
 files=(
     "755 uninstall.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
-    "755 usr/local/bin/ntpgps-ublox7-override-gpsd.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-setconfig.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-stop.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpspps-symlink.sh /usr/local/bin"

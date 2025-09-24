@@ -75,7 +75,7 @@ CopyModifyGpsdOverrideRule() {
         sudo mkdir -p "$(dirname "$NTPGPS_OVERRIDE")"
         sudo mkdir -p "$(dirname "$ORIG_GPSD_RULE")"
         if [ -f "$ORIG_GPSD_RULE" ] && ! CompareFiles "$GPSD_RULE" "$ORIG_GPSD_RULE"; then
-            sudo rm -vf "$ORIG_GPSD_RULE""
+            sudo rm -vf "$ORIG_GPSD_RULE"
             if [ -f "$NTPGPS_OVERRIDE" ]; then
                 sudo rm -vf "$NTPGPS_OVERRIDE"
             fi
@@ -86,10 +86,26 @@ CopyModifyGpsdOverrideRule() {
             sudo cp -p "$GPSD_RULE" "$NTPGPS_OVERRIDE"
     
             sudo awk -v v="$VENDOR" -v p="$PRODUCT" '{if($0 ~ v && $0 ~ p){print "#" $0} else {print $0}}' \
-                "$NTPGPS_OVERRIDE" >"${NTPGPS_OVERRIDE}.tmp"
+                "$NTPGPS_OVERRIDE" | sudo tee "${NTPGPS_OVERRIDE}.tmp" >/dev/null
             sudo mv -vf "${NTPGPS_OVERRIDE}.tmp" "$NTPGPS_OVERRIDE"
         fi
     fi
+    return 0
+}
+
+
+CleanupEmptyDirs() {
+    for dir in "$@"; do
+        current="$dir"
+        while [ "$current" != "/" ]; do
+            if [ -d "$current" ]; then
+                if sudo rmdir "$current" >/dev/null 2>/dev/null; then
+                    echo "[*] Removed empty directory: $current"
+                fi
+            fi
+            current=$(dirname "$current")
+        done
+    done
     return 0
 }
 
@@ -100,6 +116,9 @@ ActivateGpsdOverrideRule() {
 
 DeleteGpsdOverrideRule() {
     sudo rm -vf "$GPSD_OVERRIDE"
+    sudo rm -vf "$NTPGPS_OVERRIDE"
+    sudo rm -vf "$ORIG_GPSD_RULE"
+    CleanupEmptyDirs "$(dirname "$ORIG_GPSD_RULE")"
 }
 
 MoveSysadminOverrideRule() {
@@ -186,29 +205,34 @@ GpsdOverride() {
     local action="$1"
     local changed=0
 
+    # install the GPSD override
     if [ $action -eq 0 ]; then
-        # install the GPSD override
-        if SysadminOverrideRuleExists; then
-            if SysadminOverrideRuleBackupExists; then
-                if ! SysadminOverrideRuleBackupNExists; then
-                    MoveSysadminOverrideRuleBackup
-                fi
-            fi
-            MoveSysadminOverrideRule
-            changed=1
-        fi
         if GpsdRuleExists; then
+            if SysadminOverrideRuleExists; then
+                if SysadminOverrideRuleBackupExists; then
+                    if ! SysadminOverrideRuleBackupNExists; then
+                        MoveSysadminOverrideRuleBackup
+                    fi
+                fi
+                MoveSysadminOverrideRule
+                changed=1
+            fi
             if ! NtpgpsOverrideRuleExists; then
                 ActivateGpsdOverrideRule
                 changed=1
             fi
+        else
+            action=1
+            echo "GPSD is not installed. Cleaning up."
         fi
-    else
-        # uninstall the GPSD override
+    fi
+
+    # uninstall the GPSD override
+    if [ $action -eq 1 ]; then
         if NtpgpsOverrideRuleExists; then
-            DeleteGpsdOverrideRule
             changed=1
         fi
+        DeleteGpsdOverrideRule
         if ! SysadminOverrideRuleExists; then
             if SysadminOverrideRuleBackupExists; then
                 RestoreSysadminOverrideRule
@@ -218,8 +242,8 @@ GpsdOverride() {
     fi
 
     if [ $changed -eq 1 ]; then
-        udevadm control --reload-rules
-        udevadm trigger
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger
         echo "Udev rules reloaded."
     fi
 }
