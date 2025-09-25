@@ -105,10 +105,16 @@ echo "[*] Stopping and disabling GPS services..."
 stop_disable_services_udev
 echo "[*] GPS services stopped and disabled."
 
+# Cleanup GPSD override
+source "$SCRIPT_DIR/usr/local/bin/ntpgps-ublox7-gpsd-shared.sh"
+gpsd_remove_override
+
 # Remove installed files
 echo "[*] Removing installed files..."
 files=(
     /usr/local/bin/ntpgps-ublox7-config.sh
+    /usr/local/bin/ntpgps-ublox7-gpsd.sh
+    /usr/local/bin/ntpgps-ublox7-gpsd-shared.sh
     /usr/local/bin/ntpgps-ntp-setconfig.sh
     /usr/local/bin/ntpgps-gps-stop.sh
     /usr/local/bin/ntpgps-gpspps-symlink.sh
@@ -171,7 +177,7 @@ if [ -d "$keys_dir" ]; then
 else
     echo "[*] Directory $keys_dir does not exist; nothing to check for leftover keys."
 fi
-'
+' # END sudo bash
 
 # Remove the directories
 cleanup_empty_dirs /run/ntpgps /etc/ntpgps/keys /etc/ntpgps/template
