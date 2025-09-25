@@ -87,13 +87,19 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 cleanup_empty_dirs() {
-    for dir in "$@"; do
-        current="$dir"
+    for top in "$@"; do
+        [ -d "$top" ] || continue
+
+        # 1. Remove all empty subdirectories first, but not the top-level directory
+        sudo find "$top" -mindepth 1 -type d -empty -depth -exec echo "[*] Removed empty directory: {}" \; -delete
+
+        # 2. Then walk upward to remove any parent directories that became empty
+        current="$top"
         while [ "$current" != "/" ]; do
-            if [ -d "$current" ]; then
-                if sudo rmdir "$current" >/dev/null 2>/dev/null; then
-                    echo "[*] Removed empty directory: $current"
-                fi
+            if [ -d "$current" ] && sudo rmdir "$current" >/dev/null 2>&1; then
+                echo "[*] Removed empty directory: $current"
+            else
+                break
             fi
             current=$(dirname "$current")
         done
@@ -180,7 +186,7 @@ fi
 ' # END sudo bash
 
 # Remove the directories
-cleanup_empty_dirs /run/ntpgps /etc/ntpgps/keys /etc/ntpgps/template
+cleanup_empty_dirs /run/ntpgps /etc/ntpgps
 
 # Clean NTP configs
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
