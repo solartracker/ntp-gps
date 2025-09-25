@@ -95,7 +95,7 @@ backup_gpsd_override() {
 
             if [ ! -f "$GPSD_BKP_TS" ]; then
                 sudo mv -vf "$GPSD_OVERRIDE_BKP" "$GPSD_BKP_TS"
-                echo "Archived existing sysadmin backup as: $GPSD_BKP_TS"
+                echo "Archived existing backup as: $GPSD_BKP_TS"
             else
                 echo "Timestamped backup already exists: $GPSD_BKP_TS (skipping)"
                 return 1
