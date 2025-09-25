@@ -3,7 +3,8 @@
 # ntpgps-ublox7-gpsd.sh
 #
 # Self-cleaning GPSD udev override for VK172 (1546:01a7)
-# Run by systemd service when VK172 USB GPS dongle is plugged in
+# Run by systemd service when VK172 USB GPS dongle is plugged in.
+# Prevents GPSD from stepping on our inexpensive NTP refclock.
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -72,10 +73,11 @@ backup_gpsd_override() {
 
     if [ -f "$GPSD_OVERRIDE_BKP" ]; then
         # check if primary backup was archived
-        for file in ${GPSD_OVERRIDE_BKP}.*; do
+        for file in "${GPSD_OVERRIDE_BKP}".*; do
+            [ -e "$file" ] || continue
             if compare_files "$file" "$GPSD_OVERRIDE_BKP"; then
-                # backup exists
                 found=1
+                break
             fi
         done
 
@@ -92,7 +94,7 @@ backup_gpsd_override() {
             fi
 
             if [ ! -f "$GPSD_BKP_TS" ]; then
-                sudo mv -vf "$"GPSD_OVERRIDE_BKP "$GPSD_BKP_TS"
+                sudo mv -vf "$GPSD_OVERRIDE_BKP" "$GPSD_BKP_TS"
                 echo "Archived existing sysadmin backup as: $GPSD_BKP_TS"
             else
                 echo "Timestamped backup already exists: $GPSD_BKP_TS (skipping)"
@@ -171,7 +173,7 @@ gpsd_override() {
 
     if [ $changed -eq 1 ]; then
         sudo udevadm control --reload-rules
-        sudo udevadm trigger
+        sudo udevadm trigger --attr-match=idVendor=$VENDOR --attr-match=idProduct=$PRODUCT
         echo "Udev rules reloaded."
     fi
 

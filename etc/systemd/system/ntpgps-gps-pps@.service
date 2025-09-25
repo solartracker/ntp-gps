@@ -23,7 +23,6 @@ BindsTo=dev-%i.device
 After=dev-%i.device ntp.service
 Wants=ntp.service
 
-
 [Service]
 Type=simple
 ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 1
