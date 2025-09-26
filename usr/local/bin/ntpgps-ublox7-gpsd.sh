@@ -142,20 +142,105 @@ update_rules_cache() {
     return 0
 }
 
-remove_device() {
-    local vendor="$1"
-    local product="$2"
+hard_remove() {
+    local vendor="$1"   # USB vendor ID
+    local product="$2"  # USB product ID
     local dev
+    local found=0
+
+    # Validate arguments
+    if [[ ! "$vendor" =~ ^[0-9a-fA-F]{4}$ ]]; then
+        echo "Error: vendor ID must be a 4-digit hex value"
+        return 1
+    fi
+    if [[ ! "$product" =~ ^[0-9a-fA-F]{4}$ ]]; then
+        echo "Error: product ID must be a 4-digit hex value"
+        return 1
+    fi
+
     for dev in /sys/bus/usb/devices/*; do
-        [ -d "$dev" ] || continue
-        if [ -f "$dev/idVendor" ] && [ -f "$dev/idProduct" ]; then
-            if grep -q "^${vendor}$" "$dev/idVendor" && grep -q "^${product}$" "$dev/idProduct"; then
-                echo "Removing device: $dev"
-                echo 1 | sudo tee "$dev/remove" >/dev/null
-            fi
+        [ -f "$dev/idVendor" ] || continue
+        [ -f "$dev/idProduct" ] || continue
+
+        if grep -q "^${vendor}$" "$dev/idVendor" && grep -q "^${product}$" "$dev/idProduct" 2>/dev/null; then
+            echo "Removing device: $dev"
+            echo 1 | sudo tee "$dev/remove" >/dev/null
+            found=1
         fi
     done
+
+    if [ $found -eq 0 ]; then
+        echo "Warning: no device found with vendor=$vendor product=$product"
+        return 2
+    fi
+
     return 0
+}
+
+# Tracks unplugged devices in memory
+declare -A unplugged
+
+soft_toggle() {
+    local state="$1"   # 0=unplug, 1=replug
+    local vendor="$2"
+    local product="$3"
+    local key="${vendor}:${product}"
+    local dev
+    local found=0
+
+    # Validate arguments
+    if [[ "$state" != "0" && "$state" != "1" ]]; then
+        echo "Error: state must be 0 (unplug) or 1 (replug)"
+        return 1
+    fi
+    if [[ ! "$vendor" =~ ^[0-9a-fA-F]{4}$ ]]; then
+        echo "Error: vendor ID must be a 4-digit hex value" >&2
+        return 1
+    fi
+    if [[ ! "$product" =~ ^[0-9a-fA-F]{4}$ ]]; then
+        echo "Error: product ID must be a 4-digit hex value" >&2
+        return 1
+    fi
+
+    for dev in /sys/bus/usb/devices/*; do
+        [ -f "$dev/idVendor" ] || continue
+        [ -f "$dev/idProduct" ] || continue
+
+        if grep -q "^${vendor}$" "$dev/idVendor" && grep -q "^${product}$" "$dev/idProduct" 2>/dev/null; then
+            found=1
+            if [ "$state" -eq 0 ]; then
+                if [ "${unplugged[$key]}" = "1" ]; then
+                    echo "Device already unplugged $dev"
+                    continue
+                else
+                    unplugged["$key"]=1
+                    echo "Soft-unplugging $dev"
+                fi
+            else
+                if [ "${unplugged[$key]}" != "1" ]; then
+                    echo "Device is not unplugged $dev"
+                    continue
+                else
+                    unset unplugged["$key"]
+                    echo "Soft-replugging $dev"
+                fi
+            fi
+
+            echo "$state" | sudo tee "$dev/authorized" >/dev/null
+        fi
+    done
+
+    [ $found -eq 1 ] || { echo "Device $vendor:$product not found" >&2; return 2; }
+
+    return 0
+}
+
+soft_unplug() { soft_toggle 0 "$1" "$2"; }
+soft_replug() { soft_toggle 1 "$1" "$2"; }
+
+device_is_unplugged() {
+    local key="${1}:${2}"
+    [ "${unplugged[$key]}" = "1" ]
 }
 
 gpsd_override() {
@@ -172,6 +257,7 @@ gpsd_override() {
             if [ -f "$GPSD_OVERRIDE" ]; then
                 if ! compare_files "$GPSD_OVERRIDE" "$NTPGPS_OVERRIDE"; then
                     # found an override rule that is not ours, so deactivate it
+                    soft_unplug "$VENDOR" "$PRODUCT"
                     backup_gpsd_override
                     changed=1
                 fi
@@ -179,8 +265,10 @@ gpsd_override() {
 
             if [ ! -f "$GPSD_OVERRIDE" ]; then
                 # no override rule was found, so activate ours
-                remove_device "$VENDOR" "$PRODUCT"
                 sudo ln -sf "$NTPGPS_OVERRIDE" "$GPSD_OVERRIDE"
+                if device_is_unplugged "$VENDOR" "$PRODUCT"; then
+                    soft_replug "$VENDOR" "$PRODUCT"
+                fi
                 changed=1
             fi
         else
