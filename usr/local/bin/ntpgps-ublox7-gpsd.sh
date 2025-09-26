@@ -57,7 +57,6 @@ cleanup_empty_dirs() {
         # 1. Remove all empty subdirectories first, but not the top-level directory
         sudo find "$top" -mindepth 1 -depth -type d -empty -exec echo "[*] Removed empty directory: {}" \; -delete
 
-
         # 2. Then walk upward to remove any parent directories that became empty
         current="$top"
         while [ "$current" != "/" ]; do
