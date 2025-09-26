@@ -256,7 +256,7 @@ gpsd_override() {
             if [ -f "$GPSD_OVERRIDE" ]; then
                 if ! compare_files "$GPSD_OVERRIDE" "$NTPGPS_OVERRIDE"; then
                     # found an override rule that is not ours, so deactivate it
-                    soft_unplug "$VENDOR" "$PRODUCT"
+                    soft_unplug "$VENDOR" "$PRODUCT" || true
                     backup_gpsd_override
                     changed=1
                 fi
