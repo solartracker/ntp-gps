@@ -249,14 +249,14 @@ gpsd_override() {
     # install
     if [ $action -eq 0 ]; then
 
-        # check if GPSD udev rules are installed
+        # check if GPSD is installed
         if [ -f "$GPSD_RULE" ]; then
+            soft_unplug "$VENDOR" "$PRODUCT" || true
             update_rules_cache
 
             if [ -f "$GPSD_OVERRIDE" ]; then
                 if ! compare_files "$GPSD_OVERRIDE" "$NTPGPS_OVERRIDE"; then
                     # found an override rule that is not ours, so deactivate it
-                    soft_unplug "$VENDOR" "$PRODUCT" || true
                     backup_gpsd_override
                     changed=1
                 fi
