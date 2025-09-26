@@ -531,7 +531,37 @@ while true; do
     break
 done
 
-# Retrigger UDEV for the currently plugged in USB devices
+# --- Stop GPSD safely if installed ---
+if command -v gpsd >/dev/null 2>&1; then
+    echo "[*] gpsd is installed, stopping socket and service..."
+
+    # Stop socket first to prevent auto-restart
+    if systemctl status gpsd.socket >/dev/null 2>&1; then
+        sudo systemctl stop gpsd.socket
+    fi
+
+    # Stop service
+    if systemctl status gpsd.service >/dev/null 2>&1; then
+        sudo systemctl stop gpsd.service
+    fi
+
+    # Kill any leftover gpsd processes
+    sleep 1
+    sudo pkill -f /usr/sbin/gpsd 2>/dev/null || true
+
+    echo "[*] gpsd stopped completely."
+fi
+
+# --- Activate GPSD UDEV override at install time ---
+if [ -x /usr/local/bin/ntpgps-ublox7-gpsd.sh ]; then
+    echo "[*] Activating GPSD UDEV override..."
+    sudo /usr/local/bin/ntpgps-ublox7-gpsd.sh
+    echo "[*] GPSD UDEV override activated."
+else
+    echo "[!] GPSD override script not found or not executable."
+fi
+
+# --- Retrigger UDEV for the currently plugged in USB devices ---
 for dev in /dev/ttyUSB* /dev/ttyACM*; do
     [ -e "$dev" ] || continue
     echo "[*] Retriggering udev for $dev..."

@@ -51,13 +51,20 @@ if [ $# -gt 0 ]; then
 fi
 
 cleanup_empty_dirs() {
-    for dir in "$@"; do
-        current="$dir"
+    for top in "$@"; do
+        [ -d "$top" ] || continue
+
+        # 1. Remove all empty subdirectories first, but not the top-level directory
+        sudo find "$top" -mindepth 1 -depth -type d -empty -exec echo "[*] Removed empty directory: {}" \; -delete
+
+
+        # 2. Then walk upward to remove any parent directories that became empty
+        current="$top"
         while [ "$current" != "/" ]; do
-            if [ -d "$current" ]; then
-                if sudo rmdir "$current" >/dev/null 2>/dev/null; then
-                    echo "[*] Removed empty directory: $current"
-                fi
+            if [ -d "$current" ] && sudo rmdir "$current" >/dev/null 2>&1; then
+                echo "[*] Removed empty directory: $current"
+            else
+                break
             fi
             current=$(dirname "$current")
         done
@@ -135,12 +142,30 @@ update_rules_cache() {
     return 0
 }
 
+remove_device() {
+    local vendor="$1"
+    local product="$2"
+    local dev
+    for dev in /sys/bus/usb/devices/*; do
+        [ -d "$dev" ] || continue
+        if [ -f "$dev/idVendor" ] && [ -f "$dev/idProduct" ]; then
+            if grep -q "^${vendor}$" "$dev/idVendor" && grep -q "^${product}$" "$dev/idProduct"; then
+                echo "Removing device: $dev"
+                echo 1 | sudo tee "$dev/remove" >/dev/null
+            fi
+        fi
+    done
+    return 0
+}
+
 gpsd_override() {
     local action="$1"
     local changed=0
 
     # install
     if [ $action -eq 0 ]; then
+
+        # check if GPSD udev rules are installed
         if [ -f "$GPSD_RULE" ]; then
             update_rules_cache
 
@@ -154,13 +179,15 @@ gpsd_override() {
 
             if [ ! -f "$GPSD_OVERRIDE" ]; then
                 # no override rule was found, so activate ours
+                remove_device "$VENDOR" "$PRODUCT"
                 sudo ln -sf "$NTPGPS_OVERRIDE" "$GPSD_OVERRIDE"
                 changed=1
             fi
         else
-            action=1 #uninstall
             echo "GPSD is not installed. Cleaning up."
+            action=1 #uninstall
         fi
+
     fi
 
     # uninstall

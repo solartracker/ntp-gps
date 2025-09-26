@@ -91,7 +91,8 @@ cleanup_empty_dirs() {
         [ -d "$top" ] || continue
 
         # 1. Remove all empty subdirectories first, but not the top-level directory
-        sudo find "$top" -mindepth 1 -type d -empty -depth -exec echo "[*] Removed empty directory: {}" \; -delete
+        sudo find "$top" -mindepth 1 -depth -type d -empty -exec echo "[*] Removed empty directory: {}" \; -delete
+
 
         # 2. Then walk upward to remove any parent directories that became empty
         current="$top"
@@ -223,15 +224,32 @@ fi
 
 # Only offer deletion if the script is in /usr/local/bin
 if [ "$SCRIPT_DIR" == "/usr/local/bin" ]; then
-    if [ $SELF_DELETE -eq 1 ]; then
-        answer="Y"
+    if [ "$SELF_DELETE" -eq 1 ]; then
+        answer="y"
     else
         sync && sleep 0.1
-        printf "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [y/N] " >/dev/tty
-        read -r answer </dev/tty
+
+        while true; do
+            printf "Do you want to delete the uninstall script itself ($SCRIPT_PATH)? [Y/n] " >/dev/tty
+            read -r answer </dev/tty
+            answer="${answer,,}"
+
+            case "$answer" in
+                y|"")
+                    answer="y"
+                    break
+                    ;;
+                n)
+                    break
+                    ;;
+                *)
+                    echo "Invalid input"
+                    ;;
+            esac
+        done
     fi
 
-    if [ "$(toupper "$answer")" == "Y" ]; then
+    if [ "$answer" = "y" ]; then
         echo "[*] Deleting $SCRIPT_PATH ..."
         sudo rm -vf -- "$SCRIPT_PATH"
     else
