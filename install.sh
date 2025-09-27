@@ -545,7 +545,7 @@ fi
 # --- Activate GPSD UDEV override at install time ---
 if [ -x /usr/local/bin/ntpgps-ublox7-gpsd.sh ]; then
     echo "[*] Activating GPSD UDEV override..."
-    sudo /usr/local/bin/ntpgps-ublox7-gpsd.sh
+    sudo /usr/local/bin/ntpgps-ublox7-gpsd.sh --install
     echo "[*] GPSD UDEV override activated."
 else
     echo "[!] GPSD override script not found or not executable."

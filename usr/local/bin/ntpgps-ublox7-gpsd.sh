@@ -33,15 +33,18 @@ GPSD_RULE="/lib/udev/rules.d/60-gpsd.rules"
 VENDOR="1546"
 PRODUCT="01a7"
 ACTION=0 # Default action is "install"
+CONTEXT=1 # 0=installer, 1=service
 
 # Parse command line
 if [ $# -gt 0 ]; then
     case "$1" in
         --install)
             ACTION=0
+            CONTEXT=0
             ;;
         --uninstall)
             ACTION=1
+            CONTEXT=0
             ;;
         *)
             echo "Usage: $0 [--install|--uninstall]"
@@ -208,7 +211,7 @@ soft_toggle() {
         if grep -q "^${vendor}$" "$dev/idVendor" && grep -q "^${product}$" "$dev/idProduct" 2>/dev/null; then
             found=1
             if [ "$state" -eq 0 ]; then
-                if [ "${unplugged[$key]}" = "1" ]; then
+                if [ "${unplugged[$key]:-0}" == "1" ]; then
                     echo "Device already unplugged $dev"
                     continue
                 else
@@ -216,7 +219,7 @@ soft_toggle() {
                     echo "Soft-unplugging $dev"
                 fi
             else
-                if [ "${unplugged[$key]}" != "1" ]; then
+                if [ "${unplugged[$key]:-0}" != "1" ]; then
                     echo "Device is not unplugged $dev"
                     continue
                 else
@@ -239,7 +242,7 @@ soft_replug() { soft_toggle 1 "$1" "$2"; }
 
 device_is_unplugged() {
     local key="${1}:${2}"
-    [ "${unplugged[$key]}" = "1" ]
+    [ "${unplugged[$key]:-0}" == "1" ]
 }
 
 gpsd_override() {
@@ -251,7 +254,10 @@ gpsd_override() {
 
         # check if GPSD is installed
         if [ -f "$GPSD_RULE" ]; then
-            soft_unplug "$VENDOR" "$PRODUCT" || true
+            if [ "$CONTEXT" -eq 0 ]; then
+                soft_unplug "$VENDOR" "$PRODUCT" || true
+            fi
+
             update_rules_cache
 
             if [ -f "$GPSD_OVERRIDE" ]; then
@@ -265,10 +271,11 @@ gpsd_override() {
             if [ ! -f "$GPSD_OVERRIDE" ]; then
                 # no override rule was found, so activate ours
                 sudo ln -sf "$NTPGPS_OVERRIDE" "$GPSD_OVERRIDE"
-                if device_is_unplugged "$VENDOR" "$PRODUCT"; then
-                    soft_replug "$VENDOR" "$PRODUCT"
-                fi
                 changed=1
+            fi
+
+            if device_is_unplugged "$VENDOR" "$PRODUCT"; then
+                soft_replug "$VENDOR" "$PRODUCT"
             fi
         else
             echo "GPSD is not installed. Cleaning up."
