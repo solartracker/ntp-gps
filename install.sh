@@ -285,16 +285,6 @@ sudo systemctl daemon-reload
 echo "[*] Enabling ntpgps-ntp-keys.service..."
 sudo systemctl enable ntpgps-ntp-keys.service
 
-# Automatically enable dummy instance for all GPS systemd templates,
-# so systemd can create the symlinks
-TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7@")
-for tpl in "${TEMPLATES[@]}"; do
-    if systemctl list-unit-files | grep -q "^$tpl"; then
-        echo "[*] Enabling systemd template $tpl with dummy instance..."
-        sudo systemctl enable "${tpl}dummy.service" || true
-    fi
-done
-
 generate_udev_rules() {
     local all_blocks="$1"
     local selected_device_types="$2"

@@ -7,7 +7,7 @@
 stop_disable_services_udev() {
     echo "[*] Removing template services via UDEV remove action..."
     all_instances=()
-    local removed_count=0 skipped_count=0 dummy_disabled=0 singles_stopped=0 singles_disabled=0
+    local removed_count=0 skipped_count=0 singles_stopped=0 singles_disabled=0
 
     # 1. Trigger udev remove for devices tagged ID_NTPGPS=1
     for dev in /dev/ttyUSB* /dev/ttyACM*; do
@@ -22,16 +22,10 @@ stop_disable_services_udev() {
         fi || true
     done
 
-    # 2. Disable dummy template instances
-    echo "[*] Disabling dummy template instances..."
+    # 2. List template instances
+    echo "[*] List template instances..."
     TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7@")
     for tpl in "${TEMPLATES[@]}"; do
-        if systemctl is-enabled "${tpl}dummy.service" >/dev/null 2>&1; then
-            echo "    - Disabling ${tpl}dummy.service"
-            sudo systemctl disable "${tpl}dummy.service" || true
-            ((dummy_disabled++))
-        fi || true
-
         # List template instances (unit names only, no legend/pager)
         instances=$(systemctl list-units --type=service --all \
             | awk '{print $1}' | grep "^$tpl" || true)
@@ -80,7 +74,6 @@ stop_disable_services_udev() {
     echo " Summary:"
     echo "   - Devices removed via udev : $removed_count"
     echo "   - Devices skipped (not ours): $skipped_count"
-    echo "   - Dummy template disabled   : $dummy_disabled"
     echo "   - Singles stopped           : $singles_stopped"
     echo "   - Singles disabled          : $singles_disabled"
     echo "------------------------------------------------------------"
