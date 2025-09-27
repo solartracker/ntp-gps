@@ -542,11 +542,11 @@ if command -v gpsd >/dev/null 2>&1; then
     echo "[*] gpsd stopped completely."
 fi
 
-# --- Activate GPSD UDEV override at install time ---
+# --- Attempt GPSD UDEV override at install time ---
 if [ -x /usr/local/bin/ntpgps-ublox7-gpsd.sh ]; then
-    echo "[*] Activating GPSD UDEV override..."
+    echo "[*] Attempting GPSD UDEV override..."
     sudo /usr/local/bin/ntpgps-ublox7-gpsd.sh --install
-    echo "[*] GPSD UDEV override activated."
+    echo "[*] GPSD UDEV override finished."
 else
     echo "[!] GPSD override script not found or not executable."
 fi
