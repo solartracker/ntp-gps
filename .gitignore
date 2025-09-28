@@ -1,0 +1,24 @@
+# Ignore sync-system reference file list
+.sync-system-filelist
+
+# Ignore packages
+.deb
+
+# Ignore compiled binaries
+*.o
+*.exe
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore logs
+*.log
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore local config
+config/local.json
+

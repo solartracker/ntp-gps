@@ -1,0 +1,138 @@
+################################################################################
+# 99-ntpgps-usb.rules
+#
+# Enables USB plug and play for GPS receiver with NTP
+#
+# Copyright (C) 2025 Richard Elwell
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+################################################################################
+
+[Begin:1]
+Filter:ID_VENDOR_ID=0403
+Filter:ID_MODEL_ID=6001
+# FT232/FTDI USB-Serial adapter, connected to GPS module with PPS
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:1]
+
+[Begin:2]
+Filter:ID_VENDOR_ID=0403
+Filter:ID_MODEL_ID=6001
+# FT232/FTDI USB-Serial adapter, connected to GPS module
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:2]
+
+[Begin:3]
+Filter:ID_VENDOR_ID=1a86
+Filter:ID_MODEL_ID=7523
+# CH340/CH341 USB-to-Serial adapter, connected to GPS module with PPS
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:3]
+
+[Begin:4]
+Filter:ID_VENDOR_ID=1a86
+Filter:ID_MODEL_ID=7523
+# CH340/CH341 USB-to-Serial adapter, connected to GPS module
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:4]
+
+[Begin:5]
+Filter:ID_VENDOR_ID=10c4
+Filter:ID_MODEL_ID=ea60
+# CP210x USB-to-UART bridge, connected to GPS module with PPS
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:5]
+
+[Begin:6]
+Filter:ID_VENDOR_ID=10c4
+Filter:ID_MODEL_ID=ea60
+# CP210x USB-to-UART bridge, connected to GPS module
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:6]
+
+[Begin:7]
+Filter:ID_VENDOR_ID=067b
+Filter:ID_MODEL_ID=2303
+# PL2303 USB-to-Serial adapter, connected to GPS module with PPS
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:7]
+
+[Begin:8]
+Filter:ID_VENDOR_ID=067b
+Filter:ID_MODEL_ID=2303
+# PL2303 USB-to-Serial adapter, connected to GPS module
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:8]
+
+[Begin:9]
+Filter:ID_VENDOR_ID=1546
+Filter:ID_MODEL_ID=01a7
+# VK172 USB GPS dongle (u-blox USB GPS receiver)
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", SYMLINK+="gps%c", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}="ntpgps-gps-ublox7@%k.service", \
+    MODE="0666", ENV{ID_NTPGPS}="1"
+[End:9]
+
+################################################################################
+# Handles creation and removal of /dev/gpsppsN for NTP
+#
+ACTION=="add", SUBSYSTEM=="pps", \
+    IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
+    SYMLINK+="$env{GPSPPSNAME}", \
+    MODE="0666"
+
