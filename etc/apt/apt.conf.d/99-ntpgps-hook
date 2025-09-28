@@ -1,0 +1,1 @@
+DPkg::Post-Invoke { "/usr/local/bin/ntpgps-gpsd-override.sh 2>&1 | logger -t ntpgps-gpsd-override || true"; };

@@ -130,6 +130,7 @@ files=(
     /usr/local/bin/ntpgps-gps-setup.sh
     /usr/local/bin/ntpgps-ntp-configure.sh
     /usr/local/bin/ntpgps-gpsnum.sh
+    /etc/apt/apt.conf.d/99-ntpgps-hook
     /etc/ntpgps/template/nmea-gps.conf
     /etc/ntpgps/template/nmea-gps-pps.conf
     /etc/ntpgps/template/keys.conf

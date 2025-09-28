@@ -221,6 +221,7 @@ files=(
     "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-configure.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsnum.sh /usr/local/bin"
+    "644 etc/apt/apt.conf.d/99-ntpgps-hook /etc/apt/apt.conf.d"
     "644 etc/ntpgps/template/nmea-gps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/nmea-gps-pps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
