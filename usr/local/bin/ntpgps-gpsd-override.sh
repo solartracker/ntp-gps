@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# ntpgps-ublox7-gpsd.sh
+# ntpgps-gpsd-override.sh
 #
 # Self-cleaning GPSD udev override for VK172 (1546:01a7)
 # Run by systemd service when VK172 USB GPS dongle is plugged in.
