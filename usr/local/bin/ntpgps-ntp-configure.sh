@@ -49,9 +49,9 @@ NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 CONF_TEMPLATE=""
 
 if [ "$HASPPS" == "0" ]; then
-  CONF_TEMPLATE="nmea-gps.conf"
+  CONF_TEMPLATE="driver20-gps-gpzda.conf"
 elif [ "$HASPPS" == "1" ]; then
-  CONF_TEMPLATE="nmea-gps-pps.conf"
+  CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
 fi
 
 if [ -n "$CONF_TEMPLATE" ]; then

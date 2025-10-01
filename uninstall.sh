@@ -131,8 +131,14 @@ files=(
     /usr/local/bin/ntpgps-ntp-configure.sh
     /usr/local/bin/ntpgps-gpsnum.sh
     /etc/apt/apt.conf.d/99-ntpgps-hook
-    /etc/ntpgps/template/nmea-gps.conf
-    /etc/ntpgps/template/nmea-gps-pps.conf
+    /etc/ntpgps/template/driver20-gps-gpzda.conf
+    /etc/ntpgps/template/driver20-gps-gprmc.conf
+    /etc/ntpgps/template/driver20-gps-gpzda+gprmc.conf
+    /etc/ntpgps/template/driver20-gpspps-gpzda.conf
+    /etc/ntpgps/template/driver20-gpspps-gprmc.conf
+    /etc/ntpgps/template/driver20-gpspps-gpzda+gprmc.conf
+    /etc/ntpgps/template/driver22-pps.conf
+    /etc/ntpgps/template/driver28-shm.conf
     /etc/ntpgps/template/keys.conf
     /etc/ntpgps/template/ntpgps.conf
     /etc/ntpgps/template/99-ntpgps-usb.rules
