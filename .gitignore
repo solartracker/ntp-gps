@@ -4,6 +4,9 @@
 # Ignore packages
 .deb
 
+# Ignore compiled programs
+bin/
+
 # Ignore compiled binaries
 *.o
 *.exe

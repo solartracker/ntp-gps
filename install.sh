@@ -173,7 +173,7 @@ install_dependencies() {
 
 compile_shm_writer() {
     local src="$SCRIPT_DIR/ntpgps-shm-writer.c"
-    local bin="$SCRIPT_DIR/ntpgps-shm-writer"
+    local bin="$SCRIPT_DIR/bin/ntpgps-shm-writer"
 
     echo "[*] Checking ntpgps-shm-writer binary..."
     if [ ! -f "$bin" ] || [ "$bin" -ot "$src" ]; then
@@ -234,7 +234,7 @@ echo "[*] Installing files..."
 # Format: "mode source destination"
 files=(
     "755 uninstall.sh /usr/local/bin"
-    "755 ntpgps-shm-writer /usr/local/bin"
+    "755 bin/ntpgps-shm-writer /usr/local/bin"
     "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsd-override.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsd-override-shared.sh /usr/local/bin"
