@@ -50,41 +50,39 @@ CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 CONF_TEMPLATE=""
 
 ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
-if [ -n "$ENV_REFCLOCK" ]; then
-    REFCLOCK="${ENV_REFCLOCK#*=}" # get value
-    case "$REFCLOCK" in
-        20)
-            NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
-            if [ "$HASPPS" == "0" ]; then
-              CONF_TEMPLATE="driver20-gps-gpzda.conf"
-            elif [ "$HASPPS" == "1" ]; then
-              CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
-            fi
-            ;;
-        28)
-            NMEA_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
-            if [ "$HASPPS" == "0" ]; then
-              CONF_TEMPLATE="driver28-shm.conf"
-            elif [ "$HASPPS" == "1" ]; then
-              CONF_TEMPLATE="driver28-shm-pps.conf"
-            fi
-            ;;
-        "" )
-            echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
-            exit 1
-            ;;
-        *)
-            echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
-            exit 1
-            ;;
-    esac
-fi
+REFCLOCK="${ENV_REFCLOCK#*=}" # get value
+case "$REFCLOCK" in
+    20)
+        REFCLOCK_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
+        if [ "$HASPPS" == "0" ]; then
+          CONF_TEMPLATE="driver20-gps-gpzda.conf"
+        elif [ "$HASPPS" == "1" ]; then
+          CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
+        fi
+        ;;
+    28)
+        REFCLOCK_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
+        if [ "$HASPPS" == "0" ]; then
+          CONF_TEMPLATE="driver28-shm.conf"
+        elif [ "$HASPPS" == "1" ]; then
+          CONF_TEMPLATE="driver28-shm-pps.conf"
+        fi
+        ;;
+    "" )
+        echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
+        exit 1
+        ;;
+    *)
+        echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+        exit 1
+        ;;
+esac
 
 if [ -n "$CONF_TEMPLATE" ]; then
   sudo mkdir -p "$CONF_TMP_DIR"
 
   # Generate the GPS include file safely
-  sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$NMEA_TMP_PATH" >/dev/null
+  sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$REFCLOCK_TMP_PATH" >/dev/null
 
   # Create the main tmp config if it doesn't exist
   if [ ! -f "$CONF_TMP_PATH" ]; then
@@ -93,8 +91,8 @@ if [ -n "$CONF_TEMPLATE" ]; then
 
   # Append the GPS include line if not already present (handles slashes safely)
   if [ -f "$CONF_TMP_PATH" ]; then
-    if ! sudo grep -Fxq "includefile $NMEA_TMP_PATH" "$CONF_TMP_PATH"; then
-      echo "includefile $NMEA_TMP_PATH" | sudo tee -a "$CONF_TMP_PATH" >/dev/null
+    if ! sudo grep -Fxq "includefile $REFCLOCK_TMP_PATH" "$CONF_TMP_PATH"; then
+      echo "includefile $REFCLOCK_TMP_PATH" | sudo tee -a "$CONF_TMP_PATH" >/dev/null
     fi
   fi
 
