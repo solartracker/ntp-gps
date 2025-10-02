@@ -156,6 +156,13 @@ __REFCLOCK__
 [End:9]
 
 ################################################################################
+# Start SHM writer for TTYs with REFLOCK=28
+#
+ACTION=="add", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", SUBSYSTEM=="tty", \
+    ENV{ID_NTPGPS_REFCLOCK}=="28", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}+="ntpgps-shm-writer@%k.service"
+
+################################################################################
 # Triggers on creation of real virtual devices /dev/ppsX created by ldattach,
 # but ignores symlink devices that we create. Creates and manages the symlinks
 # /dev/gpspps$GPSNUM and /dev/pps$GPSNUM, which are symlinks that we create for

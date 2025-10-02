@@ -18,14 +18,14 @@
 #
 ################################################################################
 [Unit]
-Description=GPS NMEA to NTP SHM (%i)
+Description=NTP GPS SHM Writer for %i
 BindsTo=dev-%i.device
 After=dev-%i.device network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/shm_writer %i
-Restart=always
+ExecStart=/usr/local/bin/ntpgps-shm-writer %i
+Restart=on-failure
 RestartSec=5
 User=root
 SyslogIdentifier=ntpgps-shm-writer-%i

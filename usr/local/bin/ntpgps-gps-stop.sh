@@ -52,7 +52,8 @@ if command -v systemctl >/dev/null; then
         REFCLOCK="${ENV_REFCLOCK#*=}"
         case "$REFCLOCK" in
             20|28)
-                # Known refclocks, continue
+                # Remove the refclock from the list of NTP network peers
+                /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.$REFCLOCK.$GPSNUM
                 ;;
             "" )
                 echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
@@ -64,8 +65,6 @@ if command -v systemctl >/dev/null; then
                 ;;
         esac
 
-        # Remove the refclock from the list of NTP network peers
-        /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.$REFCLOCK.$GPSNUM
     fi
 
 fi
