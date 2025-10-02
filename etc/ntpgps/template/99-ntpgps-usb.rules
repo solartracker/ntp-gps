@@ -129,9 +129,10 @@ __SERIAL__
 [End:9]
 
 ################################################################################
-# Triggers on creation of real virtual device /dev/ppsX, but ignores symlink 
-# devices. Creates and manages the symlinks /dev/gpspps$GPSNUM or /dev/pps$GPSNUM, 
-# which are symlinks used by different NTP refclock drivers.
+# Triggers on creation of real virtual devices /dev/ppsX created by ldattach,
+# but ignores symlink devices that we create. Creates and manages the symlinks
+# /dev/gpspps$GPSNUM and /dev/pps$GPSNUM, which are symlinks that we create for
+# different NTP refclock drivers.
 #
 ACTION=="add", KERNEL=="pps[0-9]*", SUBSYSTEM=="pps", \
     IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
