@@ -129,10 +129,12 @@ __SERIAL__
 [End:9]
 
 ################################################################################
-# Handles creation and removal of /dev/gpsppsN for NTP
+# Triggers on creation of real virtual device /dev/ppsX, but ignores symlink 
+# devices. Creates and manages the symlinks /dev/gpspps$GPSNUM or /dev/pps$GPSNUM, 
+# which are symlinks used by different NTP refclock drivers.
 #
-ACTION=="add", SUBSYSTEM=="pps", \
+ACTION=="add", KERNEL=="pps[0-9]*", SUBSYSTEM=="pps", \
     IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
-    SYMLINK+="$env{GPSPPSNAME}", \
+    SYMLINK+="$env{PPSNAME}", \
     MODE="0666"
 
