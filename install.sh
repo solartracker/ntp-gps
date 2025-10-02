@@ -399,6 +399,10 @@ generate_udev_rules() {
                         echo "$l" >> "$tmp_file"
                     elif [ "$l" == "__SERIAL__" ] || [[ "$l" == Filter:* ]]; then
                         continue
+                    elif [ "$l" == "__REFCLOCK__" ]; then
+                        echo "#    ENV{ID_NTPGPS_REFCLOCK}=\"20\", \\" >> "$tmp_file"
+                    elif [ "$l" == "__SYMLINK__" ]; then
+                        echo "#    SYMLINK+=\"gps%c\", \\" >> "$tmp_file"
                     else
                         echo "#$l" >> "$tmp_file"
                     fi
@@ -407,9 +411,17 @@ generate_udev_rules() {
             elif [ -z "$serials" ]; then
                 # Block selected but no serial detected → drop __SERIAL__ and filters
                 for l in "${block_lines[@]}"; do
-                    [ "$l" == "__SERIAL__" ] && continue
-                    [[ "$l" == Filter:* ]] && continue
-                    echo "$l" >> "$tmp_file"
+                    if [ "$l" == "__SERIAL__" ]; then
+                        continue
+                    elif [ "$l" == "__REFCLOCK__" ]; then
+                        echo "    ENV{ID_NTPGPS_REFCLOCK}=\"20\", \\" >> "$tmp_file"
+                    elif [ "$l" == "__SYMLINK__" ]; then
+                        echo "    SYMLINK+=\"gps%c\", \\" >> "$tmp_file"
+                    elif [[ "$l" == Filter:* ]]; then
+                        continue
+                    else
+                        echo "$l" >> "$tmp_file"
+                    fi
                 done
 
             else
@@ -420,6 +432,10 @@ generate_udev_rules() {
                     for l in "${block_lines[@]}"; do
                         if [ "$l" == "__SERIAL__" ]; then
                             echo "    ATTRS{serial}==\"$s\", \\" >> "$tmp_file"
+                        elif [ "$l" == "__REFCLOCK__" ]; then
+                            echo "    ENV{ID_NTPGPS_REFCLOCK}=\"28\", \\" >> "$tmp_file"
+                        elif [ "$l" == "__SYMLINK__" ]; then
+                            echo "    SYMLINK+=\"\", \\" >> "$tmp_file"
                         elif [[ "$l" == Filter:* ]]; then
                             continue
                         else

@@ -28,11 +28,12 @@ TTYNAME="$1"
 HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
-# Which logical gpsX is this?
-GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+GPSNUM="${ENV_GPSNUM#*=}"
 
-if [ -z "$GPSNUM" ]; then
-  echo "Could not determine gps number for $TTYDEV"
+# Validate GPSNUM
+if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
+  echo "Error: GPSNUM must be an integer between 0 and 255" >&2
   exit 1
 fi
 
@@ -49,8 +50,24 @@ echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
+        ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+        REFCLOCK="${ENV_REFCLOCK#*=}"
+        case "$REFCLOCK" in
+            20|28)
+                # Known refclocks, continue
+                ;;
+            "" )
+                echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
+                exit 1
+                ;;
+            *)
+                echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+                exit 1
+                ;;
+        esac
+
         # Add the refclock to the list of NTP network peers
-        /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.20.$GPSNUM
+        /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.$REFCLOCK.$GPSNUM
     fi
 fi
 

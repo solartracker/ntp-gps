@@ -23,13 +23,20 @@
 PPSNAME=$1
 TTYDEV=$(cat /sys/class/pps/$PPSNAME/path)
 TTYNAME=${TTYDEV##*/}
-ENV_NTPGPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS=1$')
-if [ -n "$ENV_NTPGPS" ]; then
-    GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
-    if [ -n "$GPSNUM" ]; then
-        echo "GPSDEV=$TTYDEV"
-        echo "GPSNUM=$GPSNUM"
-        echo "PPSNAME=gpspps$GPSNUM"
-    fi
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+GPSNUM="${ENV_GPSNUM#*=}"
+if [ -n "$GPSNUM" ]; then
+    echo "GPSDEV=$TTYDEV"
+    echo "GPSNUM=$GPSNUM"
+    ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+    REFCLOCK="${ENV_REFCLOCK#*=}"
+    case "$REFCLOCK" in
+        20)
+            echo "PPSNAME=gpspps$GPSNUM"
+            ;;
+        28)
+            echo "PPSNAME=pps$GPSNUM"
+            ;;
+    esac
 fi
 

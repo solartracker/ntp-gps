@@ -25,7 +25,9 @@ set -euo pipefail
 
 TTYNAME="$1"
 HASPPS="$2"
-GPSNUM=$(/usr/local/bin/ntpgps-gpsnum.sh $TTYNAME)
+TTYDEV="/dev/$TTYNAME"
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+GPSNUM="${ENV_GPSNUM#*=}"
 
 # Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
@@ -45,13 +47,37 @@ fi
 # Dynamically generate the NTP device configuration
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
-NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
 CONF_TEMPLATE=""
 
-if [ "$HASPPS" == "0" ]; then
-  CONF_TEMPLATE="driver20-gps-gpzda.conf"
-elif [ "$HASPPS" == "1" ]; then
-  CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
+ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+if [ -n "$ENV_REFCLOCK" ]; then
+    REFCLOCK="${ENV_REFCLOCK#*=}" # get value
+    case "$REFCLOCK" in
+        20)
+            NMEA_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
+            if [ "$HASPPS" == "0" ]; then
+              CONF_TEMPLATE="driver20-gps-gpzda.conf"
+            elif [ "$HASPPS" == "1" ]; then
+              CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
+            fi
+            ;;
+        28)
+            NMEA_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
+            if [ "$HASPPS" == "0" ]; then
+              CONF_TEMPLATE="driver28-shm.conf"
+            elif [ "$HASPPS" == "1" ]; then
+              CONF_TEMPLATE="driver28-shm-pps.conf"
+            fi
+            ;;
+        "" )
+            echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
+            exit 1
+            ;;
+        *)
+            echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 if [ -n "$CONF_TEMPLATE" ]; then
