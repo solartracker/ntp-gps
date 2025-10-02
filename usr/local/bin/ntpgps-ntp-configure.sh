@@ -50,7 +50,7 @@ CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 CONF_TEMPLATE=""
 
 ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
-REFCLOCK="${ENV_REFCLOCK#*=}" # get value
+REFCLOCK="${ENV_REFCLOCK#*=}"
 case "$REFCLOCK" in
     20)
         REFCLOCK_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
