@@ -119,6 +119,7 @@ gpsd_remove_override
 # Remove installed files
 echo "[*] Removing installed files..."
 files=(
+    /usr/local/bin/ntpgps-shm-writer
     /usr/local/bin/ntpgps-ublox7-config.sh
     /usr/local/bin/ntpgps-gpsd-override.sh
     /usr/local/bin/ntpgps-gpsd-override-shared.sh
@@ -137,8 +138,8 @@ files=(
     /etc/ntpgps/template/driver20-gpspps-gpzda.conf
     /etc/ntpgps/template/driver20-gpspps-gprmc.conf
     /etc/ntpgps/template/driver20-gpspps-gpzda+gprmc.conf
-    /etc/ntpgps/template/driver22-pps.conf
     /etc/ntpgps/template/driver28-shm.conf
+    /etc/ntpgps/template/driver28-shm-pps.conf
     /etc/ntpgps/template/keys.conf
     /etc/ntpgps/template/ntpgps.conf
     /etc/ntpgps/template/99-ntpgps-usb.rules
@@ -147,6 +148,7 @@ files=(
     /etc/systemd/system/ntpgps-gps-nopps@.service
     /etc/systemd/system/ntpgps-gps-pps@.service
     /etc/systemd/system/ntpgps-gps-ublox7@.service
+    /etc/systemd/system/ntpgps-shm-writer@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
     /etc/systemd/system/ntpgps-gpsd-override.service
     /run/ntpgps/ntpgps.conf

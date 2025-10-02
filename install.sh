@@ -127,65 +127,71 @@ fi
 
 # --- Install dependencies ---
 install_dependencies() {
-    local need_update=0
 
-    # Check setserial version (minimum 2.17-52)
-    if dpkg-query -W -f='${Version}' setserial 2>/dev/null | grep -q '.'; then
-        installed_version=$(dpkg-query -W -f='${Version}' setserial)
-        if dpkg --compare-versions "$installed_version" ge "2.17-52"; then
-            echo "[*] setserial $installed_version is OK."
+    # Dependencies with minimum versions
+    declare -A dependencies=(
+        [setserial]="2.17-52"
+        [pps-tools]="1.0.2-1"
+        [build-essential]=""   # no version check, just ensure installed
+    )
+
+    needs_update=false
+    to_install=()
+
+    echo "[*] Checking dependencies..."
+    for pkg in "${!dependencies[@]}"; do
+        min_version="${dependencies[$pkg]}"
+
+        if dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null | grep -q '.'; then
+            installed_version=$(dpkg-query -W -f='${Version}' "$pkg")
+            if [ -n "$min_version" ]; then
+                if dpkg --compare-versions "$installed_version" ge "$min_version"; then
+                    echo "[*] $pkg $installed_version is OK."
+                else
+                    echo "[*] $pkg $installed_version is too old (min $min_version)."
+                    to_install+=("$pkg")
+                    needs_update=true
+                fi
+            else
+                echo "[*] $pkg is installed."
+            fi
         else
-            echo "[*] setserial $installed_version is too old."
-            need_update=1
+            echo "[*] $pkg not installed."
+            to_install+=("$pkg")
+            needs_update=true
         fi
-    else
-        echo "[*] setserial not installed."
-        need_update=1
-    fi
+    done
 
-    # Check pps-tools version (minimum 1.0.2-1)
-    if dpkg-query -W -f='${Version}' pps-tools 2>/dev/null | grep -q '.'; then
-        installed_version=$(dpkg-query -W -f='${Version}' pps-tools)
-        if dpkg --compare-versions "$installed_version" ge "1.0.2-1"; then
-            echo "[*] pps-tools $installed_version is OK."
-        else
-            echo "[*] pps-tools $installed_version is too old."
-            need_update=1
-        fi
-    else
-        echo "[*] pps-tools not installed."
-        need_update=1
-    fi
-
-    # Only update/install if needed
-    if [ $need_update -eq 1 ]; then
-        echo "[*] Installing/upgrading missing dependencies..."
+    if [ "$needs_update" = true ]; then
+        echo "[*] Installing/updating missing dependencies: ${to_install[*]}..."
         sudo apt-get update
-        sudo apt-get install -y setserial pps-tools
+        sudo apt-get install -y "${to_install[@]}"
     else
-        echo "[*] All dependencies already satisfied."
+        echo "[*] All dependencies satisfied."
     fi
-
-    return 0
 }
 
-# --- Check leap-seconds file ---
-if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
-    echo "[WARNING] Leap-seconds file appears expired."
+compile_shm_writer() {
+    local src="$SCRIPT_DIR/ntpgps-shm-writer.c"
+    local bin="$SCRIPT_DIR/ntpgps-shm-writer"
 
-    if [ "$NONINTERACTIVE" -eq 1 ]; then
-        echo "[INFO] Non-interactive mode: automatically updating leap-seconds file..."
-        if sudo wget -q -O "$LEAP_FILE" "$LEAP_URL"; then
-            echo "[INFO] Leap-seconds file updated successfully."
-            sudo systemctl restart ntp || true
-        else
-            echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
-        fi
+    echo "[*] Checking ntpgps-shm-writer binary..."
+    if [ ! -f "$bin" ] || [ "$bin" -ot "$src" ]; then
+        echo "[*] Compiling ntpgps-shm-writer..."
+        gcc -O2 -Wall "$src" -o "$bin"
+
+        echo "[*] ntpgps-shm-writer compiled successfully."
     else
-        sync && sleep 0.1
-        printf "Do you want to update the leap-seconds file now? [y/N] " >/dev/tty
-        read -r reply </dev/tty
-        if [[ "$reply" =~ ^[Yy]$ ]]; then
+        echo "[*] ntpgps-shm-writer is up-to-date, skipping compilation."
+    fi
+}
+
+check_leapseconds_file() {
+    if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
+        echo "[WARNING] Leap-seconds file appears expired."
+
+        if [ "$NONINTERACTIVE" -eq 1 ]; then
+            echo "[INFO] Non-interactive mode: automatically updating leap-seconds file..."
             if sudo wget -q -O "$LEAP_FILE" "$LEAP_URL"; then
                 echo "[INFO] Leap-seconds file updated successfully."
                 sudo systemctl restart ntp || true
@@ -193,16 +199,34 @@ if grep -q "leapsecond file ('$LEAP_FILE'): expired" /var/log/syslog; then
                 echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
             fi
         else
-            echo "[INFO] Skipped updating leap-seconds file."
+            sync && sleep 0.1
+            printf "Do you want to update the leap-seconds file now? [y/N] " >/dev/tty
+            read -r reply </dev/tty
+            if [[ "$reply" =~ ^[Yy]$ ]]; then
+                if sudo wget -q -O "$LEAP_FILE" "$LEAP_URL"; then
+                    echo "[INFO] Leap-seconds file updated successfully."
+                    sudo systemctl restart ntp || true
+                else
+                    echo "[ERROR] Failed to download leap-seconds file from $LEAP_URL"
+                fi
+            else
+                echo "[INFO] Skipped updating leap-seconds file."
+            fi
         fi
+    else
+        echo "[INFO] Leap-seconds file is up to date."
     fi
-else
-    echo "[INFO] Leap-seconds file is up to date."
-fi
+}
+
+# --- Check leap-seconds file ---
+check_leapseconds_file
 
 # --- Dependencies ---
 echo "[*] Installing dependencies..."
 install_dependencies
+
+# --- Compile and install shm_writer ---
+compile_shm_writer
 
 # --- Install files ---
 echo "[*] Installing files..."
@@ -210,6 +234,7 @@ echo "[*] Installing files..."
 # Format: "mode source destination"
 files=(
     "755 uninstall.sh /usr/local/bin"
+    "755 ntpgps-shm-writer /usr/local/bin"
     "755 usr/local/bin/ntpgps-ublox7-config.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsd-override.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsd-override-shared.sh /usr/local/bin"
@@ -228,8 +253,8 @@ files=(
     "644 etc/ntpgps/template/driver20-gpspps-gpzda.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/driver20-gpspps-gprmc.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/driver20-gpspps-gpzda+gprmc.conf /etc/ntpgps/template"
-    "644 etc/ntpgps/template/driver22-pps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/driver28-shm.conf /etc/ntpgps/template"
+    "644 etc/ntpgps/template/driver28-shm-pps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/keys.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/99-ntpgps-usb.rules /etc/ntpgps/template"
@@ -237,6 +262,7 @@ files=(
     "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gps-ublox7@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-shm-writer@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-ntp-keys.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gpsd-override.service /etc/systemd/system"
 )
