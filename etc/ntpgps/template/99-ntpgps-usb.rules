@@ -169,7 +169,7 @@ ACTION=="add", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", SUBSYSTEM=="tty", \
 # different NTP refclock drivers.
 #
 ACTION=="add", KERNEL=="pps[0-9]*", SUBSYSTEM=="pps", \
-    IMPORT{program}="/usr/local/bin/ntpgps-gpspps-symlink.sh %k", \
+    IMPORT{program}="/usr/local/bin/ntpgps-pps-symlink.sh %k", \
     SYMLINK+="$env{PPSNAME}", \
     MODE="0666"
 

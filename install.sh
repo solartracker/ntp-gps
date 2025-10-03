@@ -240,7 +240,7 @@ files=(
     "755 usr/local/bin/ntpgps-gpsd-override-shared.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-setconfig.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-stop.sh /usr/local/bin"
-    "755 usr/local/bin/ntpgps-gpspps-symlink.sh /usr/local/bin"
+    "755 usr/local/bin/ntpgps-pps-symlink.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-keys.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-remove.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
