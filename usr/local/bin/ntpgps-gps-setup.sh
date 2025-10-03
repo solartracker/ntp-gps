@@ -26,6 +26,10 @@ set -euo pipefail
 
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
+CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
+CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
+DEVICEDATA_DIR="${CONF_TMP_DIR}/devices"
+DEVICEDATA_PATH="${DEVICEDATA_DIR}/${TTYNAME}.txt"
 
 ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
@@ -45,10 +49,28 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
     exit 1
 fi
 
+ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
+REFCLOCK="${ENV_REFCLOCK#*=}"
+
+# Validate REFCLOCK
+if ! [[ "$REFCLOCK" =~ ^[0-9]+$ ]] || [ "$REFCLOCK" -lt 1 ] || [ "$REFCLOCK" -gt 46 ]; then
+    echo "Error: REFCLOCK must be an integer between 1 and 46" >&2
+    exit 1
+fi
+
+# Store device data
+sudo mkdir -p "$DEVICEDATA_DIR"
+tmpfile=$(sudo mktemp "$DEVICEDATA_PATH.XXXXXX") || {
+    echo "Error: cannot create temporary file" >&2
+    exit 1
+}
+sudo chmod 644 "$tmpfile"
+echo "$GPSNUM $REFCLOCK $HASPPS" | sudo tee "$tmpfile" >/dev/null
+sudo mv -vf "$tmpfile" "$DEVICEDATA_PATH"
+
+# Optional, run a program to configure the GPS chip
 ENV_PROG=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PROG=[[:graph:]]*$') || true
 PROG="${ENV_PROG#*=}"
-
-# Optionally, run a program to configure the GPS chip
 case "$PROG" in
     "ublox7-gpzda")
         /usr/local/bin/ntpgps-ublox7-config.sh "$TTYNAME"
@@ -57,7 +79,7 @@ case "$PROG" in
         # nothing to do
         ;;
     *)
-        echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+        echo "Error: Unknown program identifier '$PROG' for $TTYNAME" >&2
         exit 1
         ;;
 esac
@@ -66,15 +88,11 @@ esac
 /usr/local/bin/ntpgps-ntp-keys.sh
 
 # Dynamically generate the NTP device configuration
-CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
-CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 CONF_TEMPLATE=""
 
-ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
-REFCLOCK="${ENV_REFCLOCK#*=}"
 case "$REFCLOCK" in
     20)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
+        DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
         if [ "$HASPPS" == "0" ]; then
           CONF_TEMPLATE="driver20-gps-gpzda.conf"
         elif [ "$HASPPS" == "1" ]; then
@@ -82,7 +100,7 @@ case "$REFCLOCK" in
         fi
         ;;
     28)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
+        DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
         if [ "$HASPPS" == "0" ]; then
           CONF_TEMPLATE="driver28-shm.conf"
         elif [ "$HASPPS" == "1" ]; then

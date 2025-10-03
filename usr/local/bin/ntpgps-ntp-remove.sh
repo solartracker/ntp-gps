@@ -23,11 +23,7 @@ enter() { echo "[ENTERING] $(basename "$0")"; }
 enter
 set -euo pipefail
 
-TTYNAME="$1"
-TTYDEV="/dev/$TTYNAME"
-
-ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
-GPSNUM="${ENV_GPSNUM#*=}"
+GPSNUM="$1"
 
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
     echo "Error: GPSNUM must be an integer between 0 and 255" >&2
@@ -36,25 +32,7 @@ fi
 
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
-
-ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
-REFCLOCK="${ENV_REFCLOCK#*=}"
-case "$REFCLOCK" in
-    20)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
-        ;;
-    28)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
-        ;;
-    "" )
-        echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
-        exit 1
-        ;;
-    *)
-        echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
-        exit 1
-        ;;
-esac
+DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
 
 if [ -f "$CONF_TMP_PATH" ]; then
   sudo sed -i "\#includefile $DRIVER_TMP_PATH#d" "$CONF_TMP_PATH"

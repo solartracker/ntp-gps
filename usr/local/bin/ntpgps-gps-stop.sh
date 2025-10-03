@@ -27,8 +27,9 @@ set -euo pipefail
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
 
-ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
-GPSNUM="${ENV_GPSNUM#*=}"
+DEVICEDATA_PATH="/run/ntpgps/devices/${TTYNAME}.txt"
+read GPSNUM REFCLOCK HASPPS <"$DEVICEDATA_PATH"
+sudo rm -vf "$DEVICEDATA_PATH"
 
 # Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
@@ -36,26 +37,34 @@ if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]
     exit 1
 fi
 
-ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$') || true
-HASPPS="${ENV_PPS#*=}"
-
 # Validate HASPPS (0 or 1)
 if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
     echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
     exit 1
 fi
 
+# Validate REFCLOCK
+if ! [[ "$REFCLOCK" =~ ^[0-9]+$ ]] || [ "$REFCLOCK" -lt 1 ] || [ "$REFCLOCK" -gt 46 ]; then
+    echo "Error: REFCLOCK must be an integer between 1 and 46" >&2
+    exit 1
+fi
+
 # Remove NTP references
-/usr/local/bin/ntpgps-ntp-remove.sh "$TTYNAME"
+/usr/local/bin/ntpgps-ntp-remove.sh "$GPSNUM"
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
-        ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
-        REFCLOCK="${ENV_REFCLOCK#*=}"
         case "$REFCLOCK" in
-            20|28)
+            20)
                 # Remove the refclock from the list of NTP network peers
                 /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.$REFCLOCK.$GPSNUM
+                ;;
+            28)
+                # Remove the refclock from the list of NTP network peers
+                /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.$REFCLOCK.$GPSNUM
+                if [ "$HASPPS" == "1" ]; then
+                    /usr/local/bin/ntpgps-ntp-setconfig.sh --unpeer 127.127.22.$GPSNUM
+                fi
                 ;;
             "" )
                 echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
