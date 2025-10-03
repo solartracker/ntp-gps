@@ -30,17 +30,14 @@ TTYDEV="/dev/$TTYNAME"
 ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
 
-ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$') || true
-HASPPS="${ENV_PPS#*=}"
-
-ENV_PROG=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PROG=[[:graph:]]*$') || true
-PROG="${ENV_PROG#*=}"
-
 # Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
   echo "Error: GPSNUM must be an integer between 0 and 255" >&2
   exit 1
 fi
+
+ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$') || true
+HASPPS="${ENV_PPS#*=}"
 
 # Validate HASPPS (0 or 1)
 if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
@@ -48,6 +45,8 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
   exit 1
 fi
 
+ENV_PROG=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PROG=[[:graph:]]*$') || true
+PROG="${ENV_PROG#*=}"
 
 # Optionally, run a program to configure the GPS chip
 case "$PROG" in
@@ -122,8 +121,6 @@ fi
 
 # Ensure low latency
 setserial "$TTYDEV" low_latency
-
-echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then

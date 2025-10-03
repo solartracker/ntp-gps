@@ -25,6 +25,7 @@ set -euo pipefail
 
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
+
 ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
 
