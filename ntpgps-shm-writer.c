@@ -286,14 +286,23 @@ int main(int argc, char *argv[]) {
             struct timespec ts;
             if (parse_nmea_time(line, &ts) == 0) {
 
-                shm->valid = 0;
-                shm->count++;
-                shm->clockTimeStampSec  = ts.tv_sec;
-                shm->clockTimeStampUSec = ts.tv_nsec / 1000;
-                shm->receiveTimeStampSec  = ts.tv_sec;
-                shm->receiveTimeStampUSec = ts.tv_nsec / 1000;
-                shm->count++;
-                shm->valid = 1;
+                // Fill a temporary structure first
+                struct shmTime tmp;
+                tmp.mode = shm->mode;           // keep mode
+                tmp.precision = shm->precision; // keep precision
+                tmp.leap = shm->leap;           // keep leap
+                tmp.nsamples = shm->nsamples;   // keep sample buffer
+                tmp.clockTimeStampSec  = ts.tv_sec;
+                tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
+                tmp.receiveTimeStampSec  = ts.tv_sec;
+                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+
+                // Safe update to shared memory
+                shm->valid = 0;          // mark old data invalid
+                shm->count++;            // bump count before write
+                *shm = tmp;              // copy all fields at once
+                shm->count++;            // bump count after write
+                shm->valid = 1;          // mark new data valid
 
 //                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
