@@ -1,6 +1,6 @@
 #!/bin/bash
 #-------------------------------------------------------------------------------
-# ntpgps-ublox7-gpsd-shared.sh
+# ntpgps-gpsd-override-shared.sh
 # Copyright (C) 2025 Richard Elwell
 # Licensed under GPLv3 or later
 #-------------------------------------------------------------------------------

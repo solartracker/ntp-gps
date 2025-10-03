@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
                 shm->count++;
                 shm->valid = 1;
 
-                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+//                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
         } else {
             line[pos++] = c;

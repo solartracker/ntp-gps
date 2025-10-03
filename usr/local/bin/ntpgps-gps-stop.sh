@@ -28,7 +28,7 @@ TTYNAME="$1"
 HASPPS="$2"
 TTYDEV="/dev/$TTYNAME"
 
-ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
 
 # Validate GPSNUM
@@ -48,7 +48,7 @@ fi
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
-        ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+        ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
         REFCLOCK="${ENV_REFCLOCK#*=}"
         case "$REFCLOCK" in
             20|28)

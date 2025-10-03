@@ -27,13 +27,13 @@ set -euo pipefail
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
 
-ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
 
-ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$')
+ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$') || true
 HASPPS="${ENV_PPS#*=}"
 
-ENV_PROG=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PROG=[[:graph:]]*$')
+ENV_PROG=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PROG=[[:graph:]]*$') || true
 PROG="${ENV_PROG#*=}"
 
 # Validate GPSNUM
@@ -47,6 +47,7 @@ if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
   echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
   exit 1
 fi
+
 
 # Optionally, run a program to configure the GPS chip
 case "$PROG" in
@@ -70,7 +71,7 @@ CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 CONF_TEMPLATE=""
 
-ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
 REFCLOCK="${ENV_REFCLOCK#*=}"
 case "$REFCLOCK" in
     20)
@@ -126,8 +127,6 @@ echo "Mapped /dev/gps$GPSNUM -> $TTYDEV"
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
-        ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
-        REFCLOCK="${ENV_REFCLOCK#*=}"
         case "$REFCLOCK" in
             20|28)
                 # Add the refclock to the list of NTP network peers

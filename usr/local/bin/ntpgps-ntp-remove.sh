@@ -25,7 +25,7 @@ set -euo pipefail
 
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
-ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$')
+ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
 
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
@@ -36,7 +36,7 @@ fi
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
 CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
 
-ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$')
+ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[0-9]*$') || true
 REFCLOCK="${ENV_REFCLOCK#*=}"
 case "$REFCLOCK" in
     20)

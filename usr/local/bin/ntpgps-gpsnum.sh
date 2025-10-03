@@ -21,32 +21,33 @@
 TTYNAME=$1
 DEVTYPE=$(echo $TTYNAME | sed -E s/[0-9]+$//)
 N=${TTYNAME##*[!0-9]}
+GPSNUM=""
 
 if [ -n "$N" ]; then
-  # USB serial GPS
-  if [ "$DEVTYPE" == "ttyUSB" ]; then
-    GPSNUM=$(( 100 + N ))
+    # USB serial GPS
+    if [ "$DEVTYPE" == "ttyUSB" ]; then
+      GPSNUM=$(( 100 + N ))
 
-  # ACM modem GPS
-  elif [ "$DEVTYPE" == "ttyACM" ]; then
-    GPSNUM=$(( 120 + N ))
+    # ACM modem GPS
+    elif [ "$DEVTYPE" == "ttyACM" ]; then
+      GPSNUM=$(( 120 + N ))
 
-  # Onboard UART
-  elif [ "$DEVTYPE" == "ttyAMA" ]; then
-    GPSNUM=$(( 140 + N ))
+    # Onboard UART
+    elif [ "$DEVTYPE" == "ttyAMA" ]; then
+      GPSNUM=$(( 140 + N ))
 
-  # Legacy/PCI serial
-  elif [ "$DEVTYPE" == "ttyS" ]; then
-    GPSNUM=$(( 160 + N ))
+    # Legacy/PCI serial
+    elif [ "$DEVTYPE" == "ttyS" ]; then
+      GPSNUM=$(( 160 + N ))
 
-  # Error: Unsupported
-  else
-    GPSNUM=99
-  fi
+    else
+        echo "Error: Unsupported device type $DEVTYPE" >&2
+        exit 1
+    fi
 
-# Error: Invalid TTY device
 else
-  GPSNUM=99
+    echo "Error: Invalid device $TTYNAME" >&2
+    exit 1
 fi
 
 echo $GPSNUM
