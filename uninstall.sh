@@ -129,7 +129,6 @@ files=(
     /usr/local/bin/ntpgps-ntp-keys.sh
     /usr/local/bin/ntpgps-ntp-remove.sh
     /usr/local/bin/ntpgps-gps-setup.sh
-    /usr/local/bin/ntpgps-ntp-configure.sh
     /usr/local/bin/ntpgps-gpsnum.sh
     /etc/apt/apt.conf.d/99-ntpgps-hook
     /etc/ntpgps/template/driver20-gps-gpzda.conf
@@ -145,10 +144,9 @@ files=(
     /etc/ntpgps/template/99-ntpgps-usb.rules
     /etc/udev/rules.d/99-ntpgps-usb.rules
     /etc/modules-load.d/ntpgps-pps.conf
-    /etc/systemd/system/ntpgps-gps-nopps@.service
-    /etc/systemd/system/ntpgps-gps-pps@.service
-    /etc/systemd/system/ntpgps-gps-ublox7@.service
+    /etc/systemd/system/ntpgps-configure@.service
     /etc/systemd/system/ntpgps-shm-writer@.service
+    /etc/systemd/system/ntpgps-ldattach@.service
     /etc/systemd/system/ntpgps-ntp-keys.service
     /etc/systemd/system/ntpgps-gpsd-override.service
     /run/ntpgps/ntpgps.conf

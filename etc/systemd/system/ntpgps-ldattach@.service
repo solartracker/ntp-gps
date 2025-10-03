@@ -1,6 +1,6 @@
 ################################################################################
-# ntpgps-gps-ublox7@.service
-#
+# ntpgps-ldattach@.service
+# 
 # Copyright (C) 2025 Richard Elwell
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,20 +18,15 @@
 #
 ################################################################################
 [Unit]
-Description=NTP-GPS NMEA device ublox7 on %i
+Description=Attach Line Discipline for GPS on %i
 BindsTo=dev-%i.device
-After=dev-%i.device ntp.service
-Wants=ntp.service
+After=dev-%i.device
 
 [Service]
-Type=oneshot
-ExecStartPre=/usr/local/bin/ntpgps-ublox7-config.sh %i
-ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 0
-ExecStart=/usr/local/bin/ntpgps-gps-setup.sh %i 0
-ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 0
-RemainAfterExit=yes
-TimeoutStopSec=10s
-Restart=no
+Type=simple
+ExecStartPre=/usr/sbin/modprobe pps_ldisc
+ExecStart=/usr/sbin/ldattach -d pps /dev/%i
+Restart=on-failure
 StandardOutput=journal
 StandardError=journal
 

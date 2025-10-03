@@ -20,7 +20,6 @@
 [Unit]
 Description=NTP GPS SHM Writer for %i
 BindsTo=dev-%i.device
-After=dev-%i.device network.target
 
 [Service]
 Type=simple

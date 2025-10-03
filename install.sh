@@ -244,7 +244,6 @@ files=(
     "755 usr/local/bin/ntpgps-ntp-keys.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-ntp-remove.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
-    "755 usr/local/bin/ntpgps-ntp-configure.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsnum.sh /usr/local/bin"
     "644 etc/apt/apt.conf.d/99-ntpgps-hook /etc/apt/apt.conf.d"
     "644 etc/ntpgps/template/driver20-gps-gpzda.conf /etc/ntpgps/template"
@@ -259,10 +258,9 @@ files=(
     "644 etc/ntpgps/template/ntpgps.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/99-ntpgps-usb.rules /etc/ntpgps/template"
     "644 etc/modules-load.d/ntpgps-pps.conf /etc/modules-load.d"
-    "644 etc/systemd/system/ntpgps-gps-nopps@.service /etc/systemd/system"
-    "644 etc/systemd/system/ntpgps-gps-pps@.service /etc/systemd/system"
-    "644 etc/systemd/system/ntpgps-gps-ublox7@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-configure@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-shm-writer@.service /etc/systemd/system"
+    "644 etc/systemd/system/ntpgps-ldattach@.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-ntp-keys.service /etc/systemd/system"
     "644 etc/systemd/system/ntpgps-gpsd-override.service /etc/systemd/system"
 )
@@ -467,11 +465,20 @@ generate_udev_rules() {
     done < "$template_file"
 
     sudo mv -fv "$tmp_file" "$output_file"
+
+
+
+# --- TESTING ---
+cp -pv $HOME/99-ntpgps-usb.rules /etc/udev/rules.d
+
+
+
     sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
     echo "UDEV rules written to $output_file"
 
     echo "[*] UDEV rules written to $output_file"
+
     sudo udevadm control --reload-rules
 
     return 0

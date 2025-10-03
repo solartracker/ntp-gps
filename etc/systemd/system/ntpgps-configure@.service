@@ -1,5 +1,5 @@
 ################################################################################
-# ntpgps-gps-nopps@.service
+# ntpgps-configure@.service
 #
 # Copyright (C) 2025 Richard Elwell
 #
@@ -18,16 +18,15 @@
 #
 ################################################################################
 [Unit]
-Description=NTP-GPS NMEA device on %i
+Description=NTP-GPS device on %i
 BindsTo=dev-%i.device
 After=dev-%i.device ntp.service
 Wants=ntp.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/local/bin/ntpgps-ntp-configure.sh %i 0
-ExecStart=/usr/local/bin/ntpgps-gps-setup.sh %i 0
-ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i 0
+ExecStart=/usr/local/bin/ntpgps-gps-setup.sh %i
+ExecStop=/usr/local/bin/ntpgps-gps-stop.sh %i
 RemainAfterExit=yes
 TimeoutStopSec=10s
 Restart=no

@@ -24,7 +24,7 @@ stop_disable_services_udev() {
 
     # 2. List template instances
     echo "[*] List template instances..."
-    TEMPLATES=("ntpgps-gps-pps@" "ntpgps-gps-nopps@" "ntpgps-gps-ublox7@" "ntpgps-shm-writer@")
+    TEMPLATES=("ntpgps-configure@" "ntpgps-shm-writer@" "ntpgps-ldattach@")
     for tpl in "${TEMPLATES[@]}"; do
         # List template instances (unit names only, no legend/pager)
         instances=$(systemctl list-units --type=service --all \
