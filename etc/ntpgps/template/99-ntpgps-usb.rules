@@ -28,10 +28,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="1", \
     MODE="0666"
 [End:1]
 
@@ -43,10 +44,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="0", \
     MODE="0666"
 [End:2]
 
@@ -58,10 +60,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="1", \
     MODE="0666"
 [End:3]
 
@@ -73,10 +76,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="0", \
     MODE="0666"
 [End:4]
 
@@ -88,10 +92,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="1", \
     MODE="0666"
 [End:5]
 
@@ -103,10 +108,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="0", \
     MODE="0666"
 [End:6]
 
@@ -118,10 +124,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-pps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="1", \
     MODE="0666"
 [End:7]
 
@@ -133,10 +140,11 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-nopps@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="0", \
     MODE="0666"
 [End:8]
 
@@ -148,27 +156,31 @@ SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
     PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
-__SYMLINK__
-    ENV{SYSTEMD_WANTS}="ntpgps-gps-ublox7@%k.service", \
+    SYMLINK+="gps%c", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
-__REFCLOCK__
+    ENV{ID_NTPGPS_REFCLOCK}="20", \
+    ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:9]
 
-################################################################################
-# Start SHM writer for TTYs with REFLOCK=28
-#
-ACTION=="add", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", SUBSYSTEM=="tty", \
+
+# Start SHM writer for TTYs with REFCLOCK=28
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", ACTION=="add", \
     ENV{ID_NTPGPS_REFCLOCK}=="28", TAG+="systemd", \
     ENV{SYSTEMD_WANTS}+="ntpgps-shm-writer@%k.service"
 
-################################################################################
+# Start ldattach for TTYs with PPS=1
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", ACTION=="add", \
+    ENV{ID_NTPGPS_PPS}=="1", TAG+="systemd", \
+    ENV{SYSTEMD_WANTS}+="ntpgps-ldattach@%k.service"
+
 # Triggers on creation of real virtual devices /dev/ppsX created by ldattach,
 # but ignores symlink devices that we create. Creates and manages the symlinks
 # /dev/gpspps$GPSNUM and /dev/pps$GPSNUM, which are symlinks that we create for
 # different NTP refclock drivers.
-#
-ACTION=="add", KERNEL=="pps[0-9]*", SUBSYSTEM=="pps", \
+SUBSYSTEM=="pps", KERNEL=="pps[0-9]*", ACTION=="add", \
     IMPORT{program}="/usr/local/bin/ntpgps-pps-symlink.sh %k", \
     SYMLINK+="$env{PPSNAME}", \
     MODE="0666"

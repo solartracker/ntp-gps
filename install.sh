@@ -465,14 +465,6 @@ generate_udev_rules() {
     done < "$template_file"
 
     sudo mv -fv "$tmp_file" "$output_file"
-
-
-
-# --- TESTING ---
-cp -pv $HOME/99-ntpgps-usb.rules /etc/udev/rules.d
-
-
-
     sudo chown root:root "$output_file"
     sudo chmod 644 "$output_file"
     echo "UDEV rules written to $output_file"
