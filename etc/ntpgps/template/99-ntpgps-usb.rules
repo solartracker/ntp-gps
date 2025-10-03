@@ -36,6 +36,22 @@ __SERIAL__
     MODE="0666"
 [End:1]
 
+[Begin:11]
+Filter:ID_VENDOR_ID=0403
+Filter:ID_MODEL_ID=6001
+# FT232/FTDI USB-Serial adapter, connected to GPS module with PPS
+SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
+    SYMLINK+="", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
+    ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
+    ENV{ID_NTPGPS_REFCLOCK}="28", \
+    ENV{ID_NTPGPS_PPS}="1", \
+    MODE="0666"
+[End:11]
+
 [Begin:2]
 Filter:ID_VENDOR_ID=0403
 Filter:ID_MODEL_ID=6001
@@ -182,6 +198,6 @@ SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", ACTION=="add", \
 # different NTP refclock drivers.
 SUBSYSTEM=="pps", KERNEL=="pps[0-9]*", ACTION=="add", \
     IMPORT{program}="/usr/local/bin/ntpgps-pps-symlink.sh %k", \
-    SYMLINK+="$env{PPSNAME}", \
+    SYMLINK+="$env{ID_NTPGPS_PPSNAME}", \
     MODE="0666"
 

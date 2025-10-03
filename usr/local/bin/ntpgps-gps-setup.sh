@@ -59,11 +59,13 @@ if ! [[ "$REFCLOCK" =~ ^[0-9]+$ ]] || [ "$REFCLOCK" -lt 1 ] || [ "$REFCLOCK" -gt
 fi
 
 # Store device data
+# Some UDEV properties are copied to a file and used during device removal for cleanup
 sudo mkdir -p "$DEVICEDATA_DIR"
 tmpfile=$(sudo mktemp "$DEVICEDATA_PATH.XXXXXX") || {
     echo "Error: cannot create temporary file" >&2
     exit 1
 }
+sudo chown root:root "$tmpfile"
 sudo chmod 644 "$tmpfile"
 echo "$GPSNUM $REFCLOCK $HASPPS" | sudo tee "$tmpfile" >/dev/null
 sudo mv -vf "$tmpfile" "$DEVICEDATA_PATH"
@@ -142,15 +144,19 @@ setserial "$TTYDEV" low_latency
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
         case "$REFCLOCK" in
-            20)
+            20|28)
                 # Add the refclock to the list of NTP network peers
                 /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.$REFCLOCK.$GPSNUM
-                ;;
-            28)
-                # Add the refclock to the list of NTP network peers
-                /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.$REFCLOCK.$GPSNUM
-                if [ "$HASPPS" == "1" ]; then
-                    /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.22.$GPSNUM
+
+                if [ "$REFCLOCK" = "28" ]; then
+                    if [ "$HASPPS" == "1" ]; then
+                        /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.22.$GPSNUM
+                    fi
+
+                    # Replace and preserve formula for clarity
+                    BASE_KEY=0x4E545030
+                    NEW_KEY=$(printf "0x%X" $((BASE_KEY + GPSNUM)))
+                    sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$DRIVER_TMP_PATH"
                 fi
                 ;;
             "" )
@@ -162,7 +168,6 @@ if command -v systemctl >/dev/null; then
                 exit 1
                 ;;
         esac
-
     fi
 fi
 
