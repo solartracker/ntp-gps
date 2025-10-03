@@ -30,8 +30,8 @@ ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]
 GPSNUM="${ENV_GPSNUM#*=}"
 
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
-  echo "Error: GPSNUM must be an integer between 0 and 255" >&2
-  exit 1
+    echo "Error: GPSNUM must be an integer between 0 and 255" >&2
+    exit 1
 fi
 
 CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
@@ -41,10 +41,10 @@ ENV_REFCLOCK=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_REFCLOCK=[
 REFCLOCK="${ENV_REFCLOCK#*=}"
 case "$REFCLOCK" in
     20)
-        REFCLOCK_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
+        DRIVER_TMP_PATH="$CONF_TMP_DIR/nmea-gps$GPSNUM.conf"
         ;;
     28)
-        REFCLOCK_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
+        DRIVER_TMP_PATH="$CONF_TMP_DIR/shm-gps$GPSNUM.conf"
         ;;
     "" )
         echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
@@ -57,10 +57,10 @@ case "$REFCLOCK" in
 esac
 
 if [ -f "$CONF_TMP_PATH" ]; then
-  sudo sed -i "\#includefile $REFCLOCK_TMP_PATH#d" "$CONF_TMP_PATH"
+  sudo sed -i "\#includefile $DRIVER_TMP_PATH#d" "$CONF_TMP_PATH"
 fi
 
-if [ -f "$REFCLOCK_TMP_PATH" ]; then
-  sudo rm -f "$REFCLOCK_TMP_PATH"
+if [ -f "$DRIVER_TMP_PATH" ]; then
+  sudo rm -f "$DRIVER_TMP_PATH"
 fi
 

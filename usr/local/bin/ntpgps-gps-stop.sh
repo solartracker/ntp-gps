@@ -32,8 +32,8 @@ GPSNUM="${ENV_GPSNUM#*=}"
 
 # Validate GPSNUM
 if ! [[ "$GPSNUM" =~ ^[0-9]+$ ]] || [ "$GPSNUM" -lt 0 ] || [ "$GPSNUM" -gt 255 ]; then
-  echo "Error: GPSNUM must be an integer between 0 and 255" >&2
-  exit 1
+    echo "Error: GPSNUM must be an integer between 0 and 255" >&2
+    exit 1
 fi
 
 ENV_PPS=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_PPS=[0-9]*$') || true
@@ -41,8 +41,8 @@ HASPPS="${ENV_PPS#*=}"
 
 # Validate HASPPS (0 or 1)
 if ! [[ "$HASPPS" =~ ^[01]$ ]]; then
-  echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
-  exit 1
+    echo "Error: HASPPS must be 0 (no PPS) or 1 (with PPS)" >&2
+    exit 1
 fi
 
 # Remove NTP references

@@ -24,8 +24,10 @@ BindsTo=dev-%i.device
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/ntpgps-shm-writer %i
-Restart=on-failure
-RestartSec=5
+Restart=always
+RestartSec=1
+#Restart=on-failure
+#RestartSec=5
 User=root
 SyslogIdentifier=ntpgps-shm-writer-%i
 StandardOutput=journal
