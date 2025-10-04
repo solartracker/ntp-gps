@@ -96,9 +96,11 @@ case "$REFCLOCK" in
     20)
         DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
         if [ "$HASPPS" == "0" ]; then
-          CONF_TEMPLATE="driver20-gps-gpzda.conf"
+          #CONF_TEMPLATE="driver20-gps-gpzda.conf"
+          CONF_TEMPLATE="driver20-gps-gpzda+gprmc.conf"
         elif [ "$HASPPS" == "1" ]; then
-          CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
+          #CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
+          CONF_TEMPLATE="driver20-gpspps-gpzda+gprmc.conf"
         fi
         ;;
     28)

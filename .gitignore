@@ -5,7 +5,7 @@
 .deb
 
 # Ignore compiled programs
-bin/
+/bin/
 
 # Ignore compiled binaries
 *.o
