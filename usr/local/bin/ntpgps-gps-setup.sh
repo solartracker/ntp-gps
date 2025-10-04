@@ -124,6 +124,7 @@ if [ -n "$CONF_TEMPLATE" ]; then
     sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$DRIVER_TMP_PATH" >/dev/null
 
     case "$REFCLOCK" in
+        20) : ;; # nothing for REFCLOCK=20
         28)
             # Replace and preserve formula for clarity
             BASE_KEY=0x4E545030
