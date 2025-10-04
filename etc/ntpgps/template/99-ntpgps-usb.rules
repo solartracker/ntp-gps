@@ -40,6 +40,7 @@ __SERIAL__
 Filter:ID_VENDOR_ID=0403
 Filter:ID_MODEL_ID=6001
 # FT232/FTDI USB-Serial adapter, connected to GPS module with PPS
+# Use the NTP Shared Memory Driver
 SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*", \
 __SERIAL__
     ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
@@ -181,6 +182,23 @@ __SERIAL__
     MODE="0666"
 [End:9]
 
+[Begin:91]
+Filter:ID_VENDOR_ID=1546
+Filter:ID_MODEL_ID=01a7
+# VK172 USB GPS dongle (u-blox USB GPS receiver)
+# Use the NTP Shared Memory Driver
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", \
+__SERIAL__
+    ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", \
+    PROGRAM="/usr/local/bin/ntpgps-gpsnum.sh %k", TAG+="systemd", \
+    SYMLINK+="", \
+    ENV{SYSTEMD_WANTS}="ntpgps-configure@%k.service", \
+    ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
+    ENV{ID_NTPGPS_REFCLOCK}="28", \
+    ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="", \
+    MODE="0666"
+[End:91]
 
 # Start SHM writer for TTYs with REFCLOCK=28
 SUBSYSTEM=="tty", KERNEL=="ttyUSB[0-9]*|ttyACM[0-9]*", ACTION=="add", \
