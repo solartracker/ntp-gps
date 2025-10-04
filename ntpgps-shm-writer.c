@@ -62,15 +62,13 @@ static int to_int(const char *s, int len) {
 int parse_nmea_time(const char *line, struct timespec *ts) {
     if (line[0] != '$') return -1;
 
-    // Find '*'
+    // --- Checksum validation ---
     const char *star = strchr(line, '*');
     if (!star || (star - line) < 1) return -1;
 
-    // Compute XOR of chars between '$' and '*'
     unsigned char sum = 0;
     for (const char *p = line + 1; p < star; p++) sum ^= (unsigned char)*p;
 
-    // Extract provided checksum
     if (strlen(star) < 3) return -1;
     char chkbuf[3] = { star[1], star[2], '\0' };
     unsigned int expected;
@@ -81,31 +79,39 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         return -1;
     }
 
-    // Copy into buffer for strtok
+    // --- Copy up to '*' into mutable buffer ---
     char buf[128];
     size_t len = (star - line);
     if (len >= sizeof(buf)) len = sizeof(buf) - 1;
     memcpy(buf, line, len);
     buf[len] = '\0';
 
-    char *tok = strtok(buf, ",");
-    if (!tok) return -1;
+    // --- Tokenize with strsep() to preserve empty fields ---
+    char *saveptr = buf;
+    char *fields[16];
+    int nf = 0;
+    while (nf < 16 && (fields[nf] = strsep(&saveptr, ",")) != NULL)
+        nf++;
 
-    if (strstr(tok, "RMC")) {
-        char *time_str = strtok(NULL, ",");
+    if (nf < 2) return -1;
+
+    // --- Handle RMC sentence ---
+    if (strstr(fields[0], "RMC")) {
+        if (nf < 10) return -1;
+        const char *time_str = fields[1];
+        const char *status   = fields[2];
+        const char *date_str = fields[9];
+
         if (!time_str || strlen(time_str) < 6) return -1;
-        int hh = to_int(time_str, 2);
-        int mm = to_int(time_str+2, 2);
-        int ss = to_int(time_str+4, 2);
-
-        strtok(NULL, ","); // status
-        for (int i=0; i<6; i++) strtok(NULL, ","); // lat..course
-
-        char *date_str = strtok(NULL, ",");
         if (!date_str || strlen(date_str) < 6) return -1;
+        if (status && *status != 'A') return -1;  // ignore invalid (V) fixes
+
+        int hh  = to_int(time_str, 2);
+        int mm  = to_int(time_str + 2, 2);
+        int ss  = to_int(time_str + 4, 2);
         int day = to_int(date_str, 2);
-        int mon = to_int(date_str+2, 2);
-        int yr  = to_int(date_str+4, 2) + 2000;
+        int mon = to_int(date_str + 2, 2);
+        int yr  = to_int(date_str + 4, 2) + 2000;
 
         struct tm tm = {0};
         tm.tm_year = yr - 1900;
@@ -118,17 +124,22 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         ts->tv_sec  = timegm(&tm);
         ts->tv_nsec = 0;
         return 0;
-    } 
-    else if (strstr(tok, "ZDA")) {
-        char *time_str = strtok(NULL, ",");
-        char *day_str  = strtok(NULL, ",");
-        char *mon_str  = strtok(NULL, ",");
-        char *year_str = strtok(NULL, ",");
-        if (!time_str||!day_str||!mon_str||!year_str) return -1;
+    }
+
+    // --- Handle ZDA sentence ---
+    if (strstr(fields[0], "ZDA")) {
+        if (nf < 5) return -1;
+        const char *time_str = fields[1];
+        const char *day_str  = fields[2];
+        const char *mon_str  = fields[3];
+        const char *year_str = fields[4];
+
+        if (!time_str || !day_str || !mon_str || !year_str) return -1;
+        if (strlen(time_str) < 6) return -1;
 
         int hh = to_int(time_str, 2);
-        int mm = to_int(time_str+2, 2);
-        int ss = to_int(time_str+4, 2);
+        int mm = to_int(time_str + 2, 2);
+        int ss = to_int(time_str + 4, 2);
         int day = atoi(day_str);
         int mon = atoi(mon_str);
         int yr  = atoi(year_str);
@@ -221,7 +232,7 @@ int main(int argc, char *argv[]) {
         unit = get_unit_number(devname);
         if (unit < 0 || unit > 255) {
             fprintf(stderr, "Unsupported or invalid device name: %s\n", devname);
-            return 1;
+//            return 1;
         }
     }
 
@@ -249,16 +260,20 @@ int main(int argc, char *argv[]) {
     cfmakeraw(&tio);
     tcsetattr(fd, TCSANOW, &tio);
 
-    int shmid = shmget(NTPD_BASE + unit, sizeof(struct shmTime), IPC_CREAT | 0666);
-    if (shmid < 0) { perror("shmget"); return 1; }
+    int shmid = -1;
+    struct shmTime *shm = NULL;
+    if (unit >=0 && unit <= 255) {
+        shmid = shmget(NTPD_BASE + unit, sizeof(struct shmTime), IPC_CREAT | 0666);
+        if (shmid < 0) { perror("shmget"); return 1; }
 
-    struct shmTime *shm = (struct shmTime*) shmat(shmid, NULL, 0);
-    if (shm == (void*)-1) { perror("shmat"); return 1; }
+        shm = (struct shmTime*) shmat(shmid, NULL, 0);
+        if (shm == (void*)-1) { perror("shmat"); return 1; }
 
-    shm->mode = 1;          // safe resource lock
-    shm->precision = -1;    // ~1 µs
-    shm->leap = 0;          // no leap second
-    shm->nsamples = 3;      // a small sample buffer
+        shm->mode = 1;          // safe resource lock
+        shm->precision = -1;    // ~1 µs
+        shm->leap = 0;          // no leap second
+        shm->nsamples = 3;      // a small sample buffer
+    }
 
     char line[256];
     int pos = 0;
@@ -283,6 +298,7 @@ int main(int argc, char *argv[]) {
             line[pos] = '\0';
             pos = 0;
 
+printf(">>> %s\n", line);
             struct timespec ts;
             if (parse_nmea_time(line, &ts) == 0) {
 
@@ -297,14 +313,16 @@ int main(int argc, char *argv[]) {
                 tmp.receiveTimeStampSec  = ts.tv_sec;
                 tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
 
-                // Safe update to shared memory
-                shm->valid = 0;          // mark old data invalid
-                shm->count++;            // bump count before write
-                *shm = tmp;              // copy all fields at once
-                shm->count++;            // bump count after write
-                shm->valid = 1;          // mark new data valid
+                if (shm != NULL) {
+                    // Safe update to shared memory
+                    shm->valid = 0;          // mark old data invalid
+                    shm->count++;            // bump count before write
+                    *shm = tmp;              // copy all fields at once
+                    shm->count++;            // bump count after write
+                    shm->valid = 1;          // mark new data valid
+                }
 
-//                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
         } else {
             line[pos++] = c;
