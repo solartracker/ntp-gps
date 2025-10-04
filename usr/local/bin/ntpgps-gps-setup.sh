@@ -111,10 +111,6 @@ case "$REFCLOCK" in
           CONF_TEMPLATE="driver28-shm-pps.conf"
         fi
         ;;
-    "")
-        echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
-        exit 1
-        ;;
     *)
         echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
         exit 1
@@ -126,6 +122,19 @@ if [ -n "$CONF_TEMPLATE" ]; then
 
     # Generate the GPS include file safely
     sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$DRIVER_TMP_PATH" >/dev/null
+
+    case "$REFCLOCK" in
+        28)
+            # Replace and preserve formula for clarity
+            BASE_KEY=0x4E545030
+            NEW_KEY=$(printf "0x%X" $((BASE_KEY + GPSNUM)))
+            sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$DRIVER_TMP_PATH"
+            ;;
+        *)
+            echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+            exit 1
+            ;;
+    esac
 
     # Create the main tmp config if it doesn't exist
     if [ ! -f "$CONF_TMP_PATH" ]; then
@@ -154,16 +163,7 @@ if command -v systemctl >/dev/null; then
                     if [ "$HASPPS" == "1" ]; then
                         /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.22.$GPSNUM
                     fi
-
-                    # Replace and preserve formula for clarity
-                    BASE_KEY=0x4E545030
-                    NEW_KEY=$(printf "0x%X" $((BASE_KEY + GPSNUM)))
-                    sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$DRIVER_TMP_PATH"
                 fi
-                ;;
-            "" )
-                echo "Error: ID_NTPGPS_REFCLOCK not set for $TTYDEV" >&2
-                exit 1
                 ;;
             *)
                 echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
