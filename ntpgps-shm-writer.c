@@ -28,9 +28,41 @@
 #include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <ctype.h>
+#include <stdint.h>
+
+#ifdef DEBUG_TRACE
+  #define TRACE(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+#else
+  #define TRACE(fmt, ...)  do {} while(0)
+#endif
 
 #define NTPD_BASE   0x4e545030  /* "NTP0" */
 #define NTPD_SHMKEY (NTPD_BASE + 0)
+
+// #ifndef HAVE_STRUCT_TIMESPEC
+// #define HAVE_STRUCT_TIMESPEC
+// typedef long time_t;  // if your platform doesn’t define time_t
+// struct timespec {
+//     time_t tv_sec;
+//     long   tv_nsec;
+// };
+// #endif
+
+// #ifndef HAVE_STRUCT_TM
+// #define HAVE_STRUCT_TM
+// struct tm {
+//     int tm_sec;    /* seconds 0..60 */
+//     int tm_min;    /* minutes 0..59 */
+//     int tm_hour;   /* hours 0..23 */
+//     int tm_mday;   /* day of month 1..31 */
+//     int tm_mon;    /* month of year 0..11 */
+//     int tm_year;   /* years since 1900 */
+//     int tm_wday;   /* day of week 0..6 (Sunday=0) */
+//     int tm_yday;   /* day of year 0..365 */
+//     int tm_isdst;  /* daylight savings flag */
+// };
+// #endif
 
 /* NTP shared memory segment layout */
 struct shmTime {
@@ -49,116 +81,357 @@ struct shmTime {
     int    dummy[8];            /* reserved */
 };
 
-/* Parse integer safely */
-static int to_int(const char *s, int len) {
-    char buf[16];
-    if (len >= (int)sizeof(buf)) return 0;
-    memcpy(buf, s, len);
-    buf[len] = '\0';
-    return atoi(buf);
+/* Check if year is a leap year */
+static int is_leap(int year) {
+    year += 1900;  /* struct tm stores years since 1900 */
+    return ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
 }
 
-/* Validate NMEA checksum and parse UTC from RMC/ZDA */
+/* Days per month, normal year */
+static const uint8_t days_in_month[12] = {
+    31,28,31,30,31,30,31,31,30,31,30,31
+};
+
+/* Convert UTC struct tm to epoch seconds (no div/floats) */
+uint32_t timegm_mcu(const struct tm *t) {
+    uint32_t days = 0;
+    int y;
+
+    /* Add full years */
+    for (y = 70; y < t->tm_year; y++)  /* 1970 = 70 */
+        days += 365 + is_leap(y);
+
+    /* Add months in current year */
+    for (int m = 0; m < t->tm_mon; m++) {
+        days += days_in_month[m];
+        if (m == 1 && is_leap(t->tm_year)) days++; /* Feb in leap year */
+    }
+
+    /* Add days */
+    days += t->tm_mday - 1;
+
+    uint32_t seconds = days * 86400U;
+    seconds += t->tm_hour * 3600U;
+    seconds += t->tm_min  * 60U;
+    seconds += t->tm_sec;
+
+    return seconds;
+}
+
+int digitsToInt(const char *s, int n) {
+    int retval = 0;
+    if (n == -1) {
+        // use null termination
+        int i = 0;
+        char c = s[i];
+        while (c != '\0') {
+            if (c < '0' || c > '9')
+                return -1;
+            retval = 10 * retval + (c - '0');
+            c = s[++i];
+        }
+    }
+    else {
+        // use fixed length
+        for (int i = 0; i < n; i++) {
+            char c = s[i];
+            if (c < '0' || c > '9')
+                return -1;
+            retval = 10 * retval + (c - '0');
+        }
+    }
+    return retval;
+}
+
+int fractionToNsec(const char *s) {
+    if (!s || *s == '\0')
+        return 0;
+
+    static const long scale[] = { 0, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1 };
+    int fraction = 0;
+
+    // find last digit
+    int p = strlen(s) - 1;
+    if (p > 8) p = 8;
+    while (p >= 0 && (s[p] < '1' || s[p] > '9')) p--;
+    if (p < 0)
+        return 0;
+
+    // convert digits to integer
+    int i = 0;
+    for (i = 0; i <= p; i++) {
+        char c = s[i];
+        if (c < '0' || c > '9')
+            return 0;
+        else
+            fraction = 10 * fraction + (c - '0');
+    }
+
+    return fraction * scale[i];
+}
+
+/*
+ * strtok_empty_r - tokenize a string with empty fields preserved
+ * @str: string to tokenize (only for the first call)
+ * @delim: delimiter characters
+ * @saveptr: pointer to context variable
+ *
+ * Returns pointer to next token, or NULL at end of string.
+ * Consecutive delimiters produce empty tokens ("").
+ */
+char *strtok_empty_r(char *str, const char *delim, char **saveptr)
+{
+    char *start;
+
+    if (str)
+        start = str;
+    else if (*saveptr)
+        start = *saveptr;
+    else
+        return NULL;
+
+    char *end = start;
+
+    while (*end && !strchr(delim, *end))
+        end++;
+
+    // set saveptr for next call
+    if (*end) {
+        *end = '\0';
+        *saveptr = end + 1;
+    } else {
+        *saveptr = NULL;
+    }
+
+    return start;
+}
+
+/**
+ * parse_nmea_time - Parse UTC time from an NMEA sentence
+ *
+ * This function extracts the timestamp from an NMEA sentence and
+ * converts it into a struct timespec containing seconds and
+ * nanoseconds since the UNIX epoch (UTC). It supports RMC, ZDA/ZDG,
+ * GLL, and GGA sentence types.
+ *
+ * Features:
+ *   - Validates the NMEA checksum (XOR of characters between '$' and '*').
+ *   - Supports fractional seconds without using floating-point math.
+ *   - Remembers the last known date and hour to handle time-only lines.
+ *   - Detects midnight rollover and increments stored date correctly,
+ *     including leap years.
+ *   - Returns -1 on invalid input or if required fields are missing.
+ *
+ * Notes:
+ *   - Time-only lines (e.g., GLL/GGA) are only parsed if a previous
+ *     date has been stored.
+ *   - RMC sentences may contain only time; in that case, the stored
+ *     date is used.
+ *   - The function does not check status flags; any non-empty time is
+ *     used.
+ *   - Fractional seconds are parsed from the format ".fff..." and
+ *     converted to nanoseconds.
+ *   - Uses static variables to track the last known day, month, year,
+ *     and hour across multiple calls.
+ *
+ * Parameters:
+ *   line - A null-terminated NMEA sentence string starting with '$'.
+ *   ts   - Pointer to a struct timespec where the parsed UTC time
+ *          will be stored (tv_sec and tv_nsec).
+ *
+ * Return:
+ *   0  - Success; ts contains the parsed time.
+ *  -1  - Failure; invalid line, missing fields, or checksum error.
+ *
+ * Copyright (C) 2025 Richard Elwell
+ * Licensed under GPLv3 or later
+ */
 int parse_nmea_time(const char *line, struct timespec *ts) {
-    if (line[0] != '$') return -1;
+    if (!line || line[0] != '$')
+        return -1;
+    char *saveptr = NULL;
 
-    // --- Checksum validation ---
     const char *star = strchr(line, '*');
-    if (!star || (star - line) < 1) return -1;
+    if (!star)
+        return -1;
 
+    // XOR checksum validation
     unsigned char sum = 0;
-    for (const char *p = line + 1; p < star; p++) sum ^= (unsigned char)*p;
+    for (const char *p = line + 1; p < star; p++)
+        sum ^= (unsigned char)*p;
 
-    if (strlen(star) < 3) return -1;
-    char chkbuf[3] = { star[1], star[2], '\0' };
     unsigned int expected;
-    if (sscanf(chkbuf, "%2X", &expected) != 1) return -1;
+    if (sscanf(star + 1, "%2X", &expected) != 1)
+        return -1;
 
     if (sum != expected) {
         fprintf(stderr, "Checksum mismatch: got %02X need %02X\n", sum, expected);
         return -1;
     }
 
-    // --- Copy up to '*' into mutable buffer ---
+    // Copy line up to '*' for strtok
     char buf[128];
-    size_t len = (star - line);
-    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    size_t len = star - line;
+    if (len >= sizeof(buf))
+        len = sizeof(buf) - 1;
     memcpy(buf, line, len);
     buf[len] = '\0';
 
-    // --- Tokenize with strsep() to preserve empty fields ---
-    char *saveptr = buf;
-    char *fields[16];
-    int nf = 0;
-    while (nf < 16 && (fields[nf] = strsep(&saveptr, ",")) != NULL)
-        nf++;
+    // Supports detection of the time rolling over to the next day, so we
+    // can roll-over the stored date to the next day
+    static int stored_day = 0, stored_month = 0, stored_year = 0;
+    static int stored_hour = 0;
 
-    if (nf < 2) return -1;
+    int day = stored_day, month = stored_month, year = stored_year;
 
-    // --- Handle RMC sentence ---
-    if (strstr(fields[0], "RMC")) {
-        if (nf < 10) return -1;
-        const char *time_str = fields[1];
-        const char *status   = fields[2];
-        const char *date_str = fields[9];
+    char *tok = strtok_empty_r(buf, ",", &saveptr);
+    if (!tok)
+        return -1;
 
-        if (!time_str || strlen(time_str) < 6) return -1;
-        if (!date_str || strlen(date_str) < 6) return -1;
-        if (status && *status != 'A') return -1;  // ignore invalid (V) fixes
+    if (strlen(tok) < 5)
+        return -1;
+    if (tok[0] == '$')
+        tok++;
+    tok += 2;
 
-        int hh  = to_int(time_str, 2);
-        int mm  = to_int(time_str + 2, 2);
-        int ss  = to_int(time_str + 4, 2);
-        int day = to_int(date_str, 2);
-        int mon = to_int(date_str + 2, 2);
-        int yr  = to_int(date_str + 4, 2) + 2000;
+    char *time_str = NULL;
+    int date_present = 0;
 
-        struct tm tm = {0};
-        tm.tm_year = yr - 1900;
-        tm.tm_mon  = mon - 1;
-        tm.tm_mday = day;
-        tm.tm_hour = hh;
-        tm.tm_min  = mm;
-        tm.tm_sec  = ss;
+    if (strcmp(tok, "RMC") == 0) {
+        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        char *date_str = strtok_empty_r(NULL, ",", &saveptr); // ddmmyy
+        if (date_str && strlen(date_str) >= 6) {
+            int dd = digitsToInt(date_str, 2);
+            int mm = digitsToInt(date_str + 2, 2);
+            int yy = digitsToInt(date_str + 4, 2);
+            if (dd > 0 && mm > 0 && yy >= 0) {
+                date_present = 1;
+                day = dd;
+                month = mm;
+                if (yy >= 80 && yy <=99)
+                    year = yy + 1900;
+                else
+                    year = yy + 2000;
 
-        ts->tv_sec  = timegm(&tm);
-        ts->tv_nsec = 0;
-        return 0;
+                stored_day = day;
+                stored_month = month;
+                stored_year = year;
+            }
+        }
+        TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
+    }
+    else if (strcmp(tok, "ZDA") == 0 || 
+               strcmp(tok, "ZDG") == 0) {
+        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+        char *day_str  = strtok_empty_r(NULL, ",", &saveptr);
+        char *month_str  = strtok_empty_r(NULL, ",", &saveptr);
+        char *year_str = strtok_empty_r(NULL, ",", &saveptr);
+        if (day_str && month_str && year_str && strlen(day_str) == 2 && strlen(month_str) == 2 && strlen(year_str) == 4) {
+            int dd = digitsToInt(day_str, 2);
+            int mm = digitsToInt(month_str, 2);
+            int yy = digitsToInt(year_str, 4);
+            if (dd > 0 && mm > 0 && yy > 0) {
+                date_present = 1;
+                day = dd;
+                month = mm;
+                year  = yy;
+
+                stored_day = day;
+                stored_month = month;
+                stored_year = year;
+            }
+        }
+        TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
+    }
+    else if (strcmp(tok, "GLL") == 0) {
+        // time-only line, only valid if a previous date exists
+        if (stored_year == 0) 
+            return -1;
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+
+    }
+    else if (strcmp(tok, "GGA") == 0) {
+        // time-only line, only valid if a previous date exists
+        if (stored_year == 0) 
+            return -1;
+        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+    }
+    else {
+        return -1; // unknown line type
     }
 
-    // --- Handle ZDA sentence ---
-    if (strstr(fields[0], "ZDA")) {
-        if (nf < 5) return -1;
-        const char *time_str = fields[1];
-        const char *day_str  = fields[2];
-        const char *mon_str  = fields[3];
-        const char *year_str = fields[4];
+    int len_time_str = strlen(time_str);
+    if (!time_str || len_time_str < 6)
+        return -1;
 
-        if (!time_str || !day_str || !mon_str || !year_str) return -1;
-        if (strlen(time_str) < 6) return -1;
+    int hh = digitsToInt(time_str, 2);
+    int mm = digitsToInt(time_str + 2, 2);
+    int ss = digitsToInt(time_str + 4, 2);
+    if (hh < 0 || mm < 0 || ss < 0)
+        return -1;
+    TRACE(">>>>>> %s time: %02d:%02d:%02d\n", tok, hh, mm, ss);
 
-        int hh = to_int(time_str, 2);
-        int mm = to_int(time_str + 2, 2);
-        int ss = to_int(time_str + 4, 2);
-        int day = atoi(day_str);
-        int mon = atoi(mon_str);
-        int yr  = atoi(year_str);
+    // Roll-over detection for stored date
+    if (!date_present && stored_day) {
+        if (hh < stored_hour) {
+            TRACE(">>>>>> the stored date was rolled over \n");
+            stored_day++;
+            // Adjust February for leap year
+            if (stored_month == 2 && is_leap(stored_year)) {
+                if (stored_day > 29) {
+                    stored_day = 1;
+                    stored_month++;
+            }
+            } else {
+                if (stored_day > days_in_month[stored_month - 1]) {
+                    stored_day = 1;
+                    stored_month++;
+                }
+            }
+            if (stored_month > 12) {
+                stored_month = 1;
+                stored_year++;
+            }
+        }
+    }
+    stored_hour = hh;
 
-        struct tm tm = {0};
-        tm.tm_year = yr - 1900;
-        tm.tm_mon  = mon - 1;
-        tm.tm_mday = day;
-        tm.tm_hour = hh;
-        tm.tm_min  = mm;
-        tm.tm_sec  = ss;
-
-        ts->tv_sec  = timegm(&tm);
-        ts->tv_nsec = 0;
-        return 0;
+    // Parse digits for fractional seconds and convert to integer
+    // without using any floating point math
+    long nsec = 0;
+    if (len_time_str > 6 && time_str[6] == '.') {
+        nsec = fractionToNsec(time_str + 7);
     }
 
-    return -1;
+    struct tm tm = {0};
+    tm.tm_year = year - 1900;
+    tm.tm_mon  = month - 1;
+    tm.tm_mday = day;
+    tm.tm_hour = hh;
+    tm.tm_min  = mm;
+    tm.tm_sec  = ss;
+
+    time_t t = timegm_mcu(&tm);
+    if (t < 0)
+        return -1;
+
+    ts->tv_sec  = t;
+    ts->tv_nsec = nsec;
+
+    return 0;
 }
+
 
 /* Determine NTP unit number based on device name */
 int get_unit_number(const char *ttyname) {
@@ -232,7 +505,7 @@ int main(int argc, char *argv[]) {
         unit = get_unit_number(devname);
         if (unit < 0 || unit > 255) {
             fprintf(stderr, "Unsupported or invalid device name: %s\n", devname);
-//            return 1;
+            return 1;
         }
     }
 
@@ -298,7 +571,7 @@ int main(int argc, char *argv[]) {
             line[pos] = '\0';
             pos = 0;
 
-printf(">>> %s\n", line);
+            TRACE(">>> %s\n", line);
             struct timespec ts;
             if (parse_nmea_time(line, &ts) == 0) {
 
@@ -322,7 +595,7 @@ printf(">>> %s\n", line);
                     shm->valid = 1;          // mark new data valid
                 }
 
-                printf("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
         } else {
             line[pos++] = c;
