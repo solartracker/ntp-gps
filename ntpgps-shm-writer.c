@@ -86,13 +86,15 @@ struct shmTime {
     int    dummy[8];            /* reserved */
 };
 
-enum recvtime_enum { RECV_GPS, RECV_REALTIME, RECV_MONOTONIC, RECV_ZERO };
+enum recvtime_enum { RECV_GPS, RECV_REALTIME, RECV_MONOTONIC, RECV_ZERO, NUM_RECV };
+const char *recvtime_desc[] = {"GPS","REALTIME","MONOTONIC","ZERO"};
 
 int stored_day = 0, stored_month = 0, stored_year = 0;
 int stored_date = 0; // nmea=1, user=0
-int require_valid_data = 1; // for RMC,GLL,GGA
+int require_valid_data = 0; // for RMC,GLL,GGA
 enum recvtime_enum recvtime_mode = RECV_GPS;
 int debug_trace = 0;
+int begin_shutdown = 0;
 
 
 /* Check if year is a leap year */
@@ -660,12 +662,11 @@ static void handle_client_command(int client_fd)
                 printf("Updated stored date to: %s\n", new_date);
 
         } else if (starts_with(buf, "GETDATE")) {
-            if (stored_date == 1)
-                write_printf(client_fd, "NMEA:%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
-            else
-                write_printf(client_fd, "USER:%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
+            write_printf(client_fd, "%04d-%02d-%02d (%s)\n",
+                stored_year, stored_month, stored_day,
+                (stored_date == 1) ? "NMEA" : "User");
 
-        } else if (starts_with(buf, "ALLOWINVALID")) {
+        } else if (starts_with(buf, "SETALLOWINVALID")) {
             if (require_valid_data == 0) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -673,7 +674,7 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:require_valid_data=false\n");
             }
 
-        } else if (starts_with(buf, "REQUIREVALID")) {
+        } else if (starts_with(buf, "SETREQUIREVALID")) {
             if (require_valid_data == 1) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -682,13 +683,10 @@ static void handle_client_command(int client_fd)
             }
 
         } else if (starts_with(buf, "GETVALID")) {
-            if (require_valid_data == 0) {
-                write_printf(client_fd, "require_valid_data=false\n");
-            } else {
-                write_printf(client_fd, "require_valid_data=true\n");
-            }
+            write_printf(client_fd, "UPDATED:require_valid_data=%s\n",
+                (require_valid_data == 1) ? "true" : "false");
 
-        } else if (starts_with(buf, "RECVTIME_GPS")) {
+        } else if (starts_with(buf, "SETRECVTIME_GPS")) {
             if (recvtime_mode == RECV_GPS) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -696,7 +694,7 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:recvtime_mode=GPS\n");
             }
 
-        } else if (starts_with(buf, "RECVTIME_REALTIME")) {
+        } else if (starts_with(buf, "SETRECVTIME_REALTIME")) {
             if (recvtime_mode == RECV_REALTIME) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -704,7 +702,7 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:recvtime_mode=REALTIME\n");
             }
 
-        } else if (starts_with(buf, "RECVTIME_MONOTONIC")) {
+        } else if (starts_with(buf, "SETRECVTIME_MONOTONIC")) {
             if (recvtime_mode == RECV_MONOTONIC) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -712,7 +710,7 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:recvtime_mode=MONOTONIC\n");
             }
 
-        } else if (starts_with(buf, "RECVTIME_ZERO")) {
+        } else if (starts_with(buf, "SETRECVTIME_ZERO")) {
             if (recvtime_mode == RECV_ZERO) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -720,7 +718,13 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:recvtime_mode=ZERO\n");
             }
 
-        } else if (starts_with(buf, "TRACEON")) {
+        } else if (starts_with(buf, "GETRECVTIME")) {
+            if (recvtime_mode >=0 && recvtime_mode < NUM_RECV) {
+                write_printf(client_fd, "recvtime_mode=%s\n",
+                    recvtime_desc[recvtime_mode]);
+            }
+
+        } else if (starts_with(buf, "SETTRACEON")) {
             if (debug_trace == 1) {
                 write_printf(client_fd, "OK\n");
             } else {
@@ -728,13 +732,21 @@ static void handle_client_command(int client_fd)
                 write_printf(client_fd, "UPDATED:debug_trace=true\n");
             }
 
-        } else if (starts_with(buf, "TRACEOFF")) {
+        } else if (starts_with(buf, "SETTRACEOFF")) {
             if (debug_trace == 0) {
                 write_printf(client_fd, "OK\n");
             } else {
                 debug_trace = 0;
                 write_printf(client_fd, "UPDATED:debug_trace=false\n");
             }
+
+        } else if (starts_with(buf, "GETTRACE")) {
+            write_printf(client_fd, "debug_trace=%s\n",
+                (debug_trace == 1) ? "true" : "false");
+
+        } else if (starts_with(buf, "SHUTDOWN")) {
+            begin_shutdown = 1;
+            write_printf(client_fd, "OK\n");
 
         } else {
             write_printf(client_fd, "ERROR:%s\n", buf);
@@ -923,6 +935,8 @@ int main(int argc, char *argv[]) {
 
         // Process command from UNIX socket
         poll_socket_server(listen_fd);
+        if (begin_shutdown == 1)
+            stop = 1;
     }
 
     // Cleanup UNIX socket
