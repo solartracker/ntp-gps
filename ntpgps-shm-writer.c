@@ -778,40 +778,95 @@ void handle_sigterm(int sig) {
     stop = 1;
 }
 
+
 int main(int argc, char *argv[]) {
-    if (argc < 2 || argc > 3) {
+    const char *devname = NULL;
+    int unit = -1;
+
+    if (argc < 2) {
+usage:
         fprintf(stderr,
-            "shm_writer - GPS NMEA to NTP SHM bridge\n"
+            "shm-writer - GPS NMEA to NTP SHM bridge\n"
             "Copyright (C) 2025 Richard Elwell\n"
             "Licensed under GPLv3 or later\n"
             "\n"
-            "Usage: %s <device_name> [unit_number]\n"
+            "Usage: %s [OPTIONS] <device-name> [unit-number]\n"
+            "\n"
+            "Positional arguments:\n"
+            "  device-name           Serial device (e.g., ttyACM0, ttyUSB1)\n"
+            "  unit-number           Optional NTP SHM unit (0..255), auto-detected from device if omitted\n"
+            "\n"
+            "Options:\n"
+            "  --recvtime=gps|realtime|monotonic|zero\n"
+            "                        Set receive timestamp source (default: gps)\n"
+            "  --require-valid       Only accept valid NMEA sentences\n"
+            "  --allow-invalid       Accept invalid NMEA sentences (default)\n"
+            "  --date-seed=FILE      Path to a date seed file to initialize the stored date\n"
+            "  --debug-trace         Enable debug trace output\n"
             "\n"
             "Examples:\n"
-            "  %s ttyACM0         (unit auto-detected)\n"
-            "  %s ttyACM0 42      (unit explicitly set)\n",
-            argv[0], argv[0], argv[0]);
+            "  %s ttyACM0             (unit auto-detected)\n"
+            "  %s ttyACM0 42          (unit explicitly set)\n"
+            "  %s --recvtime=monotonic --debug-trace ttyUSB1 120\n",
+            argv[0], argv[0], argv[0], argv[0]);
         return 1;
     }
 
-    const char *devname = argv[1];
-    int unit;
+    // Parse options first (argv[1..n-1]), leave last one/two args for device/unit
+    int argi = 1;
+    for (; argi < argc; argi++) {
+        const char *arg = argv[argi];
+        if (arg[0] != '-') break;  // stop at first positional arg
 
-    if (argc == 3) {
-        // explicit override
-        unit = atoi(argv[2]);
+        // Example of parsing options
+        if (strcmp(arg, "--require-valid") == 0) {
+            require_valid_data = 1;
+        } else if (strcmp(arg, "--allow-invalid") == 0) {
+            require_valid_data = 0;
+        } else if (strcmp(arg, "--debug-trace") == 0) {
+            debug_trace = 1;
+        } else if (starts_with(arg, "--recvtime=")) {
+            const char *val = arg + strlen("--recvtime=");
+            if (strcmp(val, "gps") == 0) recvtime_mode = RECV_GPS;
+            else if (strcmp(val, "realtime") == 0) recvtime_mode = RECV_REALTIME;
+            else if (strcmp(val, "monotonic") == 0) recvtime_mode = RECV_MONOTONIC;
+            else if (strcmp(val, "zero") == 0) recvtime_mode = RECV_ZERO;
+            else {
+                fprintf(stderr, "Invalid --recvtime value: %s\n", val);
+                goto usage;
+            }
+        } else if (starts_with(arg, "--date-seed=")) {
+            // TODO: read the seed file and set stored_year/month/day
+            //const char *file = arg + strlen("--date-seed=");
+            //read_date_seed(file);  // implement this function
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", arg);
+            goto usage;
+        }
+    }
+
+    // Remaining args: device-name [unit-number]
+    if (argi >= argc) {
+        fprintf(stderr, "Missing device-name\n");
+        goto usage;
+    }
+    devname = argv[argi++];
+
+    if (argi < argc) {
+        unit = atoi(argv[argi]);
         if (unit < 0 || unit > 255) {
             fprintf(stderr, "Invalid unit number: %d\n", unit);
             return 1;
         }
     } else {
-        // auto-detect from device name
         unit = get_unit_number(devname);
         if (unit < 0 || unit > 255) {
             fprintf(stderr, "Unsupported or invalid device name: %s\n", devname);
             return 1;
         }
     }
+
+    /***************************************************************************/
 
     // Install signal handler
     struct sigaction sa;
