@@ -30,11 +30,16 @@
 #include <sys/shm.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdarg.h>
 
 #ifdef DEBUG_TRACE
   #define TRACE(fmt, ...)  printf(fmt, ##__VA_ARGS__)
 #else
-  #define TRACE(fmt, ...)  do {} while(0)
+  #define TRACE(fmt, ...)  if (debug_trace) printf(fmt, ##__VA_ARGS__)
 #endif
 
 #define NTPD_BASE   0x4e545030  /* "NTP0" */
@@ -80,6 +85,15 @@ struct shmTime {
     int    receiveTimeStampNSec;/* if >0, high-res receive time in ns */
     int    dummy[8];            /* reserved */
 };
+
+enum recvtime_enum { RECV_GPS, RECV_REALTIME, RECV_MONOTONIC, RECV_ZERO };
+
+int stored_day = 0, stored_month = 0, stored_year = 0;
+int stored_date = 0; // nmea=1, user=0
+int require_valid_data = 1; // for RMC,GLL,GGA
+enum recvtime_enum recvtime_mode = RECV_GPS;
+int debug_trace = 0;
+
 
 /* Check if year is a leap year */
 static int is_leap(int year) {
@@ -206,6 +220,7 @@ char *strtok_empty_r(char *str, const char *delim, char **saveptr)
     return start;
 }
 
+
 /**
  * parse_nmea_time - Parse UTC time from an NMEA sentence
  *
@@ -279,7 +294,6 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
 
     // Supports detection of the time rolling over to the next day, so we
     // can roll-over the stored date to the next day
-    static int stored_day = 0, stored_month = 0, stored_year = 0;
     static int stored_hour = 0;
 
     int day = stored_day, month = stored_month, year = stored_year;
@@ -296,10 +310,12 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
 
     char *time_str = NULL;
     int date_present = 0;
+    int data_invalid = 0; // for RMC,GLL,GGA
 
     if (strcmp(tok, "RMC") == 0) {
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
-        strtok_empty_r(NULL, ",", &saveptr);
+        char *pos_stat_str = strtok_empty_r(NULL, ",", &saveptr);
+        data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
         strtok_empty_r(NULL, ",", &saveptr);
         strtok_empty_r(NULL, ",", &saveptr);
         strtok_empty_r(NULL, ",", &saveptr);
@@ -323,6 +339,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 stored_day = day;
                 stored_month = month;
                 stored_year = year;
+                stored_date = 1;
             }
         }
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
@@ -346,6 +363,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 stored_day = day;
                 stored_month = month;
                 stored_year = year;
+                stored_date = 1;
             }
         }
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
@@ -359,17 +377,27 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         strtok_empty_r(NULL, ",", &saveptr);
         strtok_empty_r(NULL, ",", &saveptr);
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
-
+        char *pos_stat_str = strtok_empty_r(NULL, ",", &saveptr);
+        data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
     }
     else if (strcmp(tok, "GGA") == 0) {
         // time-only line, only valid if a previous date exists
         if (stored_year == 0) 
             return -1;
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        strtok_empty_r(NULL, ",", &saveptr);
+        char *fix_mode_str = strtok_empty_r(NULL, ",", &saveptr);
+        data_invalid = (fix_mode_str && strlen(fix_mode_str) == 1 && fix_mode_str[0] == '0');
     }
     else {
         return -1; // unknown line type
     }
+
+    if (data_invalid && require_valid_data)
+        return -1;
 
     int len_time_str = strlen(time_str);
     if (!time_str || len_time_str < 6)
@@ -467,6 +495,270 @@ int get_unit_number(const char *ttyname) {
     return -1; // unsupported
 }
 
+int parse_date(const char *input, int *year, int *month, int *day) {
+    if (!input || !year || !month || !day)
+        return -1;
+
+    int yy=0, mm=0, dd=0;
+
+    // Trim leading/trailing whitespace
+    const char *begin = input;
+    while (isspace((unsigned char)*begin)) begin++;
+    const char *end = begin + strlen(begin) - 1;
+    while (isspace((unsigned char)*end)) end--;
+    int len = end - begin + 1;
+
+    if (len == 10 && begin[4] == '-' && begin[7] == '-') {
+        // Case 1: YYYY-MM-DD
+        yy = digitsToInt(begin, 4);
+        mm = digitsToInt(begin + 5, 2);
+        dd = digitsToInt(begin + 8, 2);
+    }
+    else if (len == 8) {
+        // Case 2: YYYYMMDD
+        yy = digitsToInt(begin, 4);
+        mm = digitsToInt(begin + 4, 2);
+        dd = digitsToInt(begin + 6, 2);
+    }
+    else {
+        return -1;
+    }
+
+    // Check parse error
+    if (yy < 0 || mm < 0 || dd < 0) {
+        return -1;
+    }
+
+    // Validate data
+    if (yy < 1970 || yy > 9999)
+        return -1;
+    if (mm < 1 || mm > 12)
+        return -1;
+    if (dd < 1)
+        return -1;
+    if (is_leap(yy) && mm == 2 && dd > 29)
+        return -1;
+    if (dd > days_in_month[mm - 1])
+        return -1;
+
+    // Success
+    *year = yy;
+    *month = mm;
+    *day = dd;
+
+    return 0;
+}
+
+void write_printf(int fd, const char *fmt, ...) {
+    char buf[512];   // adjust size as needed
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    if (len > 0) {
+        if (len > (int)sizeof(buf)) len = sizeof(buf); // truncate if necessary
+        write(fd, buf, len);
+    }
+}
+
+int update_stored_date(const char *input, int client_fd) {
+    if (!input)
+        return -1;
+    int result = 0;
+
+    if (stored_date == 1) { // Stored date is NMEA
+        write_printf(client_fd, "ERROR: date locked (NMEA:%04d-%02d-%02d)\n", stored_year, stored_month, stored_day);
+    }
+    else { // Stored date is User
+        int yy=0, mm=0, dd=0;
+        result = parse_date(input, &yy, &mm, &dd);
+        if (result == 0) {
+            stored_year = yy;
+            stored_month = mm;
+            stored_day = dd;
+            write_printf(client_fd, "UPDATED:%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
+        }
+        else {
+            write_printf(client_fd, "ERROR:%s\n", input);
+        }
+    }
+    return result;
+}
+
+#define SOCKET_PATH_FMT "/run/ntpgps/shmwriter%d.sock"
+#define MAX_CMD_LEN 128
+
+static int setup_unix_socket(int unit)
+{
+    int listen_fd;
+    struct sockaddr_un addr;
+    char path[108];
+
+    snprintf(path, sizeof(path), SOCKET_PATH_FMT, unit);
+    unlink(path);  // remove stale socket file
+
+    listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listen_fd < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
+
+
+    if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(listen_fd);
+        return -1;
+    }
+
+    if (listen(listen_fd, 5) < 0) {
+        perror("listen");
+        close(listen_fd);
+        return -1;
+    }
+
+    // Set non-blocking mode
+    int flags = fcntl(listen_fd, F_GETFL, 0);
+    fcntl(listen_fd, F_SETFL, flags | O_NONBLOCK);
+
+    printf("Listening on %s\n", path);
+    return listen_fd;
+}
+
+// Trim trailing \n or \r from a string (in-place)
+static size_t trim_trailing_newline(char *buf) {
+    char *end = buf + strlen(buf);
+    while (--end >= buf && (*end == '\n' || *end == '\r'))
+        *end = '\0';
+    return (end - buf + 1);
+}
+
+// Returns 1 if buf starts with prefix, 0 otherwise
+static int starts_with(const char *buf, const char *prefix) {
+    size_t len = strlen(prefix);
+    return strncmp(buf, prefix, len) == 0;
+}
+
+static void handle_client_command(int client_fd)
+{
+    char buf[MAX_CMD_LEN] = {0};
+    ssize_t len = read(client_fd, buf, sizeof(buf) - 1);
+
+    if (len > 0) {
+        buf[len] = '\0';
+        trim_trailing_newline(buf);
+
+        printf("Received command: [%s]\n", buf);
+
+        if (starts_with(buf, "SETDATE ")) {
+            const char *new_date = buf + 8;
+            if (update_stored_date(new_date, client_fd) == 0)
+                printf("Updated stored date to: %s\n", new_date);
+
+        } else if (starts_with(buf, "GETDATE")) {
+            if (stored_date == 1)
+                write_printf(client_fd, "NMEA:%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
+            else
+                write_printf(client_fd, "USER:%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
+
+        } else if (starts_with(buf, "ALLOWINVALID")) {
+            if (require_valid_data == 0) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                require_valid_data = 0;
+                write_printf(client_fd, "UPDATED:require_valid_data=false\n");
+            }
+
+        } else if (starts_with(buf, "REQUIREVALID")) {
+            if (require_valid_data == 1) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                require_valid_data = 1;
+                write_printf(client_fd, "UPDATED:require_valid_data=true\n");
+            }
+
+        } else if (starts_with(buf, "GETVALID")) {
+            if (require_valid_data == 0) {
+                write_printf(client_fd, "require_valid_data=false\n");
+            } else {
+                write_printf(client_fd, "require_valid_data=true\n");
+            }
+
+        } else if (starts_with(buf, "RECVTIME_GPS")) {
+            if (recvtime_mode == RECV_GPS) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                recvtime_mode = RECV_GPS;
+                write_printf(client_fd, "UPDATED:recvtime_mode=GPS\n");
+            }
+
+        } else if (starts_with(buf, "RECVTIME_REALTIME")) {
+            if (recvtime_mode == RECV_REALTIME) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                recvtime_mode = RECV_REALTIME;
+                write_printf(client_fd, "UPDATED:recvtime_mode=REALTIME\n");
+            }
+
+        } else if (starts_with(buf, "RECVTIME_MONOTONIC")) {
+            if (recvtime_mode == RECV_MONOTONIC) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                recvtime_mode = RECV_MONOTONIC;
+                write_printf(client_fd, "UPDATED:recvtime_mode=MONOTONIC\n");
+            }
+
+        } else if (starts_with(buf, "RECVTIME_ZERO")) {
+            if (recvtime_mode == RECV_ZERO) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                recvtime_mode = RECV_ZERO;
+                write_printf(client_fd, "UPDATED:recvtime_mode=ZERO\n");
+            }
+
+        } else if (starts_with(buf, "TRACEON")) {
+            if (debug_trace == 1) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                debug_trace = 1;
+                write_printf(client_fd, "UPDATED:debug_trace=true\n");
+            }
+
+        } else if (starts_with(buf, "TRACEOFF")) {
+            if (debug_trace == 0) {
+                write_printf(client_fd, "OK\n");
+            } else {
+                debug_trace = 0;
+                write_printf(client_fd, "UPDATED:debug_trace=false\n");
+            }
+
+        } else {
+            write_printf(client_fd, "ERROR:%s\n", buf);
+        }
+    }
+
+    close(client_fd);
+}
+
+static void poll_socket_server(int listen_fd)
+{
+    // Check for new client connections (non-blocking)
+    struct sockaddr_un client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_len);
+
+    if (client_fd >= 0) {
+        handle_client_command(client_fd);
+    } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        perror("accept");
+    }
+}
+
+
 static volatile sig_atomic_t stop = 0;
 
 void handle_sigterm(int sig) {
@@ -515,6 +807,19 @@ int main(int argc, char *argv[]) {
     sa.sa_handler = handle_sigterm;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);  // optional, also handle Ctrl+C
+
+    // Ignore SIGPIPE (broken pipe when client disconnects)
+    struct sigaction sa_pipe;
+    memset(&sa_pipe, 0, sizeof(sa_pipe));
+    sa_pipe.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &sa_pipe, NULL);
+
+    // Create UNIX socket
+    int listen_fd = setup_unix_socket(unit);
+    if (listen_fd < 0) {
+        fprintf(stderr, "Failed to create socket\n");
+        return 1;
+    }
 
     // Device setup, shm attach, etc.
     char dev_path[64];
@@ -572,7 +877,7 @@ int main(int argc, char *argv[]) {
             pos = 0;
 
             TRACE(">>> %s\n", line);
-            struct timespec ts;
+            struct timespec ts = {0};
             if (parse_nmea_time(line, &ts) == 0) {
 
                 // Fill a temporary structure first
@@ -583,8 +888,24 @@ int main(int argc, char *argv[]) {
                 tmp.nsamples = shm->nsamples;   // keep sample buffer
                 tmp.clockTimeStampSec  = ts.tv_sec;
                 tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                tmp.receiveTimeStampSec  = ts.tv_sec;
-                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+                if (recvtime_mode == RECV_GPS) {
+                    tmp.receiveTimeStampSec  = ts.tv_sec;
+                    tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+                } else if (recvtime_mode == RECV_REALTIME) {
+                    struct timespec ts_real = {0};
+                    clock_gettime(CLOCK_REALTIME, &ts_real);
+                    tmp.receiveTimeStampSec  = ts_real.tv_sec;
+                    tmp.receiveTimeStampUSec = ts_real.tv_nsec / 1000;
+                } else if (recvtime_mode == RECV_MONOTONIC) {
+                    // seconds since system boot
+                    struct timespec ts_mono = {0};
+                    clock_gettime(CLOCK_MONOTONIC, &ts_mono);
+                    tmp.receiveTimeStampSec  = ts_mono.tv_sec;
+                    tmp.receiveTimeStampUSec = ts_mono.tv_nsec / 1000;
+                } else if (recvtime_mode == RECV_ZERO) {
+                    tmp.receiveTimeStampSec  = 0;
+                    tmp.receiveTimeStampUSec = 0;
+                }
 
                 if (shm != NULL) {
                     // Safe update to shared memory
@@ -594,14 +915,20 @@ int main(int argc, char *argv[]) {
                     shm->count++;            // bump count after write
                     shm->valid = 1;          // mark new data valid
                 }
-
                 TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
         } else {
             line[pos++] = c;
         }
+
+        // Process command from UNIX socket
+        poll_socket_server(listen_fd);
     }
 
+    // Cleanup UNIX socket
+    close(listen_fd);
+
+    // Cleanup SHM
     if (shm != (void*)-1) {
         if (shmdt(shm) < 0) {
             perror("shmdt");
