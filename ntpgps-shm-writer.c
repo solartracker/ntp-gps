@@ -110,15 +110,26 @@ int stored_date_persistence = 1;      // default: load/save enabled
 int stored_day = 0, stored_month = 0, stored_year = 0;
 int stored_hour = 0, stored_minute = 0, stored_second = 0;
 int stored_date = 0; // nmea=1, user=0
+uint64_t tickstart_ns = 0;      // monotonic timestamp in nanoseconds of first valid GPS fix
+time_t   gpsstart_seconds = 0;  // GPS UTC seconds at that moment
+uint64_t ticklatest_ns = 0;     // monotonic timestamp in nanoseconds of latest GPS fix
+time_t   gpslatest_seconds = 0; // latest GPS UTC seconds
 int require_valid_nmea = 0; // for RMC,GLL,GGA
 int debug_trace = 0;
 int begin_shutdown = 0;
 
 
+// Get monotonic time in nanoseconds
+static inline uint64_t monotonic_now_ns(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ULL + (uint64_t)t.tv_nsec;
+}
+
 /* Check if year is a leap year */
-static int is_leap(int year) {
-    year += 1900;  /* struct tm stores years since 1900 */
-    return ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
+static inline int is_leap(const int year) {
+    return (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
 }
 
 /* Days per month, normal year */
@@ -133,12 +144,12 @@ uint32_t timegm_mcu(const struct tm *t) {
 
     /* Add full years */
     for (y = 70; y < t->tm_year; y++)  /* 1970 = 70 */
-        days += 365 + is_leap(y);
+        days += 365 + is_leap(1900 + y);
 
     /* Add months in current year */
     for (int m = 0; m < t->tm_mon; m++) {
         days += days_in_month[m];
-        if (m == 1 && is_leap(t->tm_year)) days++; /* Feb in leap year */
+        if (m == 1 && is_leap(1900 + t->tm_year)) days++; /* Feb in leap year */
     }
 
     /* Add days */
@@ -152,7 +163,7 @@ uint32_t timegm_mcu(const struct tm *t) {
     return seconds;
 }
 
-int digitsToInt(const char *s, int n) {
+int digitsToInt(const char *s, const int n) {
     int retval = 0;
     if (n == -1) {
         // use null termination
@@ -205,7 +216,7 @@ int fractionToNsec(const char *s) {
 }
 
 int adjust_time_mcu(int *hour, int *minute, int *second,
-                    int add_hours, int add_minutes, int add_seconds)
+                    const int add_hours, const int add_minutes, const int add_seconds)
 {
     if (!hour || !minute || !second)
         return -1;
@@ -233,7 +244,7 @@ int adjust_time_mcu(int *hour, int *minute, int *second,
     return 0;
 }
 int adjust_time(int *hour, int *minute, int *second,
-                int add_hours, int add_minutes, int add_seconds)
+                const int add_hours, const int add_minutes, const int add_seconds)
 {
     if (!hour || !minute || !second)
         return -1;
@@ -260,7 +271,7 @@ int adjust_time(int *hour, int *minute, int *second,
     return 0;
 }
 
-int time_rollover(int hour, int minute, int second) {
+int time_rollover(const int hour, const int minute, const int second) {
     if (compare_times(hour, minute, second,
                       stored_hour, stored_minute, stored_second) < 0)
         return 0; // yes, there was a roll-over (or we have jumped backwards in time)
@@ -268,8 +279,8 @@ int time_rollover(int hour, int minute, int second) {
         return -1; // no
 }
 
-int compare_times(int hh_lhs, int mm_lhs, int ss_lhs,
-                  int hh_rhs, int mm_rhs, int ss_rhs) {
+int compare_times(const int hh_lhs, const int mm_lhs, const int ss_lhs,
+                  const int hh_rhs, const int mm_rhs, const int ss_rhs) {
     if (hh_lhs < hh_rhs)
         return -1;
     else if (hh_lhs > hh_rhs)
@@ -286,6 +297,166 @@ int compare_times(int hh_lhs, int mm_lhs, int ss_lhs,
         return 0;
 }
 
+// Adjust date function, integer-only
+int adjust_date_mcu(int *year, int *month, int *day,
+                    const int add_years, const int add_months, const int add_days)
+{
+    if (!year || !month || !day)
+        return -1;
+
+    int y = *year + add_years;
+    int m = *month + add_months;
+    int d = *day + add_days;
+
+    // Normalize months
+    while (m > 12) { m -= 12; y++; }
+    while (m < 1)  { m += 12; y--; }
+
+    // Normalize days
+    while (1) {
+        int dim = days_in_month[m - 1];
+        if (m == 2 && is_leap(y))
+            dim = 29;
+
+        if (d > dim) { d -= dim; m++; if (m > 12) { m = 1; y++; } }
+        else if (d < 1) { m--; if (m < 1) { m = 12; y--; } dim = (m == 2 && is_leap(y)) ? 29 : days_in_month[m - 1]; d += dim; }
+        else break;
+    }
+
+    *year  = y;
+    *month = m;
+    *day   = d;
+
+    return 0;
+}
+
+// Get monotonic time in ns
+static inline uint64_t monotonic_now_ns(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ULL + t.tv_nsec;
+}
+
+/**
+ * Convert a date (Y/M/D) to days since 1970-01-01 (Unix epoch).
+ * Valid for years >= 1970.
+ */
+static int64_t date_to_days(int year, int month, int day)
+{
+    // Months: March=3..February=14 (Zeller's congruence style)
+    if (month <= 2) {
+        year--;
+        month += 12;
+    }
+
+    int64_t era = year / 400;
+    int64_t yoe = year - era * 400;           // year of era
+    int64_t doy = (153*(month + 1) - 457)/5 + day - 306; // day of year
+    int64_t doe = yoe * 365 + yoe/4 - yoe/100 + doy;    // day of era
+
+    return era * 146097 + doe - 719468; // 719468 = days from 0000-03-01 to 1970-01-01
+}
+
+/**
+ * Convert days since 1970-01-01 to Y/M/D
+ */
+static void days_to_date(int64_t days, int *year, int *month, int *day)
+{
+    days += 719468;
+    int64_t era = days / 146097;
+    int64_t doe = days - era * 146097;                  // day of era
+    int64_t yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;
+    int64_t y = yoe + era*400;
+    int64_t doy = doe - (365*yoe + yoe/4 - yoe/100);
+    int64_t mp = (5*doy + 2)/153;
+    int64_t d = doy - (153*mp + 2)/5 + 1;
+    int64_t m = mp + (mp < 10 ? 3 : -9);
+
+    *year = (int)y;
+    *month = (int)m;
+    *day = (int)d;
+}
+
+/**
+ * adjust_date_fast
+ * Adjust date by years, months, and days, avoiding loops.
+ * Uses total-day arithmetic for days addition.
+ */
+int adjust_date_fast(int *year, int *month, int *day,
+                     int add_years, int add_months, int add_days)
+{
+    if (!year || !month || !day)
+        return -1;
+
+    int y = *year + add_years;
+    int m = *month + add_months;
+
+    // Normalize months
+    if (m > 12) { y += (m - 1)/12; m = (m - 1)%12 + 1; }
+    if (m < 1)  { y += (m - 12)/12; m = (m - 1)%12 + 13; } // works for negatives
+
+    // Convert current date to days
+    int64_t total_days = date_to_days(y, m, *day);
+
+    // Add/subtract days
+    total_days += add_days;
+
+    // Convert back to year/month/day
+    days_to_date(total_days, &y, &m, day);
+
+    *year = y;
+    *month = m;
+
+    return 0;
+}
+
+/**
+ * update_stored_date
+ * Call when a time-only GPS message arrives.
+ * Uses monotonic ticks to handle multi-day gaps since last full GPS fix.
+ */
+void update_stored_date(const int hh, const int mm, const int ss)
+{
+    if (ticklatest_ns == 0) {
+        // No reference yet, cannot compute days elapsed
+        stored_hour   = hh;
+        stored_minute = mm;
+        stored_second = ss;
+        return;
+    }
+
+    uint64_t now_ns = monotonic_now_ns();
+    uint64_t delta_ns = now_ns - ticklatest_ns;
+
+    // Convert elapsed ns to seconds
+    time_t delta_sec = delta_ns / 1000000000ULL;
+
+    // Compute full days elapsed since last full GPS fix
+    time_t days_passed = delta_sec / 86400ULL;
+
+    // Single-day rollover if time went backward (hh:mm:ss < stored)
+    if (days_passed == 0 &&
+        (hh < stored_hour ||
+        (hh == stored_hour && mm < stored_minute) ||
+        (hh == stored_hour && mm == stored_minute && ss < stored_second)))
+    {
+        days_passed = 1;
+    }
+
+    if (days_passed > 0) {
+        // Add days to stored date using adjust_date_mcu
+        adjust_date_fast(&stored_year, &stored_month, &stored_day,
+                         0, 0, (int)days_passed);
+    }
+
+    // Update stored time
+    stored_hour   = hh;
+    stored_minute = mm;
+    stored_second = ss;
+
+    // Update monotonic reference
+    ticklatest_ns = now_ns;
+}
 
 /*
  * strtok_empty_r - tokenize a string with empty fields preserved
@@ -569,6 +740,15 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     if (t < 0)
         return -1;
 
+    // Remember the system tick of the first valid GPS datetime and
+    // the system tick of the latest valid GPS datetime.  Obviously,
+    // this can only be done with RMC and ZDA messages containing
+    // both valid date and time.
+    if (date_present) {
+        // TODO: remember stuff here
+    }
+
+    // Return the GPS time
     ts->tv_sec  = t;
     ts->tv_nsec = nsec;
 
