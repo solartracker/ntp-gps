@@ -35,6 +35,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #ifdef DEBUG_TRACE
   #define TRACE(fmt, ...)  printf(fmt, ##__VA_ARGS__)
@@ -86,13 +88,29 @@ struct shmTime {
     int    dummy[8];            /* reserved */
 };
 
-enum recvtime_enum { RECV_GPS, RECV_REALTIME, RECV_MONOTONIC, RECV_ZERO, NUM_RECV };
-const char *recvtime_desc[] = {"GPS","REALTIME","MONOTONIC","ZERO"};
+enum recvtime_mode_t {
+    RECV_GPS,
+    RECV_REALTIME,
+    RECV_MONOTONIC,
+    RECV_ZERO,
+    NUM_MODES_RECV
+};
+enum recvtime_mode_t recvtime_mode = RECV_GPS; // default
+const char *recvtime_desc[] = {"GPS","REALTIME","MONOTONIC","ZERO","(unknown)"};
 
+#define PATH_MAX_LEN 256
+const char date_seed_dir_default[] = "/var/lib/ntpgps";
+const char date_seed_file[] = "date.seed";
+const char time_seed_file[] = "time.seed";
+char date_seed_dir[PATH_MAX_LEN];
+char date_seed_path[PATH_MAX_LEN];
+char time_seed_path[PATH_MAX_LEN];
+int stored_date_enabled = 1;          // default: enabled
+int stored_date_persistence = 1;      // default: load/save enabled
 int stored_day = 0, stored_month = 0, stored_year = 0;
+int stored_hour = 0, stored_minute = 0, stored_second = 0;
 int stored_date = 0; // nmea=1, user=0
-int require_valid_data = 0; // for RMC,GLL,GGA
-enum recvtime_enum recvtime_mode = RECV_GPS;
+int require_valid_nmea = 0; // for RMC,GLL,GGA
 int debug_trace = 0;
 int begin_shutdown = 0;
 
@@ -186,6 +204,89 @@ int fractionToNsec(const char *s) {
     return fraction * scale[i];
 }
 
+int adjust_time_mcu(int *hour, int *minute, int *second,
+                    int add_hours, int add_minutes, int add_seconds)
+{
+    if (!hour || !minute || !second)
+        return -1;
+
+    int h = *hour + add_hours;
+    int m = *minute + add_minutes;
+    int s = *second + add_seconds;
+
+    // Normalize seconds
+    while (s >= 60) { s -= 60; m++; }
+    while (s <  0)  { s += 60; m--; }
+
+    // Normalize minutes
+    while (m >= 60) { m -= 60; h++; }
+    while (m <  0)  { m += 60; h--; }
+
+    // Normalize hours (wrap to 0–23)
+    while (h >= 24) { h -= 24; }
+    while (h <  0)  { h += 24; }
+
+    *hour   = h;
+    *minute = m;
+    *second = s;
+
+    return 0;
+}
+int adjust_time(int *hour, int *minute, int *second,
+                int add_hours, int add_minutes, int add_seconds)
+{
+    if (!hour || !minute || !second)
+        return -1;
+
+    int32_t total = (int32_t)(*hour) * 3600L +
+                    (int32_t)(*minute) * 60L +
+                    (int32_t)(*second);
+
+    int32_t delta = (int32_t)add_hours * 3600L +
+                    (int32_t)add_minutes * 60L +
+                    (int32_t)add_seconds;
+
+    total += delta;
+
+    // 86400 seconds per day
+    total %= 86400L;
+    if (total < 0)
+        total += 86400L;
+
+    *hour   = (int)(total / 3600L);
+    *minute = (int)((total % 3600L) / 60L);
+    *second = (int)(total % 60L);
+
+    return 0;
+}
+
+int time_rollover(int hour, int minute, int second) {
+    if (compare_times(hour, minute, second,
+                      stored_hour, stored_minute, stored_second) < 0)
+        return 0; // yes, there was a roll-over (or we have jumped backwards in time)
+    else
+        return -1; // no
+}
+
+int compare_times(int hh_lhs, int mm_lhs, int ss_lhs,
+                  int hh_rhs, int mm_rhs, int ss_rhs) {
+    if (hh_lhs < hh_rhs)
+        return -1;
+    else if (hh_lhs > hh_rhs)
+        return 1;
+    else if (mm_lhs < mm_rhs)
+        return -1;
+    else if (mm_lhs > mm_rhs)
+        return 1;
+    else if (ss_lhs < ss_rhs)
+        return -1;
+    else if (ss_lhs > ss_rhs)
+        return 1;
+    else
+        return 0;
+}
+
+
 /*
  * strtok_empty_r - tokenize a string with empty fields preserved
  * @str: string to tokenize (only for the first call)
@@ -221,7 +322,6 @@ char *strtok_empty_r(char *str, const char *delim, char **saveptr)
 
     return start;
 }
-
 
 /**
  * parse_nmea_time - Parse UTC time from an NMEA sentence
@@ -294,11 +394,17 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     memcpy(buf, line, len);
     buf[len] = '\0';
 
-    // Supports detection of the time rolling over to the next day, so we
-    // can roll-over the stored date to the next day
-    static int stored_hour = 0;
-
-    int day = stored_day, month = stored_month, year = stored_year;
+    // variables to hold the date as reported by the GPS
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    if (stored_date_enabled) {
+        // default to our internally stored and maintained date.  this is used when
+        // the GPS is reporting time only, without the date component.
+        year = stored_year;
+        month = stored_month;
+        day = stored_day;
+    }
 
     char *tok = strtok_empty_r(buf, ",", &saveptr);
     if (!tok)
@@ -347,7 +453,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
     }
     else if (strcmp(tok, "ZDA") == 0 || 
-               strcmp(tok, "ZDG") == 0) {
+             strcmp(tok, "ZDG") == 0) {
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
         char *day_str  = strtok_empty_r(NULL, ",", &saveptr);
         char *month_str  = strtok_empty_r(NULL, ",", &saveptr);
@@ -398,7 +504,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         return -1; // unknown line type
     }
 
-    if (data_invalid && require_valid_data)
+    if (data_invalid && require_valid_nmea)
         return -1;
 
     int len_time_str = strlen(time_str);
@@ -413,29 +519,36 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     TRACE(">>>>>> %s time: %02d:%02d:%02d\n", tok, hh, mm, ss);
 
     // Roll-over detection for stored date
-    if (!date_present && stored_day) {
-        if (hh < stored_hour) {
-            TRACE(">>>>>> the stored date was rolled over \n");
-            stored_day++;
-            // Adjust February for leap year
-            if (stored_month == 2 && is_leap(stored_year)) {
-                if (stored_day > 29) {
-                    stored_day = 1;
-                    stored_month++;
-            }
-            } else {
-                if (stored_day > days_in_month[stored_month - 1]) {
-                    stored_day = 1;
-                    stored_month++;
+    if (!stored_date_enabled) {
+        stored_hour = 0;
+        stored_minute = 0;
+        stored_second = 0;
+    }
+    else {
+        if (!date_present && stored_day) {
+            if (time_rollover(hh, mm, ss) == 0) {
+                TRACE(">>>>>> the stored date was rolled over\n");
+                stored_day++;
+                // Adjust February for leap year
+                if (stored_month == 2 && is_leap(stored_year)) {
+                    if (stored_day > 29) {
+                        stored_day = 1;
+                        stored_month++;
+                }
+                } else {
+                    if (stored_day > days_in_month[stored_month - 1]) {
+                        stored_day = 1;
+                        stored_month++;
+                    }
+                }
+                if (stored_month > 12) {
+                    stored_month = 1;
+                    stored_year++;
                 }
             }
-            if (stored_month > 12) {
-                stored_month = 1;
-                stored_year++;
-            }
         }
+        stored_hour = hh;
     }
-    stored_hour = hh;
 
     // Parse digits for fractional seconds and convert to integer
     // without using any floating point math
@@ -462,6 +575,66 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     return 0;
 }
 
+// Appends 'filename' to 'dir' and stores the result in 'out_path'.
+// Returns 0 on success, -1 on error (e.g., buffer too small).
+int append_filename_to_dir(const char *dir, const char *filename, char *out_path) {
+    if (!dir || !filename || !out_path)
+        return -1;
+
+    size_t dir_len = strlen(dir);
+    size_t file_len = strlen(filename);
+
+    // Check if we need to add a '/' between dir and filename
+    int need_slash = (dir_len > 0 && dir[dir_len - 1] != '/');
+
+    if (dir_len + need_slash + file_len >= PATH_MAX_LEN)
+        return -1; // not enough space
+
+    strcpy(out_path, dir);
+    if (need_slash)
+        strcat(out_path, "/");
+    strcat(out_path, filename);
+
+    return 0;
+}
+
+int mkdir_p(const char *path, mode_t mode) {
+    char tmp[1024];
+    char *p = NULL;
+    size_t len;
+
+    if (!path || !*path)
+        return -1;
+
+    strncpy(tmp, path, sizeof(tmp));
+    tmp[sizeof(tmp)-1] = '\0';
+    len = strlen(tmp);
+
+    if (tmp[len-1] == '/')
+        tmp[len-1] = '\0';
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, mode) != 0) {
+                if (errno != EEXIST) {
+                    perror("mkdir");
+                    return -1;
+                }
+            }
+            *p = '/';
+        }
+    }
+
+    if (mkdir(tmp, mode) != 0) {
+        if (errno != EEXIST) {
+            perror("mkdir");
+            return -1;
+        }
+    }
+
+    return 0;
+}
 
 /* Determine NTP unit number based on device name */
 int get_unit_number(const char *ttyname) {
@@ -497,56 +670,113 @@ int get_unit_number(const char *ttyname) {
     return -1; // unsupported
 }
 
+int trim_spaces(const char *s, const char **pbegin) {
+    if (!s || !pbegin)
+        return -1;
+
+    const char *begin = s;
+    const char *end = s + strlen(s) - 1;
+    while (begin <= end && isspace((unsigned char)*begin)) begin++;
+    while (end > begin && isspace((unsigned char)*end)) end--;
+
+    *pbegin = begin;
+    return (end - begin + 1);
+}
+
 int parse_date(const char *input, int *year, int *month, int *day) {
     if (!input || !year || !month || !day)
         return -1;
 
-    int yy=0, mm=0, dd=0;
+    int y=0, m=0, d=0;
 
     // Trim leading/trailing whitespace
-    const char *begin = input;
-    while (isspace((unsigned char)*begin)) begin++;
-    const char *end = begin + strlen(begin) - 1;
-    while (isspace((unsigned char)*end)) end--;
-    int len = end - begin + 1;
+    const char *begin;
+    int len = trim_spaces(input, &begin);
 
     if (len == 10 && begin[4] == '-' && begin[7] == '-') {
         // Case 1: YYYY-MM-DD
-        yy = digitsToInt(begin, 4);
-        mm = digitsToInt(begin + 5, 2);
-        dd = digitsToInt(begin + 8, 2);
+        y = digitsToInt(begin, 4);
+        m = digitsToInt(begin + 5, 2);
+        d = digitsToInt(begin + 8, 2);
     }
     else if (len == 8) {
         // Case 2: YYYYMMDD
-        yy = digitsToInt(begin, 4);
-        mm = digitsToInt(begin + 4, 2);
-        dd = digitsToInt(begin + 6, 2);
+        y = digitsToInt(begin, 4);
+        m = digitsToInt(begin + 4, 2);
+        d = digitsToInt(begin + 6, 2);
     }
     else {
         return -1;
     }
 
     // Check parse error
-    if (yy < 0 || mm < 0 || dd < 0) {
+    if (y < 0 || m < 0 || d < 0) {
         return -1;
     }
 
     // Validate data
-    if (yy < 1970 || yy > 9999)
+    if (y < 1970 || y > 9999)
         return -1;
-    if (mm < 1 || mm > 12)
+    if (m < 1 || m > 12)
         return -1;
-    if (dd < 1)
+    if (d < 1)
         return -1;
-    if (is_leap(yy) && mm == 2 && dd > 29)
+    if (is_leap(y) && m == 2 && d > 29)
         return -1;
-    if (dd > days_in_month[mm - 1])
+    if (d > days_in_month[m - 1])
         return -1;
 
     // Success
-    *year = yy;
-    *month = mm;
-    *day = dd;
+    *year = y;
+    *month = m;
+    *day = d;
+
+    return 0;
+}
+
+int parse_time(const char *input, int *hour, int *minute, int *second) {
+    if (!input || !hour || !minute || !second)
+        return -1;
+
+    int hh=0, mm=0, ss=0;
+
+    // Trim leading/trailing whitespace
+    const char *begin;
+    int len = trim_spaces(input, &begin);
+
+    if (len == 8 && begin[2] == ':' && begin[5] == ':') {
+        // Case 1: HH:MM:SS
+        hh = digitsToInt(begin, 2);
+        mm = digitsToInt(begin + 3, 2);
+        ss = digitsToInt(begin + 6, 2);
+    }
+    else if (len == 6) {
+        // Case 2: HHMMSS
+        hh = digitsToInt(begin, 2);
+        mm = digitsToInt(begin + 2, 2);
+        ss = digitsToInt(begin + 4, 2);
+    }
+    else {
+        return -1;
+    }
+
+    // Check parse error
+    if (hh < 0 || mm < 0 || ss < 0) {
+        return -1;
+    }
+
+    // Validate data
+    if (hh > 23)
+        return -1;
+    if (mm > 59)
+        return -1;
+    if (ss > 59)
+        return -1;
+
+    // Success
+    *hour = hh;
+    *minute = mm;
+    *second = ss;
 
     return 0;
 }
@@ -667,24 +897,24 @@ static void handle_client_command(int client_fd)
                 (stored_date == 1) ? "NMEA" : "User");
 
         } else if (starts_with(buf, "SETALLOWINVALID")) {
-            if (require_valid_data == 0) {
+            if (require_valid_nmea == 0) {
                 write_printf(client_fd, "OK\n");
             } else {
-                require_valid_data = 0;
-                write_printf(client_fd, "UPDATED:require_valid_data=false\n");
+                require_valid_nmea = 0;
+                write_printf(client_fd, "UPDATED:require_valid_nmea=false\n");
             }
 
         } else if (starts_with(buf, "SETREQUIREVALID")) {
-            if (require_valid_data == 1) {
+            if (require_valid_nmea == 1) {
                 write_printf(client_fd, "OK\n");
             } else {
-                require_valid_data = 1;
-                write_printf(client_fd, "UPDATED:require_valid_data=true\n");
+                require_valid_nmea = 1;
+                write_printf(client_fd, "UPDATED:require_valid_nmea=true\n");
             }
 
         } else if (starts_with(buf, "GETVALID")) {
-            write_printf(client_fd, "UPDATED:require_valid_data=%s\n",
-                (require_valid_data == 1) ? "true" : "false");
+            write_printf(client_fd, "UPDATED:require_valid_nmea=%s\n",
+                (require_valid_nmea == 1) ? "true" : "false");
 
         } else if (starts_with(buf, "SETRECVTIME_GPS")) {
             if (recvtime_mode == RECV_GPS) {
@@ -719,7 +949,7 @@ static void handle_client_command(int client_fd)
             }
 
         } else if (starts_with(buf, "GETRECVTIME")) {
-            if (recvtime_mode >=0 && recvtime_mode < NUM_RECV) {
+            if (recvtime_mode >=0 && recvtime_mode < NUM_MODES_RECV) {
                 write_printf(client_fd, "recvtime_mode=%s\n",
                     recvtime_desc[recvtime_mode]);
             }
@@ -770,7 +1000,6 @@ static void poll_socket_server(int listen_fd)
     }
 }
 
-
 static volatile sig_atomic_t stop = 0;
 
 void handle_sigterm(int sig) {
@@ -778,80 +1007,231 @@ void handle_sigterm(int sig) {
     stop = 1;
 }
 
+static int read_date_seed(void) {
+    FILE *f = fopen(date_seed_path, "r");
+    if (!f) {
+        TRACE("Date seed file '%s' not found, skipping.\n", date_seed_path);
+        return 0;  // missing file is OK
+    }
+
+    char buf[64];
+    const size_t buflen = sizeof(buf) / sizeof(buf[0]);
+
+    if (!fgets(buf, buflen, f)) {
+        TRACE("Failed to read from date seed file '%s'\n", date_seed_path);
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    int y = 0, m = 0, d = 0;
+    if (parse_date(buf, &y, &m, &d) != 0) {
+        TRACE("Failed to parse date from file '%s': %s\n", date_seed_path, buf);
+        return -1;
+    }
+
+    stored_year  = y;
+    stored_month = m;
+    stored_day   = d;
+
+    TRACE("Loaded stored date: %04d-%02d-%02d\n", y, m, d);
+
+    return 0;
+}
+
+static int read_time_seed(void) {
+    FILE *f = fopen(time_seed_path, "r");
+    if (!f) {
+        TRACE("Time seed file '%s' not found, skipping.\n", time_seed_path);
+        return 0;
+    }
+
+    char buf[64];
+    const size_t buflen = sizeof(buf) / sizeof(buf[0]);
+
+    if (!fgets(buf, buflen, f)) {
+        TRACE("Failed to read from time seed file '%s'\n", time_seed_path);
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    int hh = 0, mm = 0, ss = 0;
+    if (parse_time(buf, &hh, &mm, &ss) != 0) {
+        TRACE("Failed to parse time from file '%s': %s\n", time_seed_path, buf);
+        return -1;
+    }
+
+    stored_hour = hh;
+
+    TRACE("Loaded stored hour: %02d\n", hh);
+
+    return 0;
+}
+
+static int read_seed_files(void) {
+    if (read_date_seed() != 0) return -1;
+    if (read_time_seed() != 0) return -1;
+    return 0;
+}
+
+int write_seed_files(void) {
+    FILE *f;
+    int status = 0;
+
+    // create directory
+    if (mkdir_p(date_seed_dir, 0755) != 0) {
+        TRACE("Failed to create directory %s: %s\n", date_seed_dir, strerror(errno));
+    }
+
+    // --- Write date.seed ---
+    f = fopen(date_seed_path, "w");
+    if (f) {
+        fprintf(f, "%04d-%02d-%02d\n", stored_year, stored_month, stored_day);
+        fclose(f);
+        TRACE("Updated %s\n", date_seed_path);
+    } else {
+        TRACE("Failed to write %s: %s\n", date_seed_path, strerror(errno));
+        status = -1;
+    }
+
+    // --- Write time.seed ---
+    f = fopen(time_seed_path, "w");
+    if (f) {
+        fprintf(f, "%02d:%02d:%02d\n", stored_hour, stored_minute, stored_second);
+        fclose(f);
+        TRACE("Updated %s\n", time_seed_path);
+    } else {
+        TRACE("Failed to write %s: %s\n", time_seed_path, strerror(errno));
+        status = -1;
+    }
+
+    return status;
+}
+
+static void print_usage(FILE *out, const char *progname) {
+    fprintf(out,
+        "shm-writer - GPS NMEA to NTP SHM bridge\n"
+        "Copyright (C) 2025 Richard Elwell\n"
+        "Licensed under GPLv3 or later\n"
+        "\n"
+        "Usage: %s [OPTIONS] <device-name> [unit-number]\n"
+        "\n"
+        "Positional arguments:\n"
+        "  device-name           Serial device (e.g., ttyACM0, ttyUSB1)\n"
+        "  unit-number           Optional NTP SHM unit (0..255), auto-detected from device if omitted\n"
+        "\n"
+        "Options:\n"
+        "  --recvtime=gps|realtime|monotonic|zero\n"
+        "                        Set receive timestamp source (default: gps)\n"
+        "  --require-valid       Only accept valid NMEA sentences\n"
+        "  --allow-invalid       Accept invalid NMEA sentences (default)\n"
+        "  --debug-trace         Enable debug trace output\n"
+        "\n"
+        "Stored Date and Seed File Options:\n"
+        "  --disable-stored-date\n"
+        "                        Disable the Stored Date feature entirely.\n"
+        "                        No internal date is maintained, and date/time seed files are not used.\n"
+        "\n"
+        "  --no-stored-date-persistence\n"
+        "                        Use a Stored Date internally, but do not load from or save to\n"
+        "                        date.seed or time.seed files.\n"
+        "\n"
+        "  --date-seed-dir=<DIR>\n"
+        "                        Override the default directory for the date and time seed files.\n"
+        "                        Default: %s\n"
+        "\n"
+        "General:\n"
+        "  -h, --help            Show this help message and exit\n"
+        "\n"
+        "Examples:\n"
+        "  %s ttyACM0\n"
+        "  %s ttyACM0 42\n"
+        "  %s --recvtime=monotonic --debug-trace ttyUSB1 120\n"
+        "  %s --date-seed-dir=/tmp/ntpgps ttyACM0\n"
+        "\n",
+        progname, date_seed_dir_default,
+        progname, progname, progname, progname
+    );
+}
+
+static void usage_short(const char *progname) {
+    fprintf(stderr,
+        "Usage: %s <device-name> [unit-number] [options]\n"
+        "Try '%s --help' for more information.\n",
+        progname, progname
+    );
+}
 
 int main(int argc, char *argv[]) {
     const char *devname = NULL;
     int unit = -1;
 
+    // Initialize default date seed directory
+    strncpy(date_seed_dir, date_seed_dir_default, PATH_MAX_LEN - 1);
+    date_seed_dir[PATH_MAX_LEN - 1] = '\0';
+
     if (argc < 2) {
-usage:
-        fprintf(stderr,
-            "shm-writer - GPS NMEA to NTP SHM bridge\n"
-            "Copyright (C) 2025 Richard Elwell\n"
-            "Licensed under GPLv3 or later\n"
-            "\n"
-            "Usage: %s [OPTIONS] <device-name> [unit-number]\n"
-            "\n"
-            "Positional arguments:\n"
-            "  device-name           Serial device (e.g., ttyACM0, ttyUSB1)\n"
-            "  unit-number           Optional NTP SHM unit (0..255), auto-detected from device if omitted\n"
-            "\n"
-            "Options:\n"
-            "  --recvtime=gps|realtime|monotonic|zero\n"
-            "                        Set receive timestamp source (default: gps)\n"
-            "  --require-valid       Only accept valid NMEA sentences\n"
-            "  --allow-invalid       Accept invalid NMEA sentences (default)\n"
-            "  --date-seed=FILE      Path to a date seed file to initialize the stored date\n"
-            "  --debug-trace         Enable debug trace output\n"
-            "\n"
-            "Examples:\n"
-            "  %s ttyACM0             (unit auto-detected)\n"
-            "  %s ttyACM0 42          (unit explicitly set)\n"
-            "  %s --recvtime=monotonic --debug-trace ttyUSB1 120\n",
-            argv[0], argv[0], argv[0], argv[0]);
+        usage_short(argv[0]);
         return 1;
     }
 
-    // Parse options first (argv[1..n-1]), leave last one/two args for device/unit
-    int argi = 1;
-    for (; argi < argc; argi++) {
+    // Parse options first
+    int argi;
+    for (argi = 1; argi < argc; argi++) {
         const char *arg = argv[argi];
         if (arg[0] != '-') break;  // stop at first positional arg
 
-        // Example of parsing options
-        if (strcmp(arg, "--require-valid") == 0) {
-            require_valid_data = 1;
-        } else if (strcmp(arg, "--allow-invalid") == 0) {
-            require_valid_data = 0;
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+            print_usage(stdout, argv[0]);
+            return 0;
         } else if (strcmp(arg, "--debug-trace") == 0) {
             debug_trace = 1;
         } else if (starts_with(arg, "--recvtime=")) {
-            const char *val = arg + strlen("--recvtime=");
-            if (strcmp(val, "gps") == 0) recvtime_mode = RECV_GPS;
-            else if (strcmp(val, "realtime") == 0) recvtime_mode = RECV_REALTIME;
-            else if (strcmp(val, "monotonic") == 0) recvtime_mode = RECV_MONOTONIC;
-            else if (strcmp(val, "zero") == 0) recvtime_mode = RECV_ZERO;
-            else {
-                fprintf(stderr, "Invalid --recvtime value: %s\n", val);
-                goto usage;
+            const char *mode_str = arg + strlen("--recvtime=");
+            if (strcmp(mode_str, "gps") == 0) {
+                recvtime_mode = RECV_GPS;
+            } else if (strcmp(mode_str, "realtime") == 0) {
+                recvtime_mode = RECV_REALTIME;
+            } else if (strcmp(mode_str, "monotonic") == 0) {
+                recvtime_mode = RECV_MONOTONIC;
+            } else if (strcmp(mode_str, "zero") == 0) {
+                recvtime_mode = RECV_ZERO;
+            } else {
+                fprintf(stderr, "Invalid --recvtime mode: %s\n", mode_str);
+                return 1;
             }
-        } else if (starts_with(arg, "--date-seed=")) {
-            // TODO: read the seed file and set stored_year/month/day
-            //const char *file = arg + strlen("--date-seed=");
-            //read_date_seed(file);  // implement this function
+        } else if (strcmp(arg, "--require-valid") == 0) {
+            require_valid_nmea = 1;
+        } else if (strcmp(arg, "--allow-invalid") == 0) {
+            require_valid_nmea = 0;
+        } else if (strcmp(arg, "--disable-stored-date") == 0) {
+            stored_date_enabled = 0;
+            stored_date_persistence = 0;
+        } else if (strcmp(arg, "--no-stored-date-persistence") == 0) {
+            stored_date_persistence = 0;
+        } else if (strncmp(arg, "--date-seed-dir=", 16) == 0) {
+            const char *begin;
+            int len = trim_spaces(arg + 16, &begin);
+            if (len >= PATH_MAX_LEN)
+                len = PATH_MAX_LEN - 1;
+            strncpy(date_seed_dir, begin, len);
+            date_seed_dir[len] = '\0';
         } else {
             fprintf(stderr, "Unknown option: %s\n", arg);
-            goto usage;
+            usage_short(argv[0]);
+            return 1;
         }
     }
 
-    // Remaining args: device-name [unit-number]
+    // Parse positional arguments
     if (argi >= argc) {
-        fprintf(stderr, "Missing device-name\n");
-        goto usage;
+        fprintf(stderr, "Missing device name\n");
+        usage_short(argv[0]);
+        return 1;
     }
-    devname = argv[argi++];
 
+    devname = argv[argi++];
     if (argi < argc) {
         unit = atoi(argv[argi]);
         if (unit < 0 || unit > 255) {
@@ -864,6 +1244,14 @@ usage:
             fprintf(stderr, "Unsupported or invalid device name: %s\n", devname);
             return 1;
         }
+    }
+
+    // If Stored Date is enabled and persistence is enabled, build seed file paths
+    if (stored_date_persistence) {
+        append_filename_to_dir(date_seed_dir, date_seed_file, date_seed_path);
+        append_filename_to_dir(date_seed_dir, time_seed_file, time_seed_path);
+        // if date.seed file exists then load it
+        read_seed_files();
     }
 
     /***************************************************************************/
@@ -955,24 +1343,26 @@ usage:
                 tmp.nsamples = shm->nsamples;   // keep sample buffer
                 tmp.clockTimeStampSec  = ts.tv_sec;
                 tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                if (recvtime_mode == RECV_GPS) {
-                    tmp.receiveTimeStampSec  = ts.tv_sec;
-                    tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
-                } else if (recvtime_mode == RECV_REALTIME) {
-                    struct timespec ts_real = {0};
-                    clock_gettime(CLOCK_REALTIME, &ts_real);
-                    tmp.receiveTimeStampSec  = ts_real.tv_sec;
-                    tmp.receiveTimeStampUSec = ts_real.tv_nsec / 1000;
-                } else if (recvtime_mode == RECV_MONOTONIC) {
-                    // seconds since system boot
-                    struct timespec ts_mono = {0};
-                    clock_gettime(CLOCK_MONOTONIC, &ts_mono);
-                    tmp.receiveTimeStampSec  = ts_mono.tv_sec;
-                    tmp.receiveTimeStampUSec = ts_mono.tv_nsec / 1000;
-                } else if (recvtime_mode == RECV_ZERO) {
-                    tmp.receiveTimeStampSec  = 0;
-                    tmp.receiveTimeStampUSec = 0;
+                struct timespec t = {0};
+                switch (recvtime_mode) {
+                    case RECV_GPS:
+                        t = ts;  // already filled in elsewhere
+                        break;
+                    case RECV_REALTIME:
+                        clock_gettime(CLOCK_REALTIME, &t);
+                        break;
+                    case RECV_MONOTONIC:
+                        clock_gettime(CLOCK_MONOTONIC, &t);
+                        break;
+                    case RECV_ZERO:
+                        // leave t zeroed
+                        break;
+                    default:
+                        // unknown mode — leave zeroed
+                        break;
                 }
+                tmp.receiveTimeStampSec  = t.tv_sec;
+                tmp.receiveTimeStampUSec = t.tv_nsec / 1000;
 
                 if (shm != NULL) {
                     // Safe update to shared memory
