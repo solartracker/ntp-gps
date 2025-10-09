@@ -974,7 +974,7 @@ void write_printf(int fd, const char *fmt, ...) {
     }
 }
 
-int update_stored_date(const char *input, int client_fd) {
+int update_stored_date_from_command(const char *input, int client_fd) {
     if (!input)
         return -1;
     int result = 0;
@@ -1068,7 +1068,7 @@ static void handle_client_command(int client_fd)
 
         if (starts_with(buf, "SETDATE ")) {
             const char *new_date = buf + 8;
-            if (update_stored_date(new_date, client_fd) == 0)
+            if (update_stored_date_from_command(new_date, client_fd) == 0)
                 printf("Updated stored date to: %s\n", new_date);
 
         } else if (starts_with(buf, "GETDATE")) {
