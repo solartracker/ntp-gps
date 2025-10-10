@@ -444,7 +444,7 @@ void update_stored_date(const int hh, const int mm, const int ss)
     }
 
     if (days_passed > 0) {
-        // Add days to stored date using adjust_date_mcu
+        // Add elapsed days of monotonic time to stored date
         adjust_date_fast(&stored_year, &stored_month, &stored_day,
                          0, 0, (int)days_passed);
     }
@@ -719,6 +719,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
             }
         }
         stored_hour = hh;
+        stored_minute = mm 
+        stored_second = ss;
     }
 
     // Parse digits for fractional seconds and convert to integer
