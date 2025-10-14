@@ -119,14 +119,6 @@ int debug_trace = 0;
 int begin_shutdown = 0;
 
 
-// Get monotonic time in nanoseconds
-static inline uint64_t monotonic_now_ns(void)
-{
-    struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return (uint64_t)t.tv_sec * 1000000000ULL + (uint64_t)t.tv_nsec;
-}
-
 /* Check if year is a leap year */
 static inline int is_leap(const int year) {
     return (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
@@ -271,14 +263,6 @@ int adjust_time(int *hour, int *minute, int *second,
     return 0;
 }
 
-int time_rollover(const int hour, const int minute, const int second) {
-    if (compare_times(hour, minute, second,
-                      stored_hour, stored_minute, stored_second) < 0)
-        return 0; // yes, there was a roll-over (or we have jumped backwards in time)
-    else
-        return -1; // no
-}
-
 int compare_times(const int hh_lhs, const int mm_lhs, const int ss_lhs,
                   const int hh_rhs, const int mm_rhs, const int ss_rhs) {
     if (hh_lhs < hh_rhs)
@@ -295,6 +279,14 @@ int compare_times(const int hh_lhs, const int mm_lhs, const int ss_lhs,
         return 1;
     else
         return 0;
+}
+
+int time_rollover(const int hour, const int minute, const int second) {
+    if (compare_times(hour, minute, second,
+                      stored_hour, stored_minute, stored_second) < 0)
+        return 0; // yes, there was a roll-over (or we have jumped backwards in time)
+    else
+        return -1; // no
 }
 
 // Adjust date function, integer-only
@@ -330,7 +322,7 @@ int adjust_date_mcu(int *year, int *month, int *day,
     return 0;
 }
 
-// Get monotonic time in ns
+// Get monotonic time in nanoseconds
 static inline uint64_t monotonic_now_ns(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
@@ -408,54 +400,6 @@ int adjust_date_fast(int *year, int *month, int *day,
     *month = m;
 
     return 0;
-}
-
-/**
- * update_stored_date
- * Call when a time-only GPS message arrives.
- * Uses monotonic ticks to handle multi-day gaps since last full GPS fix.
- */
-void update_stored_date(const int hh, const int mm, const int ss)
-{
-    if (ticklatest_ns == 0) {
-        // No reference yet, cannot compute days elapsed
-        stored_hour   = hh;
-        stored_minute = mm;
-        stored_second = ss;
-        return;
-    }
-
-    uint64_t now_ns = monotonic_now_ns();
-    uint64_t delta_ns = now_ns - ticklatest_ns;
-
-    // Convert elapsed ns to seconds
-    time_t delta_sec = delta_ns / 1000000000ULL;
-
-    // Compute full days elapsed since last full GPS fix
-    time_t days_passed = delta_sec / 86400ULL;
-
-    // Single-day rollover if time went backward (hh:mm:ss < stored)
-    if (days_passed == 0 &&
-        (hh < stored_hour ||
-        (hh == stored_hour && mm < stored_minute) ||
-        (hh == stored_hour && mm == stored_minute && ss < stored_second)))
-    {
-        days_passed = 1;
-    }
-
-    if (days_passed > 0) {
-        // Add elapsed days of monotonic time to stored date
-        adjust_date_fast(&stored_year, &stored_month, &stored_day,
-                         0, 0, (int)days_passed);
-    }
-
-    // Update stored time
-    stored_hour   = hh;
-    stored_minute = mm;
-    stored_second = ss;
-
-    // Update monotonic reference
-    ticklatest_ns = now_ns;
 }
 
 /*
@@ -569,13 +513,12 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     int year = 0;
     int month = 0;
     int day = 0;
-    if (stored_date_enabled) {
-        // default to our internally stored and maintained date.  this is used when
-        // the GPS is reporting time only, without the date component.
-        year = stored_year;
-        month = stored_month;
-        day = stored_day;
-    }
+
+    // default to our internally stored and maintained date.  this is used when
+    // the GPS is reporting time only, without the date component.
+    year = stored_year;
+    month = stored_month;
+    day = stored_day;
 
     char *tok = strtok_empty_r(buf, ",", &saveptr);
     if (!tok)
@@ -675,53 +618,19 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         return -1; // unknown line type
     }
 
-    if (data_invalid && require_valid_nmea)
-        return -1;
-
+    // Exit here if no time data is found in the GPS message. Nothing to do. 
+    // The GPS is either cold starting or no satellites can be seen.
     int len_time_str = strlen(time_str);
     if (!time_str || len_time_str < 6)
         return -1;
 
+    // Process the time field
     int hh = digitsToInt(time_str, 2);
     int mm = digitsToInt(time_str + 2, 2);
     int ss = digitsToInt(time_str + 4, 2);
     if (hh < 0 || mm < 0 || ss < 0)
         return -1;
     TRACE(">>>>>> %s time: %02d:%02d:%02d\n", tok, hh, mm, ss);
-
-    // Roll-over detection for stored date
-    if (!stored_date_enabled) {
-        stored_hour = 0;
-        stored_minute = 0;
-        stored_second = 0;
-    }
-    else {
-        if (!date_present && stored_day) {
-            if (time_rollover(hh, mm, ss) == 0) {
-                TRACE(">>>>>> the stored date was rolled over\n");
-                stored_day++;
-                // Adjust February for leap year
-                if (stored_month == 2 && is_leap(stored_year)) {
-                    if (stored_day > 29) {
-                        stored_day = 1;
-                        stored_month++;
-                }
-                } else {
-                    if (stored_day > days_in_month[stored_month - 1]) {
-                        stored_day = 1;
-                        stored_month++;
-                    }
-                }
-                if (stored_month > 12) {
-                    stored_month = 1;
-                    stored_year++;
-                }
-            }
-        }
-        stored_hour = hh;
-        stored_minute = mm 
-        stored_second = ss;
-    }
 
     // Parse digits for fractional seconds and convert to integer
     // without using any floating point math
@@ -730,29 +639,80 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         nsec = fractionToNsec(time_str + 7);
     }
 
-    struct tm tm = {0};
-    tm.tm_year = year - 1900;
-    tm.tm_mon  = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hh;
-    tm.tm_min  = mm;
-    tm.tm_sec  = ss;
-
-    time_t t = timegm_mcu(&tm);
-    if (t < 0)
-        return -1;
-
-    // Remember the system tick of the first valid GPS datetime and
-    // the system tick of the latest valid GPS datetime.  Obviously,
-    // this can only be done with RMC and ZDA messages containing
-    // both valid date and time.
-    if (date_present) {
-        // TODO: remember stuff here
+    // Convert hh:mm:ss to Epoch time (seconds since 1970-01-01 00:00:00 UTC)
+    time_t t = 0;
+    if (day) {
+        struct tm tm = {0};
+        tm.tm_year = year - 1900;
+        tm.tm_mon  = month - 1;
+        tm.tm_mday = day;
+        tm.tm_hour = hh;
+        tm.tm_min  = mm;
+        tm.tm_sec  = ss;
+        t = timegm_mcu(&tm);
+        if (t < 0)
+            return -1;
     }
 
+    // We roll-over the stored date for time-only GPS messages.
+    // We don't roll-over the stored date when:
+    // 1. The current GPS message contains a full date/time, so the stored date 
+    //    is updated with the GPS date
+    // 2. There is no stored date because the GPS has not gotten a fix yet and 
+    //    the user did not specify a date seed
+    uint64_t now_ns = monotonic_now_ns();
+
+    if (!date_present && stored_day) {
+        if (ticklatest_ns != 0) {
+            // Compute elapsed monotonic seconds
+            uint64_t delta_ns = now_ns - ticklatest_ns;
+            time_t delta_sec  = (time_t)(delta_ns / 1000000000ULL);
+
+            // Split into full days and remainder
+            time_t full_days = delta_sec / 86400ULL;
+            time_t partial_sec = delta_sec % 86400ULL;
+
+            // Last GPS time-of-day in seconds
+            time_t gps_sec_of_day = gpslatest_seconds % 86400;
+
+            // If partial day + last GPS seconds >= 1 day → rollover
+            if ((partial_sec + gps_sec_of_day) >= 86400) {
+                full_days += 1;
+            }
+
+            if (full_days > 0) {
+                adjust_date_mcu(&stored_year, &stored_month, &stored_day,
+                                 0, 0, (int)full_days);
+            }
+        }
+    }
+
+    // Update stored time
+    stored_hour = hh;
+    stored_minute = mm;
+    stored_second = ss;
+    if (t) {
+        ticklatest_ns = now_ns;
+        gpslatest_seconds = t;
+    }
+
+    // Exit here if the user has chosen to require a GPS position fix and
+    // the GPS does not yet have a position fix.  This ensures high reliability
+    // for valid date/time.  You definitely need a clear view of the open sky
+    // if this option is enabled.
+    if (data_invalid && require_valid_nmea)
+        return -1;
+
+    // Missing the GPS date and the user chose to disable the stored date feature
+    if (!stored_date_enabled && !date_present)
+        return -1;
+
     // Return the GPS time
-    ts->tv_sec  = t;
-    ts->tv_nsec = nsec;
+    if (t) {
+        ts->tv_sec  = t;
+        ts->tv_nsec = nsec;
+    } else
+        return -1;
 
     return 0;
 }
@@ -985,6 +945,7 @@ int update_stored_date_from_command(const char *input, int client_fd) {
         write_printf(client_fd, "ERROR: date locked (NMEA:%04d-%02d-%02d)\n", stored_year, stored_month, stored_day);
     }
     else { // Stored date is User
+// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
         int yy=0, mm=0, dd=0;
         result = parse_date(input, &yy, &mm, &dd);
         if (result == 0) {
@@ -1212,6 +1173,7 @@ static int read_date_seed(void) {
         return -1;
     }
 
+// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
     stored_year  = y;
     stored_month = m;
     stored_day   = d;
@@ -1244,6 +1206,7 @@ static int read_time_seed(void) {
         return -1;
     }
 
+// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
     stored_hour = hh;
 
     TRACE("Loaded stored hour: %02d\n", hh);
@@ -1266,6 +1229,7 @@ int write_seed_files(void) {
         TRACE("Failed to create directory %s: %s\n", date_seed_dir, strerror(errno));
     }
 
+// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
     // --- Write date.seed ---
     f = fopen(date_seed_path, "w");
     if (f) {
