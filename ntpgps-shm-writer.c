@@ -37,6 +37,7 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <getopt.h>
 
 #ifdef DEBUG_TRACE
   #define TRACE(fmt, ...)  printf(fmt, ##__VA_ARGS__)
@@ -88,28 +89,18 @@ struct shmTime {
     int    dummy[8];            /* reserved */
 };
 
-enum recvtime_mode_t {
-    RECV_GPS,
-    RECV_REALTIME,
-    RECV_MONOTONIC,
-    RECV_ZERO,
-    NUM_MODES_RECV
-};
-enum recvtime_mode_t recvtime_mode = RECV_GPS; // default
-const char *recvtime_desc[] = {"GPS","REALTIME","MONOTONIC","ZERO","(unknown)"};
-
 #define PATH_MAX_LEN 256
-const char date_seed_dir_default[] = "/var/lib/ntpgps";
+//const char date_seed_dir_default[] = "/var/lib/ntpgps";
+const char date_seed_dir_default[] = "/run/ntpgps";
 const char date_seed_file[] = "date.seed";
 const char time_seed_file[] = "time.seed";
 char date_seed_dir[PATH_MAX_LEN];
 char date_seed_path[PATH_MAX_LEN];
 char time_seed_path[PATH_MAX_LEN];
-int stored_date_enabled = 1;          // default: enabled
-int stored_date_persistence = 1;      // default: load/save enabled
 int stored_day = 0, stored_month = 0, stored_year = 0;
 int stored_hour = 0, stored_minute = 0, stored_second = 0;
-int stored_date = 0; // nmea=1, user=0
+int stored_date_source = 0;  // 1=nmea, 0=user
+int stored_date_changed = 0; // 1=date.seed file needs updating
 uint64_t tickstart_ns = 0;      // monotonic timestamp in nanoseconds of first valid GPS fix
 time_t   gpsstart_seconds = 0;  // GPS UTC seconds at that moment
 uint64_t ticklatest_ns = 0;     // monotonic timestamp in nanoseconds of latest GPS fix
@@ -561,7 +552,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 stored_day = day;
                 stored_month = month;
                 stored_year = year;
-                stored_date = 1;
+                if (stored_date_source == 0) stored_date_changed = 1;
+                stored_date_source = 1;
             }
         }
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
@@ -585,7 +577,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 stored_day = day;
                 stored_month = month;
                 stored_year = year;
-                stored_date = 1;
+                if (stored_date_source == 0) stored_date_changed = 1;
+                stored_date_source = 1;
             }
         }
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
@@ -683,6 +676,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
             if (full_days > 0) {
                 adjust_date_mcu(&stored_year, &stored_month, &stored_day,
                                  0, 0, (int)full_days);
+                stored_date_changed = 1;
             }
         }
     }
@@ -701,10 +695,6 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     // for valid date/time.  You definitely need a clear view of the open sky
     // if this option is enabled.
     if (data_invalid && require_valid_nmea)
-        return -1;
-
-    // Missing the GPS date and the user chose to disable the stored date feature
-    if (!stored_date_enabled && !date_present)
         return -1;
 
     // Return the GPS time
@@ -941,11 +931,10 @@ int update_stored_date_from_command(const char *input, int client_fd) {
         return -1;
     int result = 0;
 
-    if (stored_date == 1) { // Stored date is NMEA
+    if (stored_date_source == 1) { // Stored date is NMEA
         write_printf(client_fd, "ERROR: date locked (NMEA:%04d-%02d-%02d)\n", stored_year, stored_month, stored_day);
     }
     else { // Stored date is User
-// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
         int yy=0, mm=0, dd=0;
         result = parse_date(input, &yy, &mm, &dd);
         if (result == 0) {
@@ -1037,7 +1026,7 @@ static void handle_client_command(int client_fd)
         } else if (starts_with(buf, "GETDATE")) {
             write_printf(client_fd, "%04d-%02d-%02d (%s)\n",
                 stored_year, stored_month, stored_day,
-                (stored_date == 1) ? "NMEA" : "User");
+                (stored_date_source == 1) ? "NMEA" : "User");
 
         } else if (starts_with(buf, "SETALLOWINVALID")) {
             if (require_valid_nmea == 0) {
@@ -1058,44 +1047,6 @@ static void handle_client_command(int client_fd)
         } else if (starts_with(buf, "GETVALID")) {
             write_printf(client_fd, "UPDATED:require_valid_nmea=%s\n",
                 (require_valid_nmea == 1) ? "true" : "false");
-
-        } else if (starts_with(buf, "SETRECVTIME_GPS")) {
-            if (recvtime_mode == RECV_GPS) {
-                write_printf(client_fd, "OK\n");
-            } else {
-                recvtime_mode = RECV_GPS;
-                write_printf(client_fd, "UPDATED:recvtime_mode=GPS\n");
-            }
-
-        } else if (starts_with(buf, "SETRECVTIME_REALTIME")) {
-            if (recvtime_mode == RECV_REALTIME) {
-                write_printf(client_fd, "OK\n");
-            } else {
-                recvtime_mode = RECV_REALTIME;
-                write_printf(client_fd, "UPDATED:recvtime_mode=REALTIME\n");
-            }
-
-        } else if (starts_with(buf, "SETRECVTIME_MONOTONIC")) {
-            if (recvtime_mode == RECV_MONOTONIC) {
-                write_printf(client_fd, "OK\n");
-            } else {
-                recvtime_mode = RECV_MONOTONIC;
-                write_printf(client_fd, "UPDATED:recvtime_mode=MONOTONIC\n");
-            }
-
-        } else if (starts_with(buf, "SETRECVTIME_ZERO")) {
-            if (recvtime_mode == RECV_ZERO) {
-                write_printf(client_fd, "OK\n");
-            } else {
-                recvtime_mode = RECV_ZERO;
-                write_printf(client_fd, "UPDATED:recvtime_mode=ZERO\n");
-            }
-
-        } else if (starts_with(buf, "GETRECVTIME")) {
-            if (recvtime_mode >=0 && recvtime_mode < NUM_MODES_RECV) {
-                write_printf(client_fd, "recvtime_mode=%s\n",
-                    recvtime_desc[recvtime_mode]);
-            }
 
         } else if (starts_with(buf, "SETTRACEON")) {
             if (debug_trace == 1) {
@@ -1173,7 +1124,6 @@ static int read_date_seed(void) {
         return -1;
     }
 
-// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
     stored_year  = y;
     stored_month = m;
     stored_day   = d;
@@ -1183,44 +1133,7 @@ static int read_date_seed(void) {
     return 0;
 }
 
-static int read_time_seed(void) {
-    FILE *f = fopen(time_seed_path, "r");
-    if (!f) {
-        TRACE("Time seed file '%s' not found, skipping.\n", time_seed_path);
-        return 0;
-    }
-
-    char buf[64];
-    const size_t buflen = sizeof(buf) / sizeof(buf[0]);
-
-    if (!fgets(buf, buflen, f)) {
-        TRACE("Failed to read from time seed file '%s'\n", time_seed_path);
-        fclose(f);
-        return -1;
-    }
-    fclose(f);
-
-    int hh = 0, mm = 0, ss = 0;
-    if (parse_time(buf, &hh, &mm, &ss) != 0) {
-        TRACE("Failed to parse time from file '%s': %s\n", time_seed_path, buf);
-        return -1;
-    }
-
-// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
-    stored_hour = hh;
-
-    TRACE("Loaded stored hour: %02d\n", hh);
-
-    return 0;
-}
-
-static int read_seed_files(void) {
-    if (read_date_seed() != 0) return -1;
-    if (read_time_seed() != 0) return -1;
-    return 0;
-}
-
-int write_seed_files(void) {
+int write_date_seed(void) {
     FILE *f;
     int status = 0;
 
@@ -1229,7 +1142,6 @@ int write_seed_files(void) {
         TRACE("Failed to create directory %s: %s\n", date_seed_dir, strerror(errno));
     }
 
-// TODO: how to set ticklatest and gpslatest to get roll-over of stored date?
     // --- Write date.seed ---
     f = fopen(date_seed_path, "w");
     if (f) {
@@ -1241,72 +1153,45 @@ int write_seed_files(void) {
         status = -1;
     }
 
-    // --- Write time.seed ---
-    f = fopen(time_seed_path, "w");
-    if (f) {
-        fprintf(f, "%02d:%02d:%02d\n", stored_hour, stored_minute, stored_second);
-        fclose(f);
-        TRACE("Updated %s\n", time_seed_path);
-    } else {
-        TRACE("Failed to write %s: %s\n", time_seed_path, strerror(errno));
-        status = -1;
-    }
-
     return status;
 }
 
-static void print_usage(FILE *out, const char *progname) {
+static void print_usage(FILE *out, const char *progname)
+{
     fprintf(out,
-        "shm-writer - GPS NMEA to NTP SHM bridge\n"
-        "Copyright (C) 2025 Richard Elwell\n"
-        "Licensed under GPLv3 or later\n"
+        "Usage: %s [OPTIONS] <device> [unit]\n"
         "\n"
-        "Usage: %s [OPTIONS] <device-name> [unit-number]\n"
+        "Writes GPS time and position data to NTP shared memory (SHM) segments.\n"
+        "Intended for use with gpsd, chrony, or ntpd to provide an accurate time source.\n"
         "\n"
         "Positional arguments:\n"
-        "  device-name           Serial device (e.g., ttyACM0, ttyUSB1)\n"
-        "  unit-number           Optional NTP SHM unit (0..255), auto-detected from device if omitted\n"
+        "  <device>         GPS serial device path (e.g. /dev/ttyUSB0 or pts/1)\n"
+        "  [unit]           Optional SHM unit number (0–255). If omitted, inferred from device.\n"
         "\n"
         "Options:\n"
-        "  --recvtime=gps|realtime|monotonic|zero\n"
-        "                        Set receive timestamp source (default: gps)\n"
-        "  --require-valid       Only accept valid NMEA sentences\n"
-        "  --allow-invalid       Accept invalid NMEA sentences (default)\n"
-        "  --debug-trace         Enable debug trace output\n"
-        "\n"
-        "Stored Date and Seed File Options:\n"
-        "  --disable-stored-date\n"
-        "                        Disable the Stored Date feature entirely.\n"
-        "                        No internal date is maintained, and date/time seed files are not used.\n"
-        "\n"
-        "  --no-stored-date-persistence\n"
-        "                        Use a Stored Date internally, but do not load from or save to\n"
-        "                        date.seed or time.seed files.\n"
-        "\n"
-        "  --date-seed-dir=<DIR>\n"
-        "                        Override the default directory for the date and time seed files.\n"
-        "                        Default: %s\n"
-        "\n"
-        "General:\n"
-        "  -h, --help            Show this help message and exit\n"
+        "  -h, --help                 Show this help message and exit\n"
+        "  -d, --debug-trace          Enable detailed debug trace output\n"
+        "  -r, --require-valid        Require valid NMEA sentences (default)\n"
+        "  -a, --allow-invalid        Allow invalid NMEA sentences to update SHM\n"
+        "  -s, --date-seed-dir DIR    Directory for date-seed file storage\n"
         "\n"
         "Examples:\n"
-        "  %s ttyACM0\n"
-        "  %s ttyACM0 42\n"
-        "  %s --recvtime=monotonic --debug-trace ttyUSB1 120\n"
-        "  %s --date-seed-dir=/tmp/ntpgps ttyACM0\n"
-        "\n",
-        progname, date_seed_dir_default,
-        progname, progname, progname, progname
-    );
+        "  %s --debug-trace /dev/ttyUSB0\n"
+        "  %s -a -s /var/lib/ntpgps pts/1 120\n"
+        "\n"
+        "Exit codes:\n"
+        "  0  success\n"
+        "  1  usage or configuration error\n"
+        "  2  runtime failure\n",
+        progname, progname, progname);
 }
 
-static void usage_short(const char *progname) {
+static void usage_short(const char *progname)
+{
     fprintf(stderr,
-        "Usage: %s <device-name> [unit-number] [options]\n"
+        "Usage: %s [OPTIONS] <device> [unit]\n"
         "Try '%s --help' for more information.\n",
-        progname, progname
-    );
+        progname, progname);
 }
 
 int main(int argc, char *argv[]) {
@@ -1322,64 +1207,65 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Parse options first
-    int argi;
-    for (argi = 1; argi < argc; argi++) {
-        const char *arg = argv[argi];
-        if (arg[0] != '-') break;  // stop at first positional arg
+    // --- getopt_long setup ---
+    static struct option long_opts[] = {
+        {"help",           no_argument,       0, 'h'},
+        {"debug-trace",    no_argument,       0, 'd'},
+        {"require-valid",  no_argument,       0, 'r'},
+        {"allow-invalid",  no_argument,       0, 'a'},
+        {"date-seed-dir",  required_argument, 0, 's'},
+        {0, 0, 0, 0}
+    };
 
-        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
-            print_usage(stdout, argv[0]);
-            return 0;
-        } else if (strcmp(arg, "--debug-trace") == 0) {
-            debug_trace = 1;
-        } else if (starts_with(arg, "--recvtime=")) {
-            const char *mode_str = arg + strlen("--recvtime=");
-            if (strcmp(mode_str, "gps") == 0) {
-                recvtime_mode = RECV_GPS;
-            } else if (strcmp(mode_str, "realtime") == 0) {
-                recvtime_mode = RECV_REALTIME;
-            } else if (strcmp(mode_str, "monotonic") == 0) {
-                recvtime_mode = RECV_MONOTONIC;
-            } else if (strcmp(mode_str, "zero") == 0) {
-                recvtime_mode = RECV_ZERO;
-            } else {
-                fprintf(stderr, "Invalid --recvtime mode: %s\n", mode_str);
-                return 1;
+    int opt, opt_index = 0;
+    while ((opt = getopt_long(argc, argv, "hdras:", long_opts, &opt_index)) != -1) {
+        switch (opt) {
+            case 'h':
+                print_usage(stdout, argv[0]);
+                return 0;
+
+            case 'd':
+                debug_trace = 1;
+                break;
+
+            case 'r':
+                require_valid_nmea = 1;
+                break;
+
+            case 'a':
+                require_valid_nmea = 0;
+                break;
+
+            case 's': {
+                const char *begin;
+                int len = trim_spaces(optarg, &begin);
+                if (len >= PATH_MAX_LEN)
+                    len = PATH_MAX_LEN - 1;
+                strncpy(date_seed_dir, begin, len);
+                date_seed_dir[len] = '\0';
+                break;
             }
-        } else if (strcmp(arg, "--require-valid") == 0) {
-            require_valid_nmea = 1;
-        } else if (strcmp(arg, "--allow-invalid") == 0) {
-            require_valid_nmea = 0;
-        } else if (strcmp(arg, "--disable-stored-date") == 0) {
-            stored_date_enabled = 0;
-            stored_date_persistence = 0;
-        } else if (strcmp(arg, "--no-stored-date-persistence") == 0) {
-            stored_date_persistence = 0;
-        } else if (strncmp(arg, "--date-seed-dir=", 16) == 0) {
-            const char *begin;
-            int len = trim_spaces(arg + 16, &begin);
-            if (len >= PATH_MAX_LEN)
-                len = PATH_MAX_LEN - 1;
-            strncpy(date_seed_dir, begin, len);
-            date_seed_dir[len] = '\0';
-        } else {
-            fprintf(stderr, "Unknown option: %s\n", arg);
-            usage_short(argv[0]);
-            return 1;
+
+            case '?':  // getopt_long already printed an error
+                usage_short(argv[0]);
+                return 1;
+
+            default:
+                break;
         }
     }
 
-    // Parse positional arguments
-    if (argi >= argc) {
+    // --- Positional arguments ---
+    if (optind >= argc) {
         fprintf(stderr, "Missing device name\n");
         usage_short(argv[0]);
         return 1;
     }
 
-    devname = argv[argi++];
-    if (argi < argc) {
-        unit = atoi(argv[argi]);
+    devname = argv[optind++];
+
+    if (optind < argc) {
+        unit = atoi(argv[optind]);
         if (unit < 0 || unit > 255) {
             fprintf(stderr, "Invalid unit number: %d\n", unit);
             return 1;
@@ -1392,13 +1278,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // If Stored Date is enabled and persistence is enabled, build seed file paths
-    if (stored_date_persistence) {
-        append_filename_to_dir(date_seed_dir, date_seed_file, date_seed_path);
-        append_filename_to_dir(date_seed_dir, time_seed_file, time_seed_path);
-        // if date.seed file exists then load it
-        read_seed_files();
-    }
+    // Build seed file paths
+    append_filename_to_dir(date_seed_dir, date_seed_file, date_seed_path);
+    read_date_seed();
 
     /***************************************************************************/
 
@@ -1489,26 +1371,8 @@ int main(int argc, char *argv[]) {
                 tmp.nsamples = shm->nsamples;   // keep sample buffer
                 tmp.clockTimeStampSec  = ts.tv_sec;
                 tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                struct timespec t = {0};
-                switch (recvtime_mode) {
-                    case RECV_GPS:
-                        t = ts;  // already filled in elsewhere
-                        break;
-                    case RECV_REALTIME:
-                        clock_gettime(CLOCK_REALTIME, &t);
-                        break;
-                    case RECV_MONOTONIC:
-                        clock_gettime(CLOCK_MONOTONIC, &t);
-                        break;
-                    case RECV_ZERO:
-                        // leave t zeroed
-                        break;
-                    default:
-                        // unknown mode — leave zeroed
-                        break;
-                }
-                tmp.receiveTimeStampSec  = t.tv_sec;
-                tmp.receiveTimeStampUSec = t.tv_nsec / 1000;
+                tmp.receiveTimeStampSec  = ts.tv_sec;
+                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
 
                 if (shm != NULL) {
                     // Safe update to shared memory
@@ -1519,6 +1383,11 @@ int main(int argc, char *argv[]) {
                     shm->valid = 1;          // mark new data valid
                 }
                 TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+            }
+
+            if (stored_date_changed) {
+                stored_date_changed = 0;
+                write_date_seed();
             }
         } else {
             line[pos++] = c;

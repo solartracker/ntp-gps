@@ -151,6 +151,8 @@ files=(
     /etc/systemd/system/ntpgps-gpsd-override.service
     /run/ntpgps/ntpgps.conf
     /run/ntpgps/keys.conf
+    /run/ntpgps/date.seed
+    /var/lib/ntpgps/date.seed
 )
 for f in "${files[@]}"; do
     sudo rm -vf "$f" || true
@@ -195,7 +197,7 @@ fi
 ' # END sudo bash
 
 # Remove the directories
-cleanup_empty_dirs /run/ntpgps /etc/ntpgps
+cleanup_empty_dirs /run/ntpgps /etc/ntpgps /var/lib/ntpgps
 
 # Clean NTP configs
 echo "[*] Cleaning ntp.conf / ntpsec.conf..."
