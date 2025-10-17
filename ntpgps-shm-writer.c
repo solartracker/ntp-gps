@@ -1206,9 +1206,10 @@ static void usage_short(const char *progname)
         progname, progname);
 }
 
-void handle_sigterm(int sig) {
-    (void)sig;
-    atomic_store(&stop, 1);
+static void handle_signal(int sig)
+{
+    if (sig == SIGINT || sig == SIGTERM || sig == SIGUSR1)
+        atomic_store(&stop, 1);
 }
 
 // --- Socket thread ---
@@ -1252,7 +1253,7 @@ static void* socket_thread_func(void *arg)
         }
 
         if (atomic_load(&begin_shutdown) == 1)
-            atomic_store(&stop, 1);
+            kill(getpid(), SIGUSR1);   // wake pause() in main thread
     }
 
     return NULL;
@@ -1312,9 +1313,6 @@ void* gps_thread_func(void *arg) {
         } else {
             line[pos++] = c;
         }
-
-        if (atomic_load(&begin_shutdown) == 1)
-            atomic_store(&stop, 1);
     }
     return NULL;
 }
@@ -1430,11 +1428,12 @@ int main(int argc, char *argv[]) {
 
     // Respond to CTRL+C and kill
     struct sigaction sa = {0};
-    sa.sa_handler = handle_sigterm;
+    sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;  // <-- no SA_RESTART
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT,  &sa, NULL);
+    sigaction(SIGUSR1, &sa, NULL);
 
     // Ignore SIGPIPE (broken pipe when client disconnects)
     struct sigaction sa_pipe = {0};
