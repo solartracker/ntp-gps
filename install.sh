@@ -245,7 +245,7 @@ files=(
     "755 usr/local/bin/ntpgps-ntp-remove.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gps-setup.sh /usr/local/bin"
     "755 usr/local/bin/ntpgps-gpsnum.sh /usr/local/bin"
-    "644 etc/apt/apt.conf.d/99-ntpgps-hook /etc/apt/apt.conf.d"
+#    "644 etc/apt/apt.conf.d/99-ntpgps-hook /etc/apt/apt.conf.d"
     "644 etc/ntpgps/template/driver20-gps-gpzda.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/driver20-gps-gprmc.conf /etc/ntpgps/template"
     "644 etc/ntpgps/template/driver20-gps-gpzda+gprmc.conf /etc/ntpgps/template"
