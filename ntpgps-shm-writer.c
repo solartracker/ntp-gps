@@ -1182,6 +1182,7 @@ static void print_usage(FILE *out, const char *progname)
         "Options:\n"
         "  -h, --help                 Show this help message and exit\n"
         "  -d, --debug-trace          Enable detailed debug trace output\n"
+        "  -n, --noraw                Do not set raw mode (useful for testing on PTY)\n"
         "  -r, --require-valid        Require valid NMEA sentences (default)\n"
         "  -a, --allow-invalid        Allow invalid NMEA sentences to update SHM\n"
         "  -s, --date-seed-dir DIR    Directory for date-seed file storage\n"
@@ -1318,9 +1319,23 @@ void* gps_thread_func(void *arg) {
     return NULL;
 }
 
+int configure_serial_raw(int fd) {
+    struct termios tio = {0};
+    if (tcgetattr(fd, &tio) < 0) { perror("tcgetattr"); return 1; }
+    cfsetispeed(&tio, B9600);
+    cfsetospeed(&tio, B9600);
+    cfmakeraw(&tio);
+    tio.c_cc[VMIN]  = 0; // read() returns immediately if no data
+    tio.c_cc[VTIME] = 0; // timeout after 0.0s (units of 100ms)
+    if (tcsetattr(fd, TCSANOW, &tio) < 0) { perror("tcsetattr"); return 1; }
+
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     const char *devname = NULL;
     int unit = -1;
+    int no_raw = 0;
 
     // Initialize default date seed directory
     strncpy(date_seed_dir, date_seed_dir_default, PATH_MAX_LEN - 1);
@@ -1335,6 +1350,7 @@ int main(int argc, char *argv[]) {
     static struct option long_opts[] = {
         {"help",           no_argument,       0, 'h'},
         {"debug-trace",    no_argument,       0, 'd'},
+        {"noraw",          no_argument,       0, 'n'},
         {"require-valid",  no_argument,       0, 'r'},
         {"allow-invalid",  no_argument,       0, 'a'},
         {"date-seed-dir",  required_argument, 0, 's'},
@@ -1350,6 +1366,10 @@ int main(int argc, char *argv[]) {
 
             case 'd':
                 debug_trace = 1;
+                break;
+
+            case 'n':
+                no_raw = 1;
                 break;
 
             case 'r':
@@ -1426,22 +1446,23 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "shm_writer: device %s using unit %d (key=0x%X)\n",
             dev_path, unit, NTPD_BASE + unit);
 
+    // Open serial device for GPS (source)
     int fd = open(dev_path, O_RDONLY | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) { perror("open"); return 1; }
 
     // Configure raw mode
-    struct termios tio;
-    if (tcgetattr(fd, &tio) < 0) { perror("tcgetattr"); return 1; }
-    cfsetispeed(&tio, B9600);
-    cfsetospeed(&tio, B9600);
-    cfmakeraw(&tio);
-    tio.c_cc[VMIN]  = 0; // read() returns immediately if no data
-    tio.c_cc[VTIME] = 0; // timeout after 0.1s (units of 100ms)
-    if (tcsetattr(fd, TCSANOW, &tio) < 0) { perror("tcsetattr"); return 1; }
+    if (!no_raw) {
+        if (configure_serial_raw(fd)) return 1;
+        TRACE("Raw mode enabled on %s\n", dev_path);
+    } else {
+        TRACE("Raw mode skipped on %s\n", dev_path);
+    }
 
+    // Create Unix socket for accepting user commands
     int listen_fd = setup_unix_socket(unit);
     if (listen_fd < 0) return 1;
 
+    // Shared memory segment (destination)
     int shmid = shmget(NTPD_BASE + unit, sizeof(struct shmTime), IPC_CREAT | 0666);
     if (shmid < 0) { perror("shmget"); return 1; }
 
