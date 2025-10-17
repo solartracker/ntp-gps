@@ -178,7 +178,7 @@ compile_shm_writer() {
     echo "[*] Checking ntpgps-shm-writer binary..."
     if [ ! -f "$bin" ] || [ "$bin" -ot "$src" ]; then
         echo "[*] Compiling ntpgps-shm-writer..."
-        gcc -O2 -Wall "$src" -o "$bin"
+        gcc -std=c11 -O2 -Wall "$src" -o "$bin"
 
         echo "[*] ntpgps-shm-writer compiled successfully."
     else
