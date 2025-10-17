@@ -122,9 +122,10 @@ time_t   gpsstart_seconds = 0;  // GPS UTC seconds at that moment
 uint64_t ticklatest_ns = 0;     // monotonic timestamp in nanoseconds of latest GPS fix
 time_t   gpslatest_seconds = 0; // latest GPS UTC seconds
 static char sock_path[108];
-static atomic_int require_valid_nmea = 0; // for RMC,GLL,GGA
+int require_valid_nmea = 0; // for RMC,GLL,GGA
 static atomic_int debug_trace = 0;
 static atomic_int begin_shutdown = 0;
+static atomic_int stop = 0;
 static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -1203,8 +1204,6 @@ static void usage_short(const char *progname)
         "Try '%s --help' for more information.\n",
         progname, progname);
 }
-
-static atomic_int stop = 0;
 
 void handle_sigterm(int sig) {
     (void)sig;
