@@ -17,32 +17,48 @@
  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 *******************************************************************************/
-#include <signal.h>
-#include <stdlib.h>
+#define _DEFAULT_SOURCE
+#define _POSIX_C_SOURCE 199309L
+#define _XOPEN_SOURCE 700
+#include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stdatomic.h>
 #include <unistd.h>
+#include <ctype.h>
+#include <getopt.h>
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
-#include <termios.h>
-#include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <ctype.h>
-#include <stdint.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdarg.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <getopt.h>
+#include <sys/select.h>
+#include <pthread.h>
+#include <signal.h>
+#include <time.h>
 
 #ifdef DEBUG_TRACE
-  #define TRACE(fmt, ...)  printf(fmt, ##__VA_ARGS__)
+  #define TRACE(fmt, ...) \
+    do { \
+        pthread_mutex_lock(&trace_mutex); \
+        printf(fmt, ##__VA_ARGS__); \
+        pthread_mutex_unlock(&trace_mutex); \
+    } while (0)
 #else
-  #define TRACE(fmt, ...)  if (debug_trace) printf(fmt, ##__VA_ARGS__)
+  #define TRACE(fmt, ...) \
+    do { \
+        if (atomic_load(&debug_trace)) { \
+            pthread_mutex_lock(&trace_mutex); \
+            printf(fmt, ##__VA_ARGS__); \
+            pthread_mutex_unlock(&trace_mutex); \
+        } \
+    } while (0)
 #endif
 
 #define NTPD_BASE   0x4e545030  /* "NTP0" */
@@ -105,10 +121,12 @@ uint64_t tickstart_ns = 0;      // monotonic timestamp in nanoseconds of first v
 time_t   gpsstart_seconds = 0;  // GPS UTC seconds at that moment
 uint64_t ticklatest_ns = 0;     // monotonic timestamp in nanoseconds of latest GPS fix
 time_t   gpslatest_seconds = 0; // latest GPS UTC seconds
-int require_valid_nmea = 0; // for RMC,GLL,GGA
-int debug_trace = 0;
-int begin_shutdown = 0;
-
+static char sock_path[108];
+static atomic_int require_valid_nmea = 0; // for RMC,GLL,GGA
+static atomic_int debug_trace = 0;
+static atomic_int begin_shutdown = 0;
+static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t shared_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Check if year is a leap year */
 static inline int is_leap(const int year) {
@@ -549,9 +567,9 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 else
                     year = yy + 2000;
 
-                stored_day = day;
-                stored_month = month;
                 stored_year = year;
+                stored_month = month;
+                stored_day = day;
                 if (stored_date_source == 0) stored_date_changed = 1;
                 stored_date_source = 1;
             }
@@ -574,9 +592,9 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
                 month = mm;
                 year  = yy;
 
-                stored_day = day;
-                stored_month = month;
                 stored_year = year;
+                stored_month = month;
+                stored_day = day;
                 if (stored_date_source == 0) stored_date_changed = 1;
                 stored_date_source = 1;
             }
@@ -584,8 +602,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
     }
     else if (strcmp(tok, "GLL") == 0) {
-        // time-only line, only valid if a previous date exists
-        if (stored_year == 0) 
+        // time-only line, only valid if a stored date exists
+        if (stored_day == 0) 
             return -1;
         strtok_empty_r(NULL, ",", &saveptr);
         strtok_empty_r(NULL, ",", &saveptr);
@@ -596,8 +614,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
     }
     else if (strcmp(tok, "GGA") == 0) {
-        // time-only line, only valid if a previous date exists
-        if (stored_year == 0) 
+        // time-only line, only valid if a stored date exists
+        if (stored_day == 0) 
             return -1;
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
         strtok_empty_r(NULL, ",", &saveptr);
@@ -932,7 +950,11 @@ int update_stored_date_from_command(const char *input, int client_fd) {
     int result = 0;
 
     if (stored_date_source == 1) { // Stored date is NMEA
-        write_printf(client_fd, "ERROR: date locked (NMEA:%04d-%02d-%02d)\n", stored_year, stored_month, stored_day);
+        write_printf(client_fd, 
+                     "ERROR: date locked (NMEA:%04d-%02d-%02d)\n", 
+                     stored_year, 
+                     stored_month, 
+                     stored_day);
     }
     else { // Stored date is User
         int yy=0, mm=0, dd=0;
@@ -957,10 +979,9 @@ static int setup_unix_socket(int unit)
 {
     int listen_fd;
     struct sockaddr_un addr;
-    char path[108];
 
-    snprintf(path, sizeof(path), SOCKET_PATH_FMT, unit);
-    unlink(path);  // remove stale socket file
+    snprintf(sock_path, sizeof(sock_path), SOCKET_PATH_FMT, unit);
+    unlink(sock_path);  // remove stale socket file
 
     listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (listen_fd < 0) {
@@ -970,8 +991,7 @@ static int setup_unix_socket(int unit)
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
-
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", sock_path);
 
     if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind");
@@ -989,8 +1009,19 @@ static int setup_unix_socket(int unit)
     int flags = fcntl(listen_fd, F_GETFL, 0);
     fcntl(listen_fd, F_SETFL, flags | O_NONBLOCK);
 
-    printf("Listening on %s\n", path);
+    printf("Listening on %s\n", sock_path);
     return listen_fd;
+}
+
+static void cleanup_unix_socket(void)
+{
+    if (sock_path[0] != '\0') {
+        if (unlink(sock_path) == 0) {
+            TRACE("Removed socket: %s\n", sock_path);
+        } else if (errno != ENOENT) {
+            perror("unlink");
+        }
+    }
 }
 
 // Trim trailing \n or \r from a string (in-place)
@@ -1069,7 +1100,7 @@ static void handle_client_command(int client_fd)
                 (debug_trace == 1) ? "true" : "false");
 
         } else if (starts_with(buf, "SHUTDOWN")) {
-            begin_shutdown = 1;
+            atomic_store(&begin_shutdown, 1);
             write_printf(client_fd, "OK\n");
 
         } else {
@@ -1078,27 +1109,6 @@ static void handle_client_command(int client_fd)
     }
 
     close(client_fd);
-}
-
-static void poll_socket_server(int listen_fd)
-{
-    // Check for new client connections (non-blocking)
-    struct sockaddr_un client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_len);
-
-    if (client_fd >= 0) {
-        handle_client_command(client_fd);
-    } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        perror("accept");
-    }
-}
-
-static volatile sig_atomic_t stop = 0;
-
-void handle_sigterm(int sig) {
-    (void)sig;  // unused
-    stop = 1;
 }
 
 static int read_date_seed(void) {
@@ -1194,6 +1204,126 @@ static void usage_short(const char *progname)
         progname, progname);
 }
 
+static atomic_int stop = 0;
+
+void handle_sigterm(int sig) {
+    (void)sig;
+    atomic_store(&stop, 1);
+}
+
+// --- Socket thread ---
+struct socket_thread_args {
+    int listen_fd;
+};
+
+static void* socket_thread_func(void *arg)
+{
+    int listen_fd = *(int*)arg;
+
+    while (!atomic_load(&stop)) {
+        fd_set readfds;
+        struct timeval tv;
+
+        FD_ZERO(&readfds);
+        FD_SET(listen_fd, &readfds);
+
+        // Timeout of 1 second to periodically check stop flag
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        int ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
+        if (ret < 0) {
+            if (errno == EINTR) continue; // interrupted by signal
+            perror("select");
+            break;
+        } else if (ret == 0) {
+            // timeout, check stop flag again
+            continue;
+        }
+
+        if (FD_ISSET(listen_fd, &readfds)) {
+            struct sockaddr_un client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            int client_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &client_len);
+            if (client_fd < 0) {
+                if (errno == EINTR) continue;
+                perror("accept");
+                continue;
+            }
+
+            pthread_mutex_lock(&shared_state_mutex);
+            handle_client_command(client_fd);
+            pthread_mutex_unlock(&shared_state_mutex);
+        }
+
+        if (atomic_load(&begin_shutdown) == 1)
+            atomic_store(&stop, 1);
+    }
+
+    return NULL;
+}
+
+// --- GPS thread ---
+struct gps_thread_args {
+    int fd;
+    struct shmTime *shm;
+};
+
+void* gps_thread_func(void *arg) {
+    struct gps_thread_args *args = arg;
+    int fd = args->fd;
+    struct shmTime *shm = args->shm;
+
+    char line[256];
+    int pos = 0;
+
+    while (!atomic_load(&stop)) {
+        char c;
+        int n = read(fd, &c, 1);
+        if (n <= 0) continue;
+
+        if (c == '\n' || pos >= (int)sizeof(line)-1) {
+            line[pos] = '\0';
+            pos = 0;
+
+            TRACE(">>> %s\n", line);
+            struct timespec ts = {0};
+
+            pthread_mutex_lock(&shared_state_mutex);
+            if (parse_nmea_time(line, &ts) == 0) {
+                struct shmTime tmp = *shm;  // copy old values
+                tmp.clockTimeStampSec = ts.tv_sec;
+                tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
+                tmp.receiveTimeStampSec = ts.tv_sec;
+                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+
+                // Safe update to shared memory
+                if (shm != NULL) {
+                    shm->valid = 0;          // mark old data invalid
+                    shm->count++;            // bump count before write
+                    *shm = tmp;              // copy all fields at once
+                    shm->count++;            // bump count after write
+                    shm->valid = 1;          // mark new data valid
+                }
+                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+            }
+
+            if (stored_date_changed) {
+                stored_date_changed = 0;
+                write_date_seed();
+            }
+            pthread_mutex_unlock(&shared_state_mutex);
+
+        } else {
+            line[pos++] = c;
+        }
+
+        if (atomic_load(&begin_shutdown) == 1)
+            atomic_store(&stop, 1);
+    }
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     const char *devname = NULL;
     int unit = -1;
@@ -1284,131 +1414,79 @@ int main(int argc, char *argv[]) {
 
     /***************************************************************************/
 
-    // Install signal handler
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
+    // Respond to CTRL+C and kill
+    struct sigaction sa = {0};
     sa.sa_handler = handle_sigterm;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;  // <-- no SA_RESTART
     sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);  // optional, also handle Ctrl+C
+    sigaction(SIGINT,  &sa, NULL);
 
     // Ignore SIGPIPE (broken pipe when client disconnects)
-    struct sigaction sa_pipe;
-    memset(&sa_pipe, 0, sizeof(sa_pipe));
+    struct sigaction sa_pipe = {0};
     sa_pipe.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa_pipe, NULL);
 
-    // Create UNIX socket
-    int listen_fd = setup_unix_socket(unit);
-    if (listen_fd < 0) {
-        fprintf(stderr, "Failed to create socket\n");
-        return 1;
-    }
-
-    // Device setup, shm attach, etc.
     char dev_path[64];
     snprintf(dev_path, sizeof(dev_path), "/dev/%s", devname);
-
     fprintf(stderr, "shm_writer: device %s using unit %d (key=0x%X)\n",
             dev_path, unit, NTPD_BASE + unit);
 
-    int fd = open(dev_path, O_RDONLY | O_NOCTTY);
+    int fd = open(dev_path, O_RDONLY | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) { perror("open"); return 1; }
 
+    // Configure raw mode
     struct termios tio;
-    tcgetattr(fd, &tio);
+    if (tcgetattr(fd, &tio) < 0) { perror("tcgetattr"); return 1; }
     cfsetispeed(&tio, B9600);
     cfsetospeed(&tio, B9600);
     cfmakeraw(&tio);
-    tcsetattr(fd, TCSANOW, &tio);
+    tio.c_cc[VMIN]  = 0; // read() returns immediately if no data
+    tio.c_cc[VTIME] = 0; // timeout after 0.1s (units of 100ms)
+    if (tcsetattr(fd, TCSANOW, &tio) < 0) { perror("tcsetattr"); return 1; }
 
-    int shmid = -1;
-    struct shmTime *shm = NULL;
-    if (unit >=0 && unit <= 255) {
-        shmid = shmget(NTPD_BASE + unit, sizeof(struct shmTime), IPC_CREAT | 0666);
-        if (shmid < 0) { perror("shmget"); return 1; }
+    int listen_fd = setup_unix_socket(unit);
+    if (listen_fd < 0) return 1;
 
-        shm = (struct shmTime*) shmat(shmid, NULL, 0);
-        if (shm == (void*)-1) { perror("shmat"); return 1; }
+    int shmid = shmget(NTPD_BASE + unit, sizeof(struct shmTime), IPC_CREAT | 0666);
+    if (shmid < 0) { perror("shmget"); return 1; }
 
-        shm->mode = 1;          // safe resource lock
-        shm->precision = -1;    // ~1 µs
-        shm->leap = 0;          // no leap second
-        shm->nsamples = 3;      // a small sample buffer
+    struct shmTime *shm = shmat(shmid, NULL, 0);
+    if (shm == (void*)-1) { perror("shmat"); return 1; }
+
+    shm->mode = 1;
+    shm->precision = -1;
+    shm->leap = 0;
+    shm->nsamples = 3;
+
+    pthread_t gps_thread = 0;
+    pthread_t sock_thread = 0;
+    struct gps_thread_args gargs = {fd, shm};
+    struct socket_thread_args sargs = {listen_fd};
+
+    int ret = pthread_create(&gps_thread, NULL, gps_thread_func, &gargs);
+    if (ret != 0) {
+        fprintf(stderr, "pthread_create failed: %s\n", strerror(ret));
+        return 1;
     }
 
-    char line[256];
-    int pos = 0;
-    while (!stop) {
-        char c;
-        int n = read(fd, &c, 1);
-        if (n == 0) {
-            fprintf(stderr, "shm_writer: device closed, exiting\n");
-            break;
-        }
-        if (n < 0) {
-            if (errno == EINTR) continue;   // interrupted by signal
-            if (errno == ENODEV || errno == EIO) {
-                fprintf(stderr, "shm_writer: device removed, exiting\n");
-                break;
-            }
-            perror("shm_writer: read error");
-            break;
-        }
-
-        if (c == '\n' || pos >= (int)sizeof(line)-1) {
-            line[pos] = '\0';
-            pos = 0;
-
-            TRACE(">>> %s\n", line);
-            struct timespec ts = {0};
-            if (parse_nmea_time(line, &ts) == 0) {
-
-                // Fill a temporary structure first
-                struct shmTime tmp;
-                tmp.mode = shm->mode;           // keep mode
-                tmp.precision = shm->precision; // keep precision
-                tmp.leap = shm->leap;           // keep leap
-                tmp.nsamples = shm->nsamples;   // keep sample buffer
-                tmp.clockTimeStampSec  = ts.tv_sec;
-                tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                tmp.receiveTimeStampSec  = ts.tv_sec;
-                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
-
-                if (shm != NULL) {
-                    // Safe update to shared memory
-                    shm->valid = 0;          // mark old data invalid
-                    shm->count++;            // bump count before write
-                    *shm = tmp;              // copy all fields at once
-                    shm->count++;            // bump count after write
-                    shm->valid = 1;          // mark new data valid
-                }
-                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
-            }
-
-            if (stored_date_changed) {
-                stored_date_changed = 0;
-                write_date_seed();
-            }
-        } else {
-            line[pos++] = c;
-        }
-
-        // Process command from UNIX socket
-        poll_socket_server(listen_fd);
-        if (begin_shutdown == 1)
-            stop = 1;
+    ret = pthread_create(&sock_thread, NULL, socket_thread_func, &sargs);
+    if (ret != 0) {
+        fprintf(stderr, "pthread_create failed: %s\n", strerror(ret));
+        return 1;
     }
 
-    // Cleanup UNIX socket
+    while (!atomic_load(&stop))
+        pause();  // main thread waits for CTRL+C
+
+    pthread_join(gps_thread, NULL);
+    pthread_join(sock_thread, NULL);
+
     close(listen_fd);
-
-    // Cleanup SHM
-    if (shm != (void*)-1) {
-        if (shmdt(shm) < 0) {
-            perror("shmdt");
-        }
-    }
+    if (shm != (void*)-1) if (shmdt(shm) < 0) perror("shmdt");
     close(fd);
+
+    cleanup_unix_socket();
     fprintf(stderr, "shm_writer: terminated cleanly\n");
     return 0;
 }
