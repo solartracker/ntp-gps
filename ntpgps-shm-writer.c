@@ -1221,15 +1221,10 @@ static void* socket_thread_func(void *arg)
 
     while (!atomic_load(&stop)) {
         fd_set readfds;
-        struct timeval tv;
-
         FD_ZERO(&readfds);
         FD_SET(listen_fd, &readfds);
 
-        // Timeout of 1 second to periodically check stop flag
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-
+        struct timeval tv = {1, 0};  // 1 sec
         int ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
         if (ret < 0) {
             if (errno == EINTR) continue; // interrupted by signal
