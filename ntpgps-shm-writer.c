@@ -128,6 +128,8 @@ static atomic_int begin_shutdown = 0;
 static atomic_int stop = 0;
 static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_state_mutex = PTHREAD_MUTEX_INITIALIZER;
+atomic_uint_fast64_t loop_counter_gps = 0;
+atomic_uint_fast64_t loop_counter_socket = 0;
 
 /* Check if year is a leap year */
 static inline int is_leap(const int year) {
@@ -1100,6 +1102,15 @@ static void handle_client_command(int client_fd)
             write_printf(client_fd, "debug_trace=%s\n",
                 (debug_trace == 1) ? "true" : "false");
 
+        } else if (starts_with(buf, "SHOWCOUNTERS")) {
+            write_printf(client_fd, "GPS thread loop:    %lu\n", atomic_load(&loop_counter_gps));
+            write_printf(client_fd, "Socket thread loop: %lu\n", atomic_load(&loop_counter_socket));
+
+        } else if (starts_with(buf, "RESETCOUNTERS")) {
+            atomic_store(&loop_counter_gps, 0);
+            atomic_store(&loop_counter_socket, 0);
+            write_printf(client_fd, "OK\n");
+
         } else if (starts_with(buf, "SHUTDOWN")) {
             atomic_store(&begin_shutdown, 1);
             write_printf(client_fd, "OK\n");
@@ -1254,6 +1265,8 @@ static void* socket_thread_func(void *arg)
 
         if (atomic_load(&begin_shutdown) == 1)
             kill(getpid(), SIGUSR1);   // wake pause() in main thread
+
+        atomic_fetch_add(&loop_counter_socket, 1);
     }
 
     return NULL;
@@ -1313,6 +1326,8 @@ void* gps_thread_func(void *arg) {
         } else {
             line[pos++] = c;
         }
+
+        atomic_fetch_add(&loop_counter_gps, 1);
     }
     return NULL;
 }
@@ -1426,7 +1441,7 @@ int main(int argc, char *argv[]) {
 
     /***************************************************************************/
 
-    // Respond to CTRL+C and kill
+    // Respond to CTRL+C, kill -SIGTERM, and our SHUTDOWN socket command 
     struct sigaction sa = {0};
     sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
@@ -1446,7 +1461,8 @@ int main(int argc, char *argv[]) {
             dev_path, unit, NTPD_BASE + unit);
 
     // Open serial device for GPS (source)
-    int fd = open(dev_path, O_RDONLY | O_NOCTTY | O_NONBLOCK);
+//    int fd = open(dev_path, O_RDONLY | O_NOCTTY | O_NONBLOCK);
+    int fd = open(dev_path, O_RDONLY | O_NOCTTY);
     if (fd < 0) { perror("open"); return 1; }
 
     // Configure raw mode
