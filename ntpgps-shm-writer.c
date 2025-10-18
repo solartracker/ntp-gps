@@ -1311,21 +1311,23 @@ void* gps_thread_func(void *arg) {
 
                         pthread_mutex_lock(&shared_state_mutex);
                         if (parse_nmea_time(line, &ts) == 0) {
-                            struct shmTime tmp = *shm;  // copy old values
-                            tmp.clockTimeStampSec = ts.tv_sec;
-                            tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                            tmp.receiveTimeStampSec = ts.tv_sec;
-                            tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
 
                             // Safe update to shared memory
                             if (shm != NULL) {
+                                struct shmTime tmp = *shm;  // copy old values
+                                tmp.clockTimeStampSec = ts.tv_sec;
+                                tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
+                                tmp.receiveTimeStampSec = ts.tv_sec;
+                                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+
                                 shm->valid = 0;          // mark old data invalid
                                 shm->count++;            // bump count before write
                                 *shm = tmp;              // copy all fields at once
                                 shm->count++;            // bump count after write
                                 shm->valid = 1;          // mark new data valid
+
+                                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
                             }
-                            TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
                         }
 
                         if (stored_date_changed) {
