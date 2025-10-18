@@ -1280,51 +1280,66 @@ struct gps_thread_args {
 
 void* gps_thread_func(void *arg) {
     struct gps_thread_args *args = arg;
-    int fd = args->fd;
+    int gps_fd = args->fd;
     struct shmTime *shm = args->shm;
 
-    char line[256];
-    int pos = 0;
+    char buf[512];
+    char line[512];
+    int line_pos = 0;
 
     while (!atomic_load(&stop)) {
-        char c;
-        int n = read(fd, &c, 1);
-        if (n <= 0) continue;
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(gps_fd, &rfds);
 
-        if (c == '\n' || pos >= (int)sizeof(line)-1) {
-            line[pos] = '\0';
-            pos = 0;
+        // Wait indefinitely until GPS device has data
+        int ret = select(gps_fd + 1, &rfds, NULL, NULL, NULL);
+        if (ret < 0) {
+            perror("select failed");
+            break;
+        }
 
-            TRACE(">>> %s\n", line);
-            struct timespec ts = {0};
+        if (FD_ISSET(gps_fd, &rfds)) {
+            int n = read(gps_fd, buf, sizeof(buf));
+            if (n > 0) {
+                for (int i = 0; i < n; i++) {
+                    if (buf[i] == '\n' || line_pos >= (int)sizeof(line) - 1) {
+                        line[line_pos] = '\0';
 
-            pthread_mutex_lock(&shared_state_mutex);
-            if (parse_nmea_time(line, &ts) == 0) {
-                struct shmTime tmp = *shm;  // copy old values
-                tmp.clockTimeStampSec = ts.tv_sec;
-                tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
-                tmp.receiveTimeStampSec = ts.tv_sec;
-                tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+                        TRACE(">>> %s\n", line);
+                        struct timespec ts = {0};
 
-                // Safe update to shared memory
-                if (shm != NULL) {
-                    shm->valid = 0;          // mark old data invalid
-                    shm->count++;            // bump count before write
-                    *shm = tmp;              // copy all fields at once
-                    shm->count++;            // bump count after write
-                    shm->valid = 1;          // mark new data valid
+                        pthread_mutex_lock(&shared_state_mutex);
+                        if (parse_nmea_time(line, &ts) == 0) {
+                            struct shmTime tmp = *shm;  // copy old values
+                            tmp.clockTimeStampSec = ts.tv_sec;
+                            tmp.clockTimeStampUSec = ts.tv_nsec / 1000;
+                            tmp.receiveTimeStampSec = ts.tv_sec;
+                            tmp.receiveTimeStampUSec = ts.tv_nsec / 1000;
+
+                            // Safe update to shared memory
+                            if (shm != NULL) {
+                                shm->valid = 0;          // mark old data invalid
+                                shm->count++;            // bump count before write
+                                *shm = tmp;              // copy all fields at once
+                                shm->count++;            // bump count after write
+                                shm->valid = 1;          // mark new data valid
+                            }
+                            TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+                        }
+
+                        if (stored_date_changed) {
+                            stored_date_changed = 0;
+                            write_date_seed();
+                        }
+                        pthread_mutex_unlock(&shared_state_mutex);
+
+                        line_pos = 0;  // reset for next line
+                    } else if (buf[i] != '\r') {
+                        line[line_pos++] = buf[i];
+                    }
                 }
-                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
             }
-
-            if (stored_date_changed) {
-                stored_date_changed = 0;
-                write_date_seed();
-            }
-            pthread_mutex_unlock(&shared_state_mutex);
-
-        } else {
-            line[pos++] = c;
         }
 
         atomic_fetch_add(&loop_counter_gps, 1);
