@@ -1236,8 +1236,8 @@ static void* socket_thread_func(void *arg)
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(listen_fd, &readfds);
-
         struct timeval tv = {1, 0};  // 1 sec
+
         int ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
         if (ret < 0) {
             if (errno == EINTR) continue; // interrupted by signal
@@ -1285,26 +1285,45 @@ void* gps_thread_func(void *arg) {
 
     char buf[512];
     char line[512];
-    int line_pos = 0;
+    ssize_t n = 0;
 
     while (!atomic_load(&stop)) {
         fd_set rfds;
         FD_ZERO(&rfds);
         FD_SET(gps_fd, &rfds);
+        struct timeval tv = {1, 0};  // 1 sec
 
-        // Wait indefinitely until GPS device has data
-        int ret = select(gps_fd + 1, &rfds, NULL, NULL, NULL);
+        int ret = select(gps_fd + 1, &rfds, NULL, NULL, &tv);
         if (ret < 0) {
-            perror("select failed");
+            if (errno == EINTR)
+                continue;   // interrupted by signal, retry
+            perror("select");
             break;
+        } else if (ret == 0) {
+            continue;       // timeout, no data
         }
 
         if (FD_ISSET(gps_fd, &rfds)) {
-            int n = read(gps_fd, buf, sizeof(buf));
-            if (n > 0) {
+            n = read(gps_fd, buf, sizeof(buf));
+            if (n < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                    continue;   // transient, no data
+                if (errno == EIO) {
+                    // likely device disconnect
+                    fprintf(stderr, "GPS device disconnected (EIO)\n");
+                    break;
+                }
+                perror("read");
+                break;
+            } else if (n == 0) {
+                // EOF — device closed
+                fprintf(stderr, "GPS device EOF reached\n");
+                break;
+            } else {
+                buf[n] = '\0';
                 for (int i = 0; i < n; i++) {
-                    if (buf[i] == '\n' || line_pos >= (int)sizeof(line) - 1) {
-                        line[line_pos] = '\0';
+                    if (buf[i] == '\n' || n >= (int)sizeof(line) - 1) {
+                        line[n] = '\0';
 
                         TRACE(">>> %s\n", line);
                         struct timespec ts = {0};
@@ -1336,9 +1355,9 @@ void* gps_thread_func(void *arg) {
                         }
                         pthread_mutex_unlock(&shared_state_mutex);
 
-                        line_pos = 0;  // reset for next line
+                        n = 0;  // reset for next line
                     } else if (buf[i] != '\r') {
-                        line[line_pos++] = buf[i];
+                        line[n++] = buf[i];
                     }
                 }
             }
