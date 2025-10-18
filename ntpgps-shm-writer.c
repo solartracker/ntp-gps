@@ -1285,7 +1285,8 @@ void* gps_thread_func(void *arg) {
 
     char buf[512];
     char line[512];
-    ssize_t n = 0;
+    int n = 0;
+    int line_pos = 0;
 
     while (!atomic_load(&stop)) {
         fd_set rfds;
@@ -1322,8 +1323,8 @@ void* gps_thread_func(void *arg) {
             } else {
                 buf[n] = '\0';
                 for (int i = 0; i < n; i++) {
-                    if (buf[i] == '\n' || n >= (int)sizeof(line) - 1) {
-                        line[n] = '\0';
+                    if (buf[i] == '\n' || line_pos >= (int)sizeof(line) - 1) {
+                        line[line_pos] = '\0';
 
                         TRACE(">>> %s\n", line);
                         struct timespec ts = {0};
@@ -1355,9 +1356,9 @@ void* gps_thread_func(void *arg) {
                         }
                         pthread_mutex_unlock(&shared_state_mutex);
 
-                        n = 0;  // reset for next line
+                        line_pos = 0;  // reset for next line
                     } else if (buf[i] != '\r') {
-                        line[n++] = buf[i];
+                        line[line_pos++] = buf[i];
                     }
                 }
             }
