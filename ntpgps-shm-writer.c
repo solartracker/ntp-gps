@@ -1057,6 +1057,47 @@ static int starts_with(const char *buf, const char *prefix) {
     return strncmp(buf, prefix, len) == 0;
 }
 
+/*
+ * handle_client_command()
+ * ------------------------
+ * Handles a single command received from a connected UNIX domain socket client.
+ *
+ * This function is called whenever a client connects to the SHM writer’s control socket,
+ * typically located at:
+ *     /run/ntpgps/shmwriter<unit>.sock
+ *
+ * Commands are sent as simple text lines terminated by newline.
+ * Example usage from the shell:
+ *     echo SHUTDOWN | sudo socat -t1 - UNIX-CONNECT:/run/ntpgps/shmwriter120.sock
+ *
+ * The function reads one command line, trims any trailing newline, and executes
+ * the associated action.  After responding to the client (if applicable),
+ * the socket is closed.
+ *
+ * Supported commands:
+ *   SETDATE YYYY-MM-DD      - Manually sets stored date (used if GPS date is invalid)
+ *   GETDATE                 - Returns the currently stored date and its source
+ *   SETALLOWINVALID         - Disables NMEA validation requirement
+ *   SETREQUIREVALID         - Enables NMEA validation requirement
+ *   GETVALID                - Returns current validation mode
+ *   SETTRACEON              - Enables debug tracing
+ *   SETTRACEOFF             - Disables debug tracing
+ *   GETTRACE                - Returns current trace mode
+ *   SHOWCOUNTERS            - Prints counters for GPS, socket, and NMEA activity
+ *   RESETCOUNTERS           - Resets all counters to zero
+ *   SHUTDOWN                - Signals the main loop to begin a clean shutdown
+ *
+ * Unknown commands return an error message of the form:
+ *     ERROR:<command>
+ *
+ * Parameters:
+ *   client_fd  - File descriptor for the connected client socket.
+ *
+ * Notes:
+ *   - The function is designed for single-command, short-lived client connections.
+ *   - Atomic variables are used for counters and shutdown signaling.
+ *   - Output is written back to the client using write_printf().
+ */
 static void handle_client_command(int client_fd)
 {
     char buf[MAX_CMD_LEN] = {0};
