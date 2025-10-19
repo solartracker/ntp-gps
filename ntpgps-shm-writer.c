@@ -686,10 +686,9 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
 
     // We roll-over the stored date for time-only GPS messages.
     // We don't roll-over the stored date when:
-    // 1. The current GPS message contains a full date/time, so the stored date 
-    //    is updated with the GPS date
+    // 1. The current GPS message contains a full date/time.
     // 2. There is no stored date because the GPS has not gotten a fix yet and 
-    //    the user did not specify a date seed
+    //    the user did not specify a date seed.
     uint64_t now_ns = monotonic_now_ns();
 
     if (!date_present && stored_day) {
@@ -713,7 +712,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
             if (full_days > 0) {
                 adjust_date_mcu(&stored_year, &stored_month, &stored_day,
                                  0, 0, (int)full_days);
-                stored_date_changed = 1;
+                stored_date_changed = 1; // write date.seed file
             }
         }
     }
