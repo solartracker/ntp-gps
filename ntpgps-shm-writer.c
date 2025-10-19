@@ -130,6 +130,15 @@ static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 atomic_uint_fast64_t loop_counter_gps = 0;
 atomic_uint_fast64_t loop_counter_socket = 0;
+uint64_t nmea_rmc_count = 0;
+uint64_t nmea_zda_count = 0;
+uint64_t nmea_zdg_count = 0;
+uint64_t nmea_gll_count = 0;
+uint64_t nmea_gga_count = 0;
+uint64_t nmea_other_count = 0;
+uint64_t nmea_badcs_count = 0;
+uint64_t shm_write_count = 0;
+uint64_t parse_nmea_fail = 0;
 
 /* Check if year is a leap year */
 static inline int is_leap(const int year) {
@@ -509,6 +518,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         return -1;
 
     if (sum != expected) {
+        nmea_badcs_count++;
         fprintf(stderr, "Checksum mismatch: got %02X need %02X\n", sum, expected);
         return -1;
     }
@@ -547,6 +557,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     int data_invalid = 0; // for RMC,GLL,GGA
 
     if (strcmp(tok, "RMC") == 0) {
+        nmea_rmc_count++;
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
         char *pos_stat_str = strtok_empty_r(NULL, ",", &saveptr);
         data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
@@ -581,6 +592,8 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     }
     else if (strcmp(tok, "ZDA") == 0 || 
              strcmp(tok, "ZDG") == 0) {
+        if (tok[2] == 'A') nmea_zda_count++;
+        if (tok[2] == 'G') nmea_zdg_count++;
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
         char *day_str  = strtok_empty_r(NULL, ",", &saveptr);
         char *month_str  = strtok_empty_r(NULL, ",", &saveptr);
@@ -605,6 +618,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
     }
     else if (strcmp(tok, "GLL") == 0) {
+        nmea_gll_count++;
         // time-only line, only valid if a stored date exists
         if (stored_day == 0) 
             return -1;
@@ -617,6 +631,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
     }
     else if (strcmp(tok, "GGA") == 0) {
+        nmea_gga_count++;
         // time-only line, only valid if a stored date exists
         if (stored_day == 0) 
             return -1;
@@ -629,6 +644,7 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         data_invalid = (fix_mode_str && strlen(fix_mode_str) == 1 && fix_mode_str[0] == '0');
     }
     else {
+        nmea_other_count++;
         return -1; // unknown line type
     }
 
@@ -1105,10 +1121,28 @@ static void handle_client_command(int client_fd)
         } else if (starts_with(buf, "SHOWCOUNTERS")) {
             write_printf(client_fd, "GPS thread loop:    %lu\n", atomic_load(&loop_counter_gps));
             write_printf(client_fd, "Socket thread loop: %lu\n", atomic_load(&loop_counter_socket));
+            write_printf(client_fd, "NMEA GxRMC count:   %lu\n", nmea_rmc_count);
+            write_printf(client_fd, "NMEA GxZDA count:   %lu\n", nmea_zda_count);
+            write_printf(client_fd, "NMEA GxZDG count:   %lu\n", nmea_zdg_count);
+            write_printf(client_fd, "NMEA GxGLL count:   %lu\n", nmea_gll_count);
+            write_printf(client_fd, "NMEA GxGGA count:   %lu\n", nmea_gga_count);
+            write_printf(client_fd, "NMEA OTHER count:   %lu\n", nmea_other_count);
+            write_printf(client_fd, "NMEA bad cksum:     %lu\n", nmea_badcs_count);
+            write_printf(client_fd, "SHM write count:    %lu\n", shm_write_count);
+            write_printf(client_fd, "Parse NMEA fail:    %lu\n", parse_nmea_fail);
 
         } else if (starts_with(buf, "RESETCOUNTERS")) {
             atomic_store(&loop_counter_gps, 0);
             atomic_store(&loop_counter_socket, 0);
+            nmea_rmc_count = 0;
+            nmea_zda_count = 0;
+            nmea_zdg_count = 0;
+            nmea_gll_count = 0;
+            nmea_gga_count = 0;
+            nmea_other_count = 0;
+            nmea_badcs_count = 0;
+            shm_write_count = 0;
+            parse_nmea_fail = 0;
             write_printf(client_fd, "OK\n");
 
         } else if (starts_with(buf, "SHUTDOWN")) {
@@ -1232,6 +1266,8 @@ static void* socket_thread_func(void *arg)
 {
     int listen_fd = *(int*)arg;
 
+    TRACE("Socket thread started\n");
+
     while (!atomic_load(&stop)) {
         fd_set readfds;
         FD_ZERO(&readfds);
@@ -1269,6 +1305,7 @@ static void* socket_thread_func(void *arg)
         atomic_fetch_add(&loop_counter_socket, 1);
     }
 
+    TRACE("Socket thread exiting\n");
     return NULL;
 }
 
@@ -1280,45 +1317,50 @@ struct gps_thread_args {
 
 void* gps_thread_func(void *arg) {
     struct gps_thread_args *args = arg;
-    int gps_fd = args->fd;
+    int fd = args->fd;
     struct shmTime *shm = args->shm;
 
     char buf[512];
     char line[512];
     int n = 0;
     int line_pos = 0;
+    fd_set rfds;
+
+    TRACE("GPS thread started\n");
 
     while (!atomic_load(&stop)) {
-        fd_set rfds;
         FD_ZERO(&rfds);
-        FD_SET(gps_fd, &rfds);
-        struct timeval tv = {1, 0};  // 1 sec
+        FD_SET(fd, &rfds);
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 }; // 1s timeout
 
-        int ret = select(gps_fd + 1, &rfds, NULL, NULL, &tv);
+        int ret = select(fd + 1, &rfds, NULL, NULL, &tv);
+
         if (ret < 0) {
             if (errno == EINTR)
                 continue;   // interrupted by signal, retry
             perror("select");
             break;
-        } else if (ret == 0) {
+        }
+        else if (ret == 0) {
             continue;       // timeout, no data
         }
 
-        if (FD_ISSET(gps_fd, &rfds)) {
-            n = read(gps_fd, buf, sizeof(buf));
+        if (FD_ISSET(fd, &rfds)) {
+            n = read(fd, buf, sizeof(buf));
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
-                    continue;   // transient, no data
-                if (errno == EIO) {
-                    // likely device disconnect
-                    fprintf(stderr, "GPS device disconnected (EIO)\n");
+                    continue; // nothing to read
+                else if (errno == EINTR)
+                    continue; // signal
+                else if (errno == EIO || errno == ENODEV) {
+                    TRACE("GPS device disconnected (errno=%d: %s)\n", errno, strerror(errno));
+                    break;
+                } else {
+                    perror("read");
                     break;
                 }
-                perror("read");
-                break;
             } else if (n == 0) {
-                // EOF — device closed
-                fprintf(stderr, "GPS device EOF reached\n");
+                TRACE("GPS device returned EOF – exiting thread\n");
                 break;
             } else {
                 buf[n] = '\0';
@@ -1326,7 +1368,7 @@ void* gps_thread_func(void *arg) {
                     if (buf[i] == '\n' || line_pos >= (int)sizeof(line) - 1) {
                         line[line_pos] = '\0';
 
-                        TRACE(">>> %s\n", line);
+//                        TRACE(">>> %s\n", line);
                         struct timespec ts = {0};
 
                         pthread_mutex_lock(&shared_state_mutex);
@@ -1346,9 +1388,11 @@ void* gps_thread_func(void *arg) {
                                 shm->count++;            // bump count after write
                                 shm->valid = 1;          // mark new data valid
 
-                                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+//                                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+                                shm_write_count++;
                             }
-                        }
+                        } else
+                            parse_nmea_fail++;
 
                         if (stored_date_changed) {
                             stored_date_changed = 0;
@@ -1366,6 +1410,8 @@ void* gps_thread_func(void *arg) {
 
         atomic_fetch_add(&loop_counter_gps, 1);
     }
+
+    TRACE("GPS thread exiting\n");
     return NULL;
 }
 
