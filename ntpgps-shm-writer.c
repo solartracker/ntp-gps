@@ -1451,6 +1451,7 @@ void* gps_thread_func(void *arg) {
         atomic_fetch_add(&loop_counter_gps, 1);
     }
 
+    kill(getpid(), SIGUSR1);   // wake pause() in main thread
     TRACE("GPS thread exiting\n");
     return NULL;
 }
