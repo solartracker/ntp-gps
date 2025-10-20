@@ -1067,7 +1067,7 @@ static int starts_with(const char *buf, const char *prefix) {
  *
  * Commands are sent as simple text lines terminated by newline.
  * Example usage from the shell:
- *     echo SHUTDOWN | sudo socat -t1 - UNIX-CONNECT:/run/ntpgps/shmwriter120.sock
+ *     echo SHOWCOUNTERS | sudo socat -t1 - UNIX-CONNECT:/run/ntpgps/shmwriter120.sock
  *
  * The function reads one command line, trims any trailing newline, and executes
  * the associated action.  After responding to the client (if applicable),
