@@ -973,6 +973,7 @@ int update_stored_date_from_command(const char *input, int client_fd) {
                      stored_year, 
                      stored_month, 
                      stored_day);
+        result = -1;
     }
     else { // Stored date is User
         int yy=0, mm=0, dd=0;
