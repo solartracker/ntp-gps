@@ -105,6 +105,13 @@ struct shmTime {
     int    dummy[8];            /* reserved */
 };
 
+enum nmea_filter_t {
+    NMEA_RMC = 1 << 0,
+    NMEA_GGA = 1 << 1,
+    NMEA_GLL = 1 << 2,
+    NMEA_ZDA = 1 << 3,   // covers both ZDA and ZDG
+};
+
 #define PATH_MAX_LEN 256
 //const char date_seed_dir_default[] = "/var/lib/ntpgps";
 const char date_seed_dir_default[] = "/run/ntpgps";
@@ -123,11 +130,17 @@ uint64_t ticklatest_ns = 0;     // monotonic timestamp in nanoseconds of latest 
 time_t   gpslatest_seconds = 0; // latest GPS UTC seconds
 static char sock_path[108];
 int require_valid_nmea = 0; // for RMC,GLL,GGA
+int ublox_zda_only = 0;
+unsigned nmea_filter_mask = 0;  // 0 = accept all
+struct termios orig_tio = {0};
+
 static atomic_int debug_trace = 0;
 static atomic_int begin_shutdown = 0;
 static atomic_int stop = 0;
 static pthread_mutex_t trace_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_state_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// performance counters
 atomic_uint_fast64_t loop_counter_gps = 0;
 atomic_uint_fast64_t loop_counter_socket = 0;
 uint64_t nmea_rmc_count = 0;
@@ -556,7 +569,42 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
     int date_present = 0;
     int data_invalid = 0; // for RMC,GLL,GGA
 
-    if (strcmp(tok, "RMC") == 0) {
+    if (strcmp(tok, "ZDA") == 0 ||
+        strcmp(tok, "ZDG") == 0) {
+
+        if (nmea_filter_mask && ((nmea_filter_mask & NMEA_ZDA) == 0))
+            return -1;
+
+        if (tok[2] == 'A') nmea_zda_count++;
+        if (tok[2] == 'G') nmea_zdg_count++;
+        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
+        char *day_str  = strtok_empty_r(NULL, ",", &saveptr);
+        char *month_str  = strtok_empty_r(NULL, ",", &saveptr);
+        char *year_str = strtok_empty_r(NULL, ",", &saveptr);
+        if (day_str && month_str && year_str && strlen(day_str) == 2 && strlen(month_str) == 2 && strlen(year_str) == 4) {
+            int dd = digitsToInt(day_str, 2);
+            int mm = digitsToInt(month_str, 2);
+            int yy = digitsToInt(year_str, 4);
+            if (dd > 0 && mm > 0 && yy > 0) {
+                date_present = 1;
+                day = dd;
+                month = mm;
+                year  = yy;
+
+                stored_year = year;
+                stored_month = month;
+                stored_day = day;
+                if (stored_date_source == 0) stored_date_changed = 1;
+                stored_date_source = 1;
+            }
+        }
+        TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
+    }
+    else if (strcmp(tok, "RMC") == 0) {
+
+        if (nmea_filter_mask && ((nmea_filter_mask & NMEA_RMC) == 0))
+            return -1;
+
         nmea_rmc_count++;
         time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
         char *pos_stat_str = strtok_empty_r(NULL, ",", &saveptr);
@@ -590,34 +638,11 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         }
         TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
     }
-    else if (strcmp(tok, "ZDA") == 0 || 
-             strcmp(tok, "ZDG") == 0) {
-        if (tok[2] == 'A') nmea_zda_count++;
-        if (tok[2] == 'G') nmea_zdg_count++;
-        time_str = strtok_empty_r(NULL, ",", &saveptr); // hhmmss.ff
-        char *day_str  = strtok_empty_r(NULL, ",", &saveptr);
-        char *month_str  = strtok_empty_r(NULL, ",", &saveptr);
-        char *year_str = strtok_empty_r(NULL, ",", &saveptr);
-        if (day_str && month_str && year_str && strlen(day_str) == 2 && strlen(month_str) == 2 && strlen(year_str) == 4) {
-            int dd = digitsToInt(day_str, 2);
-            int mm = digitsToInt(month_str, 2);
-            int yy = digitsToInt(year_str, 4);
-            if (dd > 0 && mm > 0 && yy > 0) {
-                date_present = 1;
-                day = dd;
-                month = mm;
-                year  = yy;
-
-                stored_year = year;
-                stored_month = month;
-                stored_day = day;
-                if (stored_date_source == 0) stored_date_changed = 1;
-                stored_date_source = 1;
-            }
-        }
-        TRACE(">>>>>> %s date: %04d-%02d-%02d\n", tok, year, month, day);
-    }
     else if (strcmp(tok, "GLL") == 0) {
+
+        if (nmea_filter_mask && ((nmea_filter_mask & NMEA_GLL) == 0))
+            return -1;
+
         nmea_gll_count++;
         // time-only line, only valid if a stored date exists
         if (stored_day == 0) 
@@ -631,6 +656,10 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         data_invalid = (pos_stat_str && strlen(pos_stat_str) == 1 && pos_stat_str[0] == 'V');
     }
     else if (strcmp(tok, "GGA") == 0) {
+
+        if (nmea_filter_mask && ((nmea_filter_mask & NMEA_GGA) == 0))
+            return -1;
+
         nmea_gga_count++;
         // time-only line, only valid if a stored date exists
         if (stored_day == 0) 
@@ -644,7 +673,11 @@ int parse_nmea_time(const char *line, struct timespec *ts) {
         data_invalid = (fix_mode_str && strlen(fix_mode_str) == 1 && fix_mode_str[0] == '0');
     }
     else {
+        if (nmea_filter_mask)
+            return -1;
+
         nmea_other_count++;
+        TRACE(">>>>>> %s\n", line);
         return -1; // unknown line type
     }
 
@@ -1258,7 +1291,7 @@ static void print_usage(FILE *out, const char *progname)
     fprintf(out,
         "Usage: %s [OPTIONS] <device> [unit]\n"
         "\n"
-        "Writes GPS time and position data to NTP shared memory (SHM) segments.\n"
+        "Writes GPS time to NTP shared memory (SHM) segments.\n"
         "Intended for use with gpsd, chrony, or ntpd to provide an accurate time source.\n"
         "\n"
         "Positional arguments:\n"
@@ -1272,6 +1305,8 @@ static void print_usage(FILE *out, const char *progname)
         "  -r, --require-valid        Require valid NMEA sentences (default)\n"
         "  -a, --allow-invalid        Allow invalid NMEA sentences to update SHM\n"
         "  -s, --date-seed-dir DIR    Directory for date-seed file storage\n"
+        "  -u, --ublox-zda-only       Configure u-blox GPS to output only ZDA messages\n"
+        "  -f, --filter MSG[,MSG...]  Only process specified NMEA sentence types (e.g. RMC,GGA,GLL,ZDA)\n"
         "\n"
         "Examples:\n"
         "  %s --debug-trace /dev/ttyUSB0\n"
@@ -1290,6 +1325,38 @@ static void usage_short(const char *progname)
         "Usage: %s [OPTIONS] <device> [unit]\n"
         "Try '%s --help' for more information.\n",
         progname, progname);
+}
+
+unsigned parse_nmea_filter(const char *arg)
+{
+    unsigned mask = 0;
+    if (!arg || !*arg)
+        return 0;
+
+    const char *p = arg;
+    while (*p) {
+        char word[8];
+        int i = 0;
+
+        // Extract token up to comma
+        while (*p && *p != ',' && i < (int)sizeof(word) - 1)
+            word[i++] = *p++;
+        word[i] = '\0';
+        if (*p == ',')
+            p++;
+
+        // Uppercase for robustness
+        for (int j = 0; word[j]; j++)
+            word[j] = toupper((unsigned char)word[j]);
+
+        if      (strcmp(word, "RMC") == 0) mask |= NMEA_RMC;
+        else if (strcmp(word, "GGA") == 0) mask |= NMEA_GGA;
+        else if (strcmp(word, "GLL") == 0) mask |= NMEA_GLL;
+        else if (strcmp(word, "ZDA") == 0) mask |= NMEA_ZDA;
+        else fprintf(stderr, "Unknown NMEA filter type: %s\n", word);
+    }
+
+    return mask;
 }
 
 static void handle_signal(int sig)
@@ -1429,7 +1496,7 @@ void* gps_thread_func(void *arg) {
                                 shm->count++;            // bump count after write
                                 shm->valid = 1;          // mark new data valid
 
-//                                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
+                                TRACE("Wrote GPS time: %ld.%09ld\n", (long)ts.tv_sec, ts.tv_nsec);
                                 shm_write_count++;
                             }
                         } else
@@ -1457,17 +1524,101 @@ void* gps_thread_func(void *arg) {
     return NULL;
 }
 
+#define UBX_SYNC1 0xB5
+#define UBX_SYNC2 0x62
+#define UBX_CLASS_ACK 0x05
+#define UBX_ID_ACK_ACK 0x01
+#define UBX_ID_ACK_NAK 0x00
+
+// Wait for UBX ACK
+static int wait_ubx_ack(int fd, int timeout_us) {
+    uint8_t buf[64];
+    int total_wait = 0;
+    int n;
+
+    while (total_wait < timeout_us) {
+        n = read(fd, buf, sizeof(buf));
+        if (n > 0) {
+            for (int i = 0; i < n - 2; i++) {
+                if (buf[i] == UBX_SYNC1 && buf[i+1] == UBX_SYNC2 && buf[i+2] == UBX_CLASS_ACK) {
+                    if (buf[i+3] == UBX_ID_ACK_ACK) return 0;  // ACK received
+                    if (buf[i+3] == UBX_ID_ACK_NAK)  return -1; // NAK received
+                }
+            }
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            perror("read");
+            return -1;
+        }
+        usleep(1000); // poll every 1 ms
+        total_wait += 1000;
+    }
+
+    fprintf(stderr, "UBX ACK timeout\n");
+    return -1;
+}
+
+// Send one UBX command and wait for ACK
+static int send_ubx(int fd, const uint8_t *cmd, size_t len) {
+    if (write(fd, cmd, len) != (ssize_t)len) {
+        perror("write");
+        return -1;
+    }
+    return wait_ubx_ack(fd, 50000); // 50 ms timeout
+}
+
+static int configure_ublox_zda_only(int fd)
+{
+    static const uint8_t ublox_zda_only[][29] = {
+        {0x1C, 0xB5,0x62,0x06,0x00,0x14,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x07,0x00,0x02,0x00,0x00,0x00,0x00,0x00,0x26,0xC8}, // CFG-PRT
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x24,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GGA
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x2B,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GLL
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x32,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GSA
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x03,0x00,0x00,0x00,0x00,0x00,0x01,0x03,0x39,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GSV
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x04,0x00,0x00,0x00,0x00,0x00,0x01,0x04,0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // RMC
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x47,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // VTG
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x05,0x4D,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GRS
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x06,0x54,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GST
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x09,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x62,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GBS
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x0A,0x00,0x00,0x00,0x00,0x00,0x00,0x09,0x69,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // DTM
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x0D,0x00,0x00,0x00,0x00,0x00,0x00,0x0C,0x7E,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // GNS
+//        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x0E,0x00,0x00,0x00,0x00,0x00,0x00,0x0D,0x89,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // THS
+//        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x0F,0x00,0x00,0x00,0x00,0x00,0x00,0x0E,0x94,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // VLW
+//        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x0F,0x9F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // UTC
+//        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x0B,0x00,0x00,0x00,0x00,0x00,0x00,0x0A,0x70,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // RLM
+        {0x10, 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x08,0x01,0x01,0x01,0x01,0x01,0x00,0x0C,0x6F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}  // ZDA
+    };
+
+    size_t num_cmds = sizeof(ublox_zda_only) / sizeof(ublox_zda_only[0]);
+    for (size_t i = 0; i < num_cmds; i++) {
+        uint8_t len = ublox_zda_only[i][0];      // length prefix
+        if (send_ubx(fd, &ublox_zda_only[i][1], len) < 0) {
+            fprintf(stderr, "Failed to send UBX command #%zu\n", i);
+//            return -1;
+        }
+        usleep(10000); // 10 ms delay between commands
+    }
+
+    return 0;
+}
+
 int configure_serial_raw(int fd) {
-    struct termios tio = {0};
-    if (tcgetattr(fd, &tio) < 0) { perror("tcgetattr"); return 1; }
+    if (tcgetattr(fd, &orig_tio) < 0) { perror("tcgetattr"); return 1; }
+
+    struct termios tio = orig_tio;  // start from original settings
     cfsetispeed(&tio, B9600);
     cfsetospeed(&tio, B9600);
     cfmakeraw(&tio);
-    tio.c_cc[VMIN]  = 0; // read() returns immediately if no data
-    tio.c_cc[VTIME] = 0; // timeout after 0.0s (units of 100ms)
+    tio.c_cc[VMIN]  = 0;
+    tio.c_cc[VTIME] = 0;
+
     if (tcsetattr(fd, TCSANOW, &tio) < 0) { perror("tcsetattr"); return 1; }
 
     return 0;
+}
+
+void restore_serial(int fd) {
+    if (tcsetattr(fd, TCSANOW, &orig_tio) < 0)
+        perror("tcsetattr restore");
 }
 
 int main(int argc, char *argv[]) {
@@ -1492,11 +1643,13 @@ int main(int argc, char *argv[]) {
         {"require-valid",  no_argument,       0, 'r'},
         {"allow-invalid",  no_argument,       0, 'a'},
         {"date-seed-dir",  required_argument, 0, 's'},
+        {"ublox-zda-only", no_argument,       0, 'u'},
+        {"filter",         required_argument, 0, 'f'},
         {0, 0, 0, 0}
     };
 
     int opt, opt_index = 0;
-    while ((opt = getopt_long(argc, argv, "hdras:", long_opts, &opt_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hdnras:uf:", long_opts, &opt_index)) != -1) {
         switch (opt) {
             case 'h':
                 print_usage(stdout, argv[0]);
@@ -1527,6 +1680,17 @@ int main(int argc, char *argv[]) {
                 date_seed_dir[len] = '\0';
                 break;
             }
+
+            case 'u':
+                ublox_zda_only = 1;
+                break;
+
+            case 'f':
+                nmea_filter_mask = parse_nmea_filter(optarg);
+                if (nmea_filter_mask == 0) {
+                    fprintf(stderr, "Warning: invalid or empty NMEA filter string: '%s'\n", optarg);
+                }
+                break;
 
             case '?':  // getopt_long already printed an error
                 usage_short(argv[0]);
@@ -1587,7 +1751,8 @@ int main(int argc, char *argv[]) {
 
     // Open serial device for GPS (source)
 //    int fd = open(dev_path, O_RDONLY | O_NOCTTY | O_NONBLOCK);
-    int fd = open(dev_path, O_RDONLY | O_NOCTTY);
+//    int fd = open(dev_path, O_RDONLY | O_NOCTTY);
+    int fd = open(dev_path, O_RDWR | O_NOCTTY);
     if (fd < 0) { perror("open"); return 1; }
 
     // Configure raw mode
@@ -1596,6 +1761,14 @@ int main(int argc, char *argv[]) {
         TRACE("Raw mode enabled on %s\n", dev_path);
     } else {
         TRACE("Raw mode skipped on %s\n", dev_path);
+    }
+
+    // Configure u-blox GPS to only output ZDA
+    if (ublox_zda_only) {
+        TRACE("Configuring u-blox for ZDA-only output...\n");
+        if (configure_ublox_zda_only(fd) != 0) {
+            fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
+        }
     }
 
     // Create Unix socket for accepting user commands
@@ -1639,6 +1812,7 @@ int main(int argc, char *argv[]) {
 
     close(listen_fd);
     if (shm != (void*)-1) if (shmdt(shm) < 0) perror("shmdt");
+    restore_serial(fd);
     close(fd);
 
     cleanup_unix_socket();
