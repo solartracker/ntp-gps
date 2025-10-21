@@ -79,14 +79,19 @@ def dm_to_deg_safe(dm_str: str, hemi: str):
     return dec
 
 def deg_to_dm_nmea(deg: float, is_lat: bool):
+    """
+    Convert decimal degrees to NMEA DM format with correct hemisphere.
+    For latitude: DDMM.MMMMM
+    For longitude: DDDMM.MMMMM
+    """
     hemi = 'N' if deg >= 0 else 'S' if is_lat else 'E' if deg >= 0 else 'W'
     d = abs(deg)
     deg_int = int(d)
     minutes = (d - deg_int) * 60.0
     if is_lat:
-        return f"{deg_int:02d}{minutes:07.5f}", hemi
+        return f"{deg_int:02d}{minutes:08.5f}", hemi
     else:
-        return f"{deg_int:03d}{minutes:07.5f}", hemi
+        return f"{deg_int:03d}{minutes:08.5f}", hemi
 
 # ---------- Sentence processing ----------
 GN_POS_TYPES = {
