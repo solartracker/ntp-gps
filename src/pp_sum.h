@@ -1,16 +1,31 @@
 #ifndef PP_SUM_H_
 #define PP_SUM_H_
+/*******************************************************************************
+ pp_sum.h - Preprocessor macros for summing argument lists
 
-/**
- * @file pp_sum.h
- * @brief Preprocessor macros for summing argument lists.
- *
- * Defines macros that expand to the sum of all numeric arguments at
- * preprocessor time using variadic macro dispatch based on argument count.
- *
- * Example:
- *   PP_SUM(1, 2, 3)   ->  6
- */
+ Defines macros that expand to the sum of all numeric arguments at
+ preprocessor time using variadic macro dispatch based on argument count.
+
+ Example:
+   PP_SUM(1, 2, 3)   ->  6
+
+ Copyright (C) 2025 Richard Elwell
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+*******************************************************************************/
+
 #define PP_SUM_1(a1) (a1)
 #define PP_SUM_2(a1,a2) (a1+a2)
 #define PP_SUM_3(a1,a2,a3) (a1+a2+a3)

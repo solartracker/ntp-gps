@@ -1,21 +1,36 @@
 #ifndef PP_CSUM_H_
 #define PP_CSUM_H_
+/*******************************************************************************
+ pp_csum.h - Preprocessor macros for cumulative sum expansion
 
-/**
- * @file pp_csum.h
- * @brief Preprocessor macros for cumulative sum expansion.
- *
- * Defines macros that expand each argument into a cumulative sum of the arguments.
- *
- * Example:
- *   The cumulative sum expansion of (a, b, c, d) is:
- *     a + a+b + a+b+c + a+b+c+d
- *
- *   But, we expand a simplified expression here:
- *     4*a + 3*b + 2*c + 1*d
- *
- *   PP_CSUM(1, 2, 3, 4)   ->  20
- */
+ Defines macros that expand each argument into a cumulative sum of the arguments
+
+ Example:
+   The cumulative sum expansion of (a, b, c, d) is:
+     a + a+b + a+b+c + a+b+c+d
+
+   But, we expand a simplified expression here:
+     4*a + 3*b + 2*c + 1*d
+
+   PP_CSUM(1, 2, 3, 4)   ->  20
+
+ Copyright (C) 2025 Richard Elwell
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+*******************************************************************************/
+
 #define PP_CSUM_1(a1) (1*a1)
 #define PP_CSUM_2(a1,a2) (2*a1+1*a2)
 #define PP_CSUM_3(a1,a2,a3) (3*a1+2*a2+1*a3)
