@@ -1307,7 +1307,7 @@ static void print_usage(FILE *out, const char *progname)
         "Intended for use with gpsd, chrony, or ntpd to provide an accurate time source.\n"
         "\n"
         "Positional arguments:\n"
-        "  <device>         GPS serial device path (e.g. /dev/ttyUSB0 or pts/1)\n"
+        "  <device>         GPS serial device path (e.g. ttyUSB0 or pts/1)\n"
         "  [unit]           Optional SHM unit number (0–255). If omitted, inferred from device.\n"
         "\n"
         "Options:\n"
