@@ -68,9 +68,9 @@
 // Experimental / Engineering Test Class (u-blox internal use)
 #define UBX_CLS_TRK   0x03    // TRK-* : Tracking / debugging (not public)
 
-// ============================================================================
+
 // Optional: quick short aliases (useful for macros)
-// ============================================================================
+
 #define CLS_NAV  UBX_CLS_NAV
 #define CLS_RXM  UBX_CLS_RXM
 #define CLS_INF  UBX_CLS_INF
@@ -88,3 +88,4 @@
 #define CLS_TRK  UBX_CLS_TRK
 
 #endif // UBX_CLASS_H
+
