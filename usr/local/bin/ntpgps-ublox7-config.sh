@@ -77,6 +77,8 @@ ntp_configure_ublox7() {
     #send_ubx "B5 62 06 3E 24 00 00 00 16 04 00 04 FF 00 01 00 00 01 01 01 03 00 01 00 00 01 05 00 03 00 01 00 00 01 06 08 FF 00 01 00 00 01 A7 49"
     # UBX-CFG-GNSS GPS=configure,on,4,255 SBAS=configure,on,1,3 Galileo=off BeiDou=off IMES=off QZSS=configure,on,0,3 GLONASS=off ChannelsAvailable=22 ChannelsToUse=22
     send_ubx "B5 62 06 3E 1C 00 00 00 16 03 00 04 FF 00 01 00 00 01 01 01 03 00 01 00 00 01 05 00 03 00 01 00 00 01 8F 19"
+    # UBX-CFG-INF Protocol=NEMA Target0=all,off Target1=all,off Target2=all,off Target3=all,off Target4=all,off
+    send_ubx "B5 62 06 02 0A 00 01 00 00 00 00 00 00 00 00 00 13 F0" # disables all informational NMEA messages (i.e. $GPTXT)
     # UBX-CFG-MSG Message=F0-00-NMEA-GxGGA I2C=off UART1=off UART2=off USB=off SPI=off
     send_ubx "B5 62 06 01 08 00 F0 00 00 00 00 00 00 01 00 24"
     # UBX-CFG-MSG Message=F0-01-NMEA-GxGLL I2C=off UART1=off UART2=off USB=off SPI=off
