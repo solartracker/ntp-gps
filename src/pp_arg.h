@@ -4,7 +4,7 @@
  pp_arg.h - Preprocessor argument counting macros
 
  Provides macros to determine the number of arguments passed to a variadic
- macro. Used internally by PP_SUM, PP_CUMSUM, and other variadic macro helpers.
+ macro. Used internally by PP_SUM, PP_CSUM, and other variadic macro helpers.
 
  Example:
    PP_NARG(a, b, c)   ->  3
