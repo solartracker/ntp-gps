@@ -1736,7 +1736,7 @@ static int read_ubx_mon_ver(int fd, uint64_t timeout_ms) {
     return 0; // timeout
 }
 
-// Wait for UBX-MON-VER message using ubx_feed_byte()
+// Wait for UBX-MON-VER message using read_ubx_mon_ver()
 int get_ublox_version(int fd) {
 
     // 1. Enable UBX output on USB,UART1
