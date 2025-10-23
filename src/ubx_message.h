@@ -62,8 +62,10 @@ static const uint8_t name[] = {         \
 #define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, 0x57, __VA_ARGS__)
 
 // Acknowledge messages (ACK)
-#define UBX_ACK_NAK(name)        UBX_MESSAGE(name, CLS_ACK, 0x00)
-#define UBX_ACK_ACK(name)        UBX_MESSAGE(name, CLS_ACK, 0x01)
+#define UBX_ID_ACK_NAK           0x00
+#define UBX_ID_ACK_ACK           0x01
+#define UBX_ACK_NAK(name)        UBX_MESSAGE(name, CLS_ACK, UBX_ID_ACK_NAK)
+#define UBX_ACK_ACK(name)        UBX_MESSAGE(name, CLS_ACK, UBX_ID_ACK_ACK)
 
 // Navigation messages (NAV)
 #define UBX_NAV_PVT(name)        UBX_MESSAGE(name, CLS_NAV, 0x07)
@@ -84,6 +86,23 @@ static inline void print_ubx(const uint8_t *msg, size_t len) {
     for (size_t i = 0; i < len; i++)
         printf("%02X ", msg[i]);
     printf("\n");
+}
+
+// Copy string helper
+static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
+{
+    // Copy fixed-length field
+    memcpy(dst, src, len);
+    dst[len] = '\0'; // Null-terminate
+
+    // Trim trailing spaces
+    for (int i = len - 1; i >= 0; i--) {
+        if (isspace((unsigned char)dst[i])) {
+            dst[i] = '\0';
+        } else {
+            break;
+        }
+    }
 }
 
 #endif // UBX_MESSAGES_H
