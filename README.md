@@ -81,6 +81,7 @@ This has been verified to work with:
 - **FTDI USB-to-Serial** connected to Reyax RY725AI / RY825AI (with PPS line discipline).
 - **CH341 USB-to-Serial** connected to Reyax RY725AI / RY825AI (without PPS).
 - **USB Dongle GPS Receiver VK-172**.
+- **USB G-Mouse VK-162**.
 
 ---
 
