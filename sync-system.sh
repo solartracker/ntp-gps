@@ -67,7 +67,7 @@ update_reference_file() {
 
     cd "$PROJECT_DIR"
     find . -mindepth 2 \( \
-        -path "./.git/*" -o -path "./test/*" \
+        -path "./.git/*" -o -path "./src/*" -o -path "./test/*" \
         \) -prune -o -type f -print \
     | cut -c3- >"$tmpfile"
 

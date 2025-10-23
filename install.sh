@@ -172,7 +172,7 @@ install_dependencies() {
 }
 
 compile_shm_writer() {
-    local src="$SCRIPT_DIR/ntpgps-shm-writer.c"
+    local src="$SCRIPT_DIR/src/ntpgps-shm-writer.c"
     local bin="$SCRIPT_DIR/bin/ntpgps-shm-writer"
 
     echo "[*] Checking ntpgps-shm-writer binary..."
