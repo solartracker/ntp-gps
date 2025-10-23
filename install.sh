@@ -176,6 +176,7 @@ compile_shm_writer() {
     local bin="$SCRIPT_DIR/bin/ntpgps-shm-writer"
 
     echo "[*] Checking ntpgps-shm-writer binary..."
+    mkdir -vp "$SCRIPT_DIR/bin"
     if [ ! -f "$bin" ] || [ "$bin" -ot "$src" ]; then
         echo "[*] Compiling ntpgps-shm-writer..."
         gcc -std=c11 -O2 -Wall "$src" -o "$bin" -latomic -pthread
