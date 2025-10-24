@@ -1,0 +1,139 @@
+#ifndef UBX_DEFS_H
+#define UBX_DEFS_H
+/*******************************************************************************
+ ubx_defs.h
+
+ Copyright (C) 2025 Richard Elwell
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+*******************************************************************************/
+#include <stdint.h>
+#include <stdio.h>
+#include "ubx_message.h"
+
+
+// --- Define UBX messages ---
+
+// UBX-CFG-PRT Target=UART1 ProtocolIn=UBX+NMEA+RTCM2 ProtocolOut=NMEA Baudrate=9600 Databits=8 Stopbits=1 Parity=None BitOrder=LsbFirst ExtendedTxTimeout=off TxReadyFeature=off
+UBX_CFG_PRT(cfg_prt_uart1_nmea, 0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x80,0x25,0x00,0x00,0x07,0x00,0x02,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-PRT Target=USB ProtocolIn=UBX+NMEA+RTCM2 ProtocolOut=NMEA ExtendedTxTimeout=off TxReadyFeature=off
+UBX_CFG_PRT(cfg_prt_usb_nmea, 0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x07,0x00,0x02,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-TP PulseMode=RisingEdge TimeSource=GPSTime
+UBX_CFG_TP(cfg_tp, 0x40,0x42,0x0F,0x00,0xA0,0x86,0x01,0x00,0x01,0x01,0x00,0x00,0x34,0x03,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-TP5 TimepulseSettings=TIMEPULSE TimeSource=GPSTime
+UBX_CFG_TP5(cfg_tp5, 0x00,0x01,0x00,0x00,0x32,0x00,0x00,0x00,0x40,0x42,0x0F,0x00,0x40,0x42,0x0F,0x00,0x00,0x00,0x00,0x00,0xA0,0x86,0x01,0x00,0x00,0x00,0x00,0x00,0xF7,0x00,0x00,0x00)
+
+// UBX-CFG-RATE TimeSource=GPSTime MeasurementPeriod=1000 NavigationRate=1
+UBX_CFG_RATE(cfg_rate, 0xE8,0x03,0x01,0x00,0x01,0x00)
+
+// UBX-CFG-GNSS GPS=configure,on,4,255 SBAS=configure,on,1,3 Galileo=off BeiDou=off IMES=off QZSS=configure,on,0,3 GLONASS=configure,off,8,255 ChannelsAvailable=22 ChannelsToUse=22
+UBX_CFG_GNSS(cfg_gnss_glonass_configure_off, 0x00,0x00,0x16,0x04,0x00,0x04,0xFF,0x00,0x01,0x00,0x00,0x01,0x01,0x01,0x03,0x00,0x01,0x00,0x00,0x01,0x05,0x00,0x03,0x00,0x01,0x00,0x00,0x01,0x06,0x08,0xFF,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-GNSS GPS=configure,on,4,255 SBAS=configure,on,1,3 Galileo=off BeiDou=off IMES=off QZSS=configure,on,0,3 GLONASS=configure,on,8,255 ChannelsAvailable=22 ChannelsToUse=22
+UBX_CFG_GNSS(cfg_gnss_glonass_configure_on, 0x00,0x00,0x16,0x04,0x00,0x04,0xFF,0x00,0x01,0x00,0x00,0x01,0x01,0x01,0x03,0x00,0x01,0x00,0x00,0x01,0x05,0x00,0x03,0x00,0x01,0x00,0x00,0x01,0x06,0x08,0xFF,0x00,0x01,0x00,0x00,0x01)
+
+// UBX-CFG-GNSS GPS=configure,on,4,255 SBAS=configure,on,1,3 Galileo=off BeiDou=off IMES=off QZSS=configure,on,0,3 GLONASS=off ChannelsAvailable=22 ChannelsToUse=22
+UBX_CFG_GNSS(cfg_gnss_glonass_off, 0x00,0x00,0x16,0x03,0x00,0x04,0xFF,0x00,0x01,0x00,0x00,0x01,0x01,0x01,0x03,0x00,0x01,0x00,0x00,0x01,0x05,0x00,0x03,0x00,0x01,0x00,0x00,0x01)
+
+// UBX-CFG-INF Protocol=NEMA Target0=all,off Target1=all,off Target2=all,off Target3=all,off Target4=all,off
+UBX_CFG_INF(cfg_inf_off, 0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-00-NMEA-GxGGA I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gga_off, 0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-01-NMEA-GxGLL I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gll_off, 0xF0,0x01,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-02-NMEA-GxGSA I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gsa_off, 0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-03-NMEA-GxGSV I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gsv_off, 0xF0,0x03,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-04-NMEA-GxRMC I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_rmc_off, 0xF0,0x04,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-05-NMEA-GxVTG I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_vtg_off, 0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01)
+
+// UBX-CFG-MSG Message=F0-06-NMEA-GxGRS I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_grs_off, 0xF0,0x06,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-07-NMEA-GxGST I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gst_off, 0xF0,0x07,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-09-NMEA-GxGBS I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gbs_off, 0xF0,0x08,0x01,0x01,0x01,0x01,0x01,0x00)
+
+// UBX-CFG-MSG Message=F0-0A-NMEA-GxDTM I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_dtm_off, 0xF0,0x09,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-0D-NMEA-GxGNS I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_gns_off, 0xF0,0x0A,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-0E-NMEA-GxTHS I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_ths_off, 0xF0,0x0D,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-0F-NMEA-GxVLW I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_vlw_off, 0xF0,0x0E,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-10-NMEA-GxUTC I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_utc_off, 0xF0,0x0F,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-0B-NMEA-GxRLM I2C=off UART1=off UART2=off USB=off SPI=off
+UBX_CFG_MSG(cfg_msg_nmea_rlm_off, 0xF0,0x10,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-MSG Message=F0-08-NMEA-GxZDA I2C=on,1 UART1=on,1 UART2=on,1 USB=on,1 SPI=on,1
+UBX_CFG_MSG(cfg_msg_nmea_zda_on, 0xF0,0x0B,0x00,0x00,0x00,0x00,0x00,0x00)
+
+// UBX-CFG-CFG SaveCurrentConfiguration Devices=BBR,FLASH
+UBX_CFG_CFG(cfg_cfg_bbr_flash, 0x00,0x05,0x00,0x00)
+
+
+// --- Define list items ---
+
+UBX_ITEM(cfg_prt_uart1_nmea)
+UBX_ITEM(cfg_prt_usb_nmea)
+UBX_ITEM(cfg_tp)
+UBX_ITEM(cfg_tp5)
+UBX_ITEM(cfg_rate)
+UBX_ITEM(cfg_gnss_glonass_configure_off)
+UBX_ITEM(cfg_gnss_glonass_configure_on)
+UBX_ITEM(cfg_gnss_glonass_off)
+UBX_ITEM(cfg_inf_off)
+UBX_ITEM(cfg_msg_nmea_gga_off)
+UBX_ITEM(cfg_msg_nmea_gll_off)
+UBX_ITEM(cfg_msg_nmea_gsa_off)
+UBX_ITEM(cfg_msg_nmea_gsv_off)
+UBX_ITEM(cfg_msg_nmea_rmc_off)
+UBX_ITEM(cfg_msg_nmea_vtg_off)
+UBX_ITEM(cfg_msg_nmea_grs_off)
+UBX_ITEM(cfg_msg_nmea_gst_off)
+UBX_ITEM(cfg_msg_nmea_gbs_off)
+UBX_ITEM(cfg_msg_nmea_dtm_off)
+UBX_ITEM(cfg_msg_nmea_gns_off)
+UBX_ITEM(cfg_msg_nmea_ths_off)
+UBX_ITEM(cfg_msg_nmea_vlw_off)
+UBX_ITEM(cfg_msg_nmea_utc_off)
+UBX_ITEM(cfg_msg_nmea_rlm_off)
+UBX_ITEM(cfg_msg_nmea_zda_on)
+UBX_ITEM(cfg_cfg_bbr_flash)
+
+
+#endif // UBX_DEFS_H
+

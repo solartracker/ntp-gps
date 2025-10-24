@@ -38,7 +38,7 @@ static const uint8_t name[] = {         \
     ##__VA_ARGS__,                      \
     (PP_SUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF, \
     (PP_CSUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF \
-}
+};
 
 // Convenience macros for common UBX messages
 
@@ -82,7 +82,7 @@ static const uint8_t name[] = {         \
 #define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, 0x07)
 
 // Debug print helper
-static inline void print_ubx(const uint8_t *msg, size_t len) {
+static inline void print_ubx(const uint8_t * const msg, size_t len) {
     for (size_t i = 0; i < len; i++)
         printf("%02X ", msg[i]);
     printf("\n");
@@ -104,6 +104,41 @@ static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
         }
     }
 }
+
+// --- Struct for UBX message entry ---
+typedef struct {
+    const uint8_t * const data;
+    size_t length;
+} ubx_msg_t;
+
+// --- Helper macros ---
+#define CONCAT2(a,b) a##b
+#define CONCAT(a,b) CONCAT2(a,b)
+
+// --- Wrap an existing UBX message in a ubx_msg_t with underscore prefix ---
+#define UBX_ITEM(name) \
+    static const ubx_msg_t CONCAT(_, name) = { \
+        name, sizeof(name) / sizeof(name[0]) };
+
+// --- Macro to define a message and its list entry ---
+// Byte array keeps the clean name, struct gets the _ prefix
+#define UBX_ITEM_CREATE(generator_macro, name, ...) \
+    generator_macro(name, ##__VA_ARGS__);       \
+    static const ubx_msg_t CONCAT(_, name) = { name, sizeof(name)/sizeof(name[0]) };
+
+// --- Macro to define a message and its ubx_msg_t entry ---
+// Byte array gets the _ prefix, struct keeps the clean name
+#define UBX_ITEM_CREATE_2(generator_macro, name, ...) \
+    generator_macro(CONCAT(_,name), ##__VA_ARGS__);       \
+    static const ubx_msg_t name = { CONCAT(_,name), sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]) };
+
+// --- Macros to delimit a list ---
+#define UBX_LIST_BEGIN static const ubx_msg_t * const ubxArrayList[] = {
+#define UBX_LIST_END   NULL };
+
+// --- Reference the wrapper automatically ---
+#define UBX_REF(name) &CONCAT(_, name),
+
 
 #endif // UBX_MESSAGES_H
 
