@@ -59,7 +59,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$PROJECT_DIR/shared-utils.sh"
 REFERENCE_FILE="$PROJECT_DIR/.sync-system-filelist"
-MAX_FILES=20
+MAX_FILES=30
 
 update_reference_file() {
     local tmpfile
