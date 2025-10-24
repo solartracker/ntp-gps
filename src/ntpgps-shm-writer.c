@@ -49,7 +49,7 @@
   #define TRACE(fmt, ...) \
     do { \
         pthread_mutex_lock(&trace_mutex); \
-        printf(fmt, ##__VA_ARGS__); \
+        fprintf(stderr, fmt, ##__VA_ARGS__); \
         pthread_mutex_unlock(&trace_mutex); \
     } while (0)
 #else
@@ -57,7 +57,7 @@
     do { \
         if (atomic_load(&debug_trace)) { \
             pthread_mutex_lock(&trace_mutex); \
-            printf(fmt, ##__VA_ARGS__); \
+            fprintf(stderr, fmt, ##__VA_ARGS__); \
             pthread_mutex_unlock(&trace_mutex); \
         } \
     } while (0)
@@ -118,6 +118,10 @@ char ublox_software_version[64];
 char ublox_hardware_version[64];
 char ublox_extensions[10][64];
 int ublox_extension_count = 0;
+
+#define SOCKET_DIR "/run/ntpgps"
+const char socket_dir[] = SOCKET_DIR;
+const char socket_path_fmt[] = SOCKET_DIR"/shmwriter%d.sock";
 
 //const char date_seed_dir_default[] = "/var/lib/ntpgps";
 const char date_seed_dir_default[] = "/run/ntpgps";
@@ -1037,7 +1041,6 @@ int update_stored_date_from_command(const char *input, int client_fd) {
     return result;
 }
 
-#define SOCKET_PATH_FMT "/run/ntpgps/shmwriter%d.sock"
 #define MAX_CMD_LEN 128
 
 static int setup_unix_socket(int unit)
@@ -1045,7 +1048,11 @@ static int setup_unix_socket(int unit)
     int listen_fd;
     struct sockaddr_un addr;
 
-    snprintf(sock_path, sizeof(sock_path), SOCKET_PATH_FMT, unit);
+    if (mkdir_p(socket_dir, 0755) != 0) {
+        TRACE("Failed to create directory %s: %s\n", socket_dir, strerror(errno));
+    }
+
+    snprintf(sock_path, sizeof(sock_path), socket_path_fmt, unit);
     unlink(sock_path);  // remove stale socket file
 
     listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
