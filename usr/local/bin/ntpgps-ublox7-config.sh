@@ -95,22 +95,22 @@ ntp_configure_ublox7() {
     send_ubx "B5 62 06 01 08 00 F0 06 00 00 00 00 00 00 05 4D"
     # UBX-CFG-MSG Message=F0-07-NMEA-GxGST I2C=off UART1=off UART2=off USB=off SPI=off
     send_ubx "B5 62 06 01 08 00 F0 07 00 00 00 00 00 00 06 54"
-    # UBX-CFG-MSG Message=F0-09-NMEA-GxGBS I2C=off UART1=off UART2=off USB=off SPI=off
-    send_ubx "B5 62 06 01 08 00 F0 08 01 01 01 01 01 00 0C 6F"
-    # UBX-CFG-MSG Message=F0-0A-NMEA-GxDTM I2C=off UART1=off UART2=off USB=off SPI=off
-    send_ubx "B5 62 06 01 08 00 F0 09 00 00 00 00 00 00 08 62"
-    # UBX-CFG-MSG Message=F0-0D-NMEA-GxGNS I2C=off UART1=off UART2=off USB=off SPI=off
-    send_ubx "B5 62 06 01 08 00 F0 0A 00 00 00 00 00 00 09 69"
-    # UBX-CFG-MSG Message=F0-0E-NMEA-GxTHS I2C=off UART1=off UART2=off USB=off SPI=off
-    #send_ubx "B5 62 06 01 08 00 F0 0D 00 00 00 00 00 00 0C 7E"
-    # UBX-CFG-MSG Message=F0-0F-NMEA-GxVLW I2C=off UART1=off UART2=off USB=off SPI=off
-    #send_ubx "B5 62 06 01 08 00 F0 0E 00 00 00 00 00 00 0D 89"
-    # UBX-CFG-MSG Message=F0-10-NMEA-GxUTC I2C=off UART1=off UART2=off USB=off SPI=off
-    #send_ubx "B5 62 06 01 08 00 F0 0F 00 00 00 00 00 00 0E 94"
-    # UBX-CFG-MSG Message=F0-0B-NMEA-GxRLM I2C=off UART1=off UART2=off USB=off SPI=off
-    #send_ubx "B5 62 06 01 08 00 F0 10 00 00 00 00 00 00 0F 9F"
     # UBX-CFG-MSG Message=F0-08-NMEA-GxZDA I2C=on,1 UART1=on,1 UART2=on,1 USB=on,1 SPI=on,1
-    send_ubx "B5 62 06 01 08 00 F0 0B 00 00 00 00 00 00 0A 70"
+    send_ubx "B5 62 06 01 08 00 F0 08 01 01 01 01 01 00 0C 6F"
+    # UBX-CFG-MSG Message=F0-09-NMEA-GxGBS I2C=off UART1=off UART2=off USB=off SPI=off
+    send_ubx "B5 62 06 01 08 00 F0 09 00 00 00 00 00 00 08 62"
+    # UBX-CFG-MSG Message=F0-0A-NMEA-GxDTM I2C=off UART1=off UART2=off USB=off SPI=off
+    send_ubx "B5 62 06 01 08 00 F0 0A 00 00 00 00 00 00 09 69"
+    # UBX-CFG-MSG Message=F0-0D-NMEA-GxGNS I2C=off UART1=off UART2=off USB=off SPI=off
+    send_ubx "B5 62 06 01 08 00 F0 0D 00 00 00 00 00 00 0C 7E"
+    # UBX-CFG-MSG Message=F0-0E-NMEA-GxTHS I2C=off UART1=off UART2=off USB=off SPI=off
+    #send_ubx "B5 62 06 01 08 00 F0 0E 00 00 00 00 00 00 0D 89"
+    # UBX-CFG-MSG Message=F0-0F-NMEA-GxVLW I2C=off UART1=off UART2=off USB=off SPI=off
+    #send_ubx "B5 62 06 01 08 00 F0 0F 00 00 00 00 00 00 0E 94"
+    # UBX-CFG-MSG Message=F0-10-NMEA-GxUTC I2C=off UART1=off UART2=off USB=off SPI=off
+    #send_ubx "B5 62 06 01 08 00 F0 10 00 00 00 00 00 00 0F 9F"
+    # UBX-CFG-MSG Message=F0-0B-NMEA-GxRLM I2C=off UART1=off UART2=off USB=off SPI=off
+    #send_ubx "B5 62 06 01 08 00 F0 0B 00 00 00 00 00 00 0A 70"
     # UBX-CFG-CFG SaveCurrentConfiguration Devices=BBR,FLASH
     #send_ubx "B5 62 06 09 04 00 00 05 00 00 1C 17"
 

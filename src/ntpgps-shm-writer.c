@@ -1589,10 +1589,14 @@ static int configure_ublox_zda_only(int fd)
         UBX_REF(cfg_msg_nmea_vtg_off)
         UBX_REF(cfg_msg_nmea_grs_off)
         UBX_REF(cfg_msg_nmea_gst_off)
+        UBX_REF(cfg_msg_nmea_zda_on)
         UBX_REF(cfg_msg_nmea_gbs_off)
         UBX_REF(cfg_msg_nmea_dtm_off)
         UBX_REF(cfg_msg_nmea_gns_off)
-        UBX_REF(cfg_msg_nmea_zda_on)
+        //UBX_REF(cfg_msg_nmea_ths_off)
+        //UBX_REF(cfg_msg_nmea_vlw_off)
+        //UBX_REF(cfg_msg_nmea_utc_off)
+        //UBX_REF(cfg_msg_nmea_rlm_off)
     UBX_LIST_END
 
     // --- Send UBX commands ---
