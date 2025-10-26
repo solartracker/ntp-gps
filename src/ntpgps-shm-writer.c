@@ -1544,44 +1544,57 @@ void* gps_thread_func(void *arg) {
     return NULL;
 }
 
+////////////////////////////////////////////////////////////////////////////////
 
-// Wait for UBX ACK
-/*
-static int wait_ubx_ack(int fd, int timeout_us) {
+typedef enum {
+    UBX_ACK_OK = 0,       // ACK received
+    UBX_ACK_NAK = 1,      // NAK received
+    UBX_ACK_TIMEOUT = -1, // No response in timeout
+    UBX_ACK_ERROR = -2    // UART read/write error
+} ubx_ack_result_t;
+
+static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us) {
     uint8_t buf[64];
     int total_wait = 0;
-    int n;
 
     while (total_wait < timeout_us) {
-        n = read(fd, buf, sizeof(buf));
+        ssize_t n = read(fd, buf, sizeof(buf));
         if (n > 0) {
-            for (int i = 0; i < n - 2; i++) {
+            for (ssize_t i = 0; i <= n - 4; i++) { // need at least 4 bytes for SYNC+CLS+ID
                 if (buf[i] == UBX_SYNC1 && buf[i+1] == UBX_SYNC2 && buf[i+2] == UBX_CLS_ACK) {
-                    if (buf[i+3] == UBX_ID_ACK_ACK) return 0;  // ACK received
-                    if (buf[i+3] == UBX_ID_ACK_NAK)  return -1; // NAK received
+                    if (buf[i+3] == UBX_ID_ACK_ACK) return UBX_ACK_OK;
+                    if (buf[i+3] == UBX_ID_ACK_NAK) return UBX_ACK_NAK;
                 }
             }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             perror("read");
-            return -1;
+            return UBX_ACK_ERROR;
         }
-        usleep(1000); // poll every 1 ms
+
+        usleep(1000);           // 1 ms polling
         total_wait += 1000;
     }
 
     fprintf(stderr, "UBX ACK timeout\n");
-    return -1;
+    return UBX_ACK_TIMEOUT;
 }
 
-// Send one UBX command and wait for ACK
-static int send_ubx(int fd, const uint8_t * const cmd, const size_t len) {
-    if (write(fd, cmd, len) != (ssize_t)len) {
+static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *pmsg) {
+    if (!pmsg)
+        return UBX_ACK_ERROR;
+
+    print_ubx(pmsg);
+    ssize_t written = write(fd, pmsg->data, pmsg->length);
+    if (written != (ssize_t)pmsg->length) {
         perror("write");
-        return -1;
+        return UBX_ACK_ERROR;
     }
+
+    tcdrain(fd); // ensure all bytes have left UART before waiting
     return wait_ubx_ack(fd, 50000); // 50 ms timeout
 }
-*/
+
+////////////////////////////////////////////////////////////////////////////////
 
 int configure_serial_raw(int fd) {
     if (tcgetattr(fd, &orig_tio) < 0) { perror("tcgetattr"); return 1; }
@@ -1611,9 +1624,8 @@ static int send_ubx_message(int fd, const ubx_msg_t * const pmsg) {
         return -1;
 
     print_ubx(pmsg);
-    const uint8_t * const data = pmsg->data;
-    const size_t len = pmsg->length;
-    if (len && write(fd, data, len) != len)
+    ssize_t written = write(fd, pmsg->data, pmsg->length);
+    if (written != (ssize_t)pmsg->length)
         return -1;
 
     tcdrain(fd);
@@ -1643,10 +1655,21 @@ static int configure_ublox_zda_only(int fd)
 
     // --- Send UBX commands ---
     for (size_t i = 0; ubxArrayList[i]; i++) {
-        if (send_ubx_message(fd, ubxArrayList[i]) < 0) {
-            fprintf(stderr, "Failed to send UBX command #%zu\n", i);
-            //return -1;
+        switch (send_ubx(fd, ubxArrayList[i])) {
+            case UBX_ACK_OK:
+                printf("Configuration accepted.\n");
+                break;
+            case UBX_ACK_NAK:
+                fprintf(stderr, "Command rejected (NAK).\n");
+                break;
+            case UBX_ACK_TIMEOUT:
+                fprintf(stderr, "Timeout waiting for ACK.\n");
+                break;
+            default:
+                fprintf(stderr, "Communication error.\n");
+                break;
         }
+
         usleep(10000); // 10 ms delay between commands
     }
 
@@ -1754,12 +1777,12 @@ int get_ublox_version(int fd) {
     // 1. Enable UBX output on USB,UART1
 
     // UBX-CFG-PRT for USB: ProtocolOut = UBX + NMEA
-    if (send_ubx_message(fd, &cfg_prt_uart1_nmea_ubx) < 0)
+    if (send_ubx_message(fd, &cfg_prt_uart1_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
     // UBX-CFG-PRT for UART1: ProtocolOut = UBX + NMEA
-    if (send_ubx_message(fd, &cfg_prt_usb_nmea_ubx) < 0)
+    if (send_ubx_message(fd, &cfg_prt_usb_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
@@ -1777,7 +1800,7 @@ int get_ublox_version(int fd) {
 
     // 3. Disable UBX output on USB,UART1
 
-    // UBX-CFG-PRT for USB: ProtocolOut = UBX + NMEA
+    // UBX-CFG-PRT for USB: ProtocolOut = NMEA
     if (send_ubx_message(fd, &cfg_prt_uart1_nmea) < 0)
         return 0;
     usleep(20000); // wait 20 ms
