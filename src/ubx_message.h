@@ -22,6 +22,16 @@
 
 #include "pp_utils.h"
 
+// --- Struct for UBX message entry ---
+typedef struct {
+    const uint8_t * const data;
+    size_t length;
+} ubx_msg_t;
+
+// --- Helper macros ---
+#define CONCAT2(a,b) a##b
+#define CONCAT(a,b) CONCAT2(a,b)
+
 // Macro to define a UBX message with optional payload
 // __VA_ARGS__ can be empty
 #define UBX_SYNC1 0xB5
@@ -29,18 +39,27 @@
 #define UBX_PAYLOAD_LEN(...) (sizeof((uint8_t[]){__VA_ARGS__}))
 #define UBX_LEN_LO(...) ((UBX_PAYLOAD_LEN(__VA_ARGS__)) & 0xFF)
 #define UBX_LEN_HI(...) ((UBX_PAYLOAD_LEN(__VA_ARGS__)) >> 8 & 0xFF)
-#define UBX_MESSAGE(name, cls, id, ...) \
-static const uint8_t name[] = {         \
-    UBX_SYNC1, UBX_SYNC2,               \
-    cls, id,                            \
-    UBX_LEN_LO(__VA_ARGS__),            \
-    UBX_LEN_HI(__VA_ARGS__),            \
-    ##__VA_ARGS__,                      \
+
+#define UBX_MESSAGE_BYTES(name, cls, id, ...)               \
+static const uint8_t name[] = {                             \
+    UBX_SYNC1, UBX_SYNC2,                                   \
+    cls, id,                                                \
+    UBX_LEN_LO(__VA_ARGS__),                                \
+    UBX_LEN_HI(__VA_ARGS__),                                \
+    ##__VA_ARGS__,                                          \
     (PP_SUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF, \
-    (PP_CSUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF \
-};
+    (PP_CSUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF };
+
+#define UBX_MESSAGE(name, cls, id, ...)                     \
+UBX_MESSAGE_BYTES(CONCAT(_,name),  cls, id, ##__VA_ARGS__)  \
+static const ubx_msg_t name = { CONCAT(_,name),             \
+    sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]) };
+
 
 // Convenience macros for common UBX messages
+
+#define UBX_MESSAGE_ARGS(a) a.data,a.length
+#define UBX_MESSAGE_ARGS_2(a) a,sizeof(a)
 
 #include "ubx_class.h"
 
@@ -82,10 +101,13 @@ static const uint8_t name[] = {         \
 #define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, 0x07)
 
 // Debug print helper
-static inline void print_ubx(const uint8_t * const msg, size_t len) {
+static inline void print_ubx_bytes(const uint8_t * const msg, size_t len) {
     for (size_t i = 0; i < len; i++)
         printf("%02X ", msg[i]);
     printf("\n");
+}
+static inline void print_ubx(const ubx_msg_t * const pmsg) {
+    if (pmsg) print_ubx_bytes(pmsg->data, pmsg->length);
 }
 
 // Copy string helper
@@ -104,16 +126,6 @@ static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
         }
     }
 }
-
-// --- Struct for UBX message entry ---
-typedef struct {
-    const uint8_t * const data;
-    size_t length;
-} ubx_msg_t;
-
-// --- Helper macros ---
-#define CONCAT2(a,b) a##b
-#define CONCAT(a,b) CONCAT2(a,b)
 
 // --- Wrap an existing UBX message in a ubx_msg_t with underscore prefix ---
 #define UBX_ITEM(name) \
@@ -137,7 +149,8 @@ typedef struct {
 #define UBX_LIST_END   NULL };
 
 // --- Reference the wrapper automatically ---
-#define UBX_REF(name) &CONCAT(_, name),
+#define UBX_REF(name) &name,
+#define UBX_REF_2(name) &CONCAT(_, name),
 
 
 #endif // UBX_MESSAGES_H

@@ -1546,6 +1546,7 @@ void* gps_thread_func(void *arg) {
 
 
 // Wait for UBX ACK
+/*
 static int wait_ubx_ack(int fd, int timeout_us) {
     uint8_t buf[64];
     int total_wait = 0;
@@ -1573,51 +1574,14 @@ static int wait_ubx_ack(int fd, int timeout_us) {
 }
 
 // Send one UBX command and wait for ACK
-static int send_ubx(int fd, const uint8_t *cmd, size_t len) {
+static int send_ubx(int fd, const uint8_t * const cmd, const size_t len) {
     if (write(fd, cmd, len) != (ssize_t)len) {
         perror("write");
         return -1;
     }
     return wait_ubx_ack(fd, 50000); // 50 ms timeout
 }
-
-static int configure_ublox_zda_only(int fd)
-{
-    // --- Build the compile-time list ---
-    UBX_LIST_BEGIN
-        UBX_REF(cfg_prt_uart1_nmea)
-        UBX_REF(cfg_prt_usb_nmea)
-        UBX_REF(cfg_inf_off)
-        UBX_REF(cfg_msg_nmea_gga_off)
-        UBX_REF(cfg_msg_nmea_gll_off)
-        UBX_REF(cfg_msg_nmea_gsa_off)
-        UBX_REF(cfg_msg_nmea_gsv_off)
-        UBX_REF(cfg_msg_nmea_rmc_off)
-        UBX_REF(cfg_msg_nmea_vtg_off)
-        UBX_REF(cfg_msg_nmea_grs_off)
-        UBX_REF(cfg_msg_nmea_gst_off)
-        UBX_REF(cfg_msg_nmea_zda_on)
-        UBX_REF(cfg_msg_nmea_gbs_off)
-        UBX_REF(cfg_msg_nmea_dtm_off)
-        UBX_REF(cfg_msg_nmea_gns_off)
-        //UBX_REF(cfg_msg_nmea_ths_off)
-        //UBX_REF(cfg_msg_nmea_vlw_off)
-        //UBX_REF(cfg_msg_nmea_utc_off)
-        //UBX_REF(cfg_msg_nmea_rlm_off)
-    UBX_LIST_END
-
-    // --- Send UBX commands ---
-    for (size_t i = 0; ubxArrayList[i]; i++) {
-        const ubx_msg_t * const msg = ubxArrayList[i];
-        if (send_ubx(fd, msg->data, msg->length) < 0) {
-            fprintf(stderr, "Failed to send UBX command #%zu\n", i);
-            //return -1;
-        }
-        usleep(10000); // 10 ms delay between commands
-    }
-
-    return 0;
-}
+*/
 
 int configure_serial_raw(int fd) {
     if (tcgetattr(fd, &orig_tio) < 0) { perror("tcgetattr"); return 1; }
@@ -1642,11 +1606,50 @@ void restore_serial(int fd) {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Send UBX message
-static int send_ubx_message(int fd, const uint8_t *msg, size_t len) {
-    if (len && write(fd, msg, len) != len)
+static int send_ubx_message(int fd, const ubx_msg_t * const pmsg) {
+    if (!pmsg)
+        return -1;
+
+    print_ubx(pmsg);
+    const uint8_t * const data = pmsg->data;
+    const size_t len = pmsg->length;
+    if (len && write(fd, data, len) != len)
         return -1;
 
     tcdrain(fd);
+    return 0;
+}
+
+static int configure_ublox_zda_only(int fd)
+{
+    // --- Build the compile-time list ---
+    UBX_LIST_BEGIN
+        UBX_REF(cfg_prt_uart1_nmea)
+        UBX_REF(cfg_prt_usb_nmea)
+        UBX_REF(cfg_inf_off)
+        UBX_REF(cfg_msg_nmea_gga_off)
+        UBX_REF(cfg_msg_nmea_gll_off)
+        UBX_REF(cfg_msg_nmea_gsa_off)
+        UBX_REF(cfg_msg_nmea_gsv_off)
+        UBX_REF(cfg_msg_nmea_rmc_off)
+        UBX_REF(cfg_msg_nmea_vtg_off)
+        UBX_REF(cfg_msg_nmea_grs_off)
+        UBX_REF(cfg_msg_nmea_gst_off)
+        UBX_REF(cfg_msg_nmea_zda_on)
+        UBX_REF(cfg_msg_nmea_gbs_off)
+        UBX_REF(cfg_msg_nmea_dtm_off)
+        UBX_REF(cfg_msg_nmea_gns_off)
+    UBX_LIST_END
+
+    // --- Send UBX commands ---
+    for (size_t i = 0; ubxArrayList[i]; i++) {
+        if (send_ubx_message(fd, ubxArrayList[i]) < 0) {
+            fprintf(stderr, "Failed to send UBX command #%zu\n", i);
+            //return -1;
+        }
+        usleep(10000); // 10 ms delay between commands
+    }
+
     return 0;
 }
 
@@ -1751,34 +1754,17 @@ int get_ublox_version(int fd) {
     // 1. Enable UBX output on USB,UART1
 
     // UBX-CFG-PRT for USB: ProtocolOut = UBX + NMEA
-    UBX_CFG_PRT(cfg_prt_usb,
-        0x03, 0x00,             // PortID = 3 (USB), reserved
-        0x00, 0x00, 0x00, 0x00, // txReady (unused for USB)
-        0x00, 0x00, 0x00, 0x00, // mode (unused for USB)
-        0x07, 0x00, 0x03, 0x00, // inProtoMask=UBX+NMEA+RTCM2 (0x07), outProtoMask=UBX+NMEA (0x03)
-        0x00, 0x00, 0x00, 0x00  // flags + reserved2
-    );
-    if (send_ubx_message(fd, cfg_prt_usb, sizeof(cfg_prt_usb)) < 0)
+    if (send_ubx_message(fd, &cfg_prt_uart1_nmea_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
     // UBX-CFG-PRT for UART1: ProtocolOut = UBX + NMEA
-    UBX_CFG_PRT(cfg_prt_uart1,
-        0x01, 0x00,             // PortID = 1 (UART1)
-        0x00, 0x00, 0x00, 0x00, // txReady
-        0xD0, 0x08, 0x00, 0x00, // mode: 8N1, no parity
-        0x80, 0x25, 0x00, 0x00, // baudRate = 9600 (0x2580)
-        0x07, 0x00, 0x03, 0x00, // inProtoMask=UBX+NMEA+RTCM2, outProtoMask=UBX+NMEA
-        0x00, 0x00, 0x00, 0x00  // flags + reserved2
-    );
-    if (send_ubx_message(fd, cfg_prt_uart1, sizeof(cfg_prt_uart1)) < 0)
+    if (send_ubx_message(fd, &cfg_prt_usb_nmea_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
     // 2. Send UBX-MON-VER request
-
-    UBX_MON_VER(mon_ver);
-    if (send_ubx_message(fd, mon_ver, sizeof(mon_ver)) < 0)
+    if (send_ubx_message(fd, &mon_ver) < 0)
         return 0;
 
     if (!read_ubx_mon_ver(fd, 500)) // timeout 500 ms
@@ -1788,6 +1774,18 @@ int get_ublox_version(int fd) {
     printf("u-blox Hardware Version: %s\n", ublox_hardware_version);
     for (int i = 0; i < ublox_extension_count; i++)
         printf("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
+
+    // 3. Disable UBX output on USB,UART1
+
+    // UBX-CFG-PRT for USB: ProtocolOut = UBX + NMEA
+    if (send_ubx_message(fd, &cfg_prt_uart1_nmea) < 0)
+        return 0;
+    usleep(20000); // wait 20 ms
+
+    // UBX-CFG-PRT for UART1: ProtocolOut = NMEA
+    if (send_ubx_message(fd, &cfg_prt_usb_nmea) < 0)
+        return 0;
+    usleep(20000); // wait 20 ms
 
     return 1;
 }
@@ -1943,6 +1941,7 @@ int main(int argc, char *argv[]) {
         // Configure u-blox GPS to output ZDA only
         if (ublox_zda_only) {
             TRACE("Configuring u-blox for ZDA-only output...\n");
+            usleep(20000); // wait 20 ms
             if (configure_ublox_zda_only(fd) != 0) {
                 fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
             }
