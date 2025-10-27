@@ -370,13 +370,25 @@ int adjust_date_mcu(int *year, int *month, int *day,
 // Get monotonic time in nanoseconds
 static inline uint64_t monotonic_now_ns(void) {
     struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
+    if (clock_gettime(CLOCK_MONOTONIC, &t) != 0) {
+        return 0; // or handle error
+    }
     return (uint64_t)t.tv_sec * 1000000000ULL + t.tv_nsec;
+}
+// Get monotonic time in microseconds
+static inline uint64_t monotonic_now_us(void) {
+    struct timespec t;
+    if (clock_gettime(CLOCK_MONOTONIC, &t) != 0) {
+        return 0; // or handle error
+    }
+    return (uint64_t)t.tv_sec * 1000000ULL + t.tv_nsec / 1000ULL;
 }
 // Get monotonic time in milliseconds
 static inline uint64_t monotonic_now_ms(void) {
     struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
+    if (clock_gettime(CLOCK_MONOTONIC, &t) != 0) {
+        return 0; // or handle error
+    }
     return (uint64_t)t.tv_sec * 1000ULL + t.tv_nsec / 1000000ULL;
 }
 
@@ -1573,7 +1585,7 @@ static int send_ubx_message(int fd, const ubx_msg_t * const pmsg) {
     if (!pmsg)
         return -1;
 
-    print_ubx(pmsg);
+    //print_ubx(pmsg);
     ssize_t written = write(fd, pmsg->data, pmsg->length);
     if (written != (ssize_t)pmsg->length)
         return -1;
@@ -1591,55 +1603,64 @@ typedef enum {
     UBX_ACK_ERROR = -2
 } ubx_ack_result_t;
 
-// Wait for UBX ACK/NAK
-// fd: file descriptor for UART
-// timeout_us: timeout in microseconds
-// filter_cls/filter_id: optional, set to 0xFF to ignore filtering
 static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us, uint8_t filter_cls, uint8_t filter_id)
 {
-    uint8_t buf[128];  // rolling buffer
+    uint8_t buf[128];
     size_t buf_len = 0;
-    int total_wait = 0;
+    struct timeval tv;
+    fd_set rfds;
+    uint64_t start = monotonic_now_us();
 
-    while (total_wait < timeout_us) {
-        ssize_t n = read(fd, buf + buf_len, sizeof(buf) - buf_len);
-        if (n > 0) {
-            //fprintf(stderr, "read:  ");
-            //print_ubx_bytes(buf + buf_len, n);
+    while ((monotonic_now_us() - start) < (uint64_t)timeout_us) {
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+
+        tv.tv_sec = 0;
+        tv.tv_usec = 1000;  // 1 ms polling, non-blocking
+
+        int ret = select(fd + 1, &rfds, NULL, NULL, &tv);
+        if (ret < 0) {
+            if (errno == EINTR) continue;
+            perror("select");
+            return UBX_ACK_ERROR;
+        } else if (ret == 0) {
+            continue;  // timeout, loop again
+        }
+
+        if (FD_ISSET(fd, &rfds)) {
+            ssize_t n = read(fd, buf + buf_len, sizeof(buf) - buf_len);
+            if (n <= 0) {
+                if (errno == EINTR) continue;
+                if (errno != EAGAIN && errno != EWOULDBLOCK) return UBX_ACK_ERROR;
+                continue;
+            }
+            fprintf(stderr, "read:  ");
+            print_ubx_bytes(buf + buf_len, n);
 
             buf_len += n;
 
-            // Prevent overflow: keep only the last 20 bytes if buffer is nearly full
-            if (buf_len > sizeof(buf) - 20) {
-                memmove(buf, buf + buf_len - 20, 20);
-                buf_len = 20;
-            }
-
-            // Scan buffer for ACK/NAK
+            // Scan for full ACK/NAK packets (10 bytes)
             size_t i = 0;
-            while (i + 9 < buf_len) { // need at least 10 bytes for a full ACK
+            while (i + 9 < buf_len) {
                 if (buf[i] == 0xB5 && buf[i+1] == 0x62 && buf[i+2] == 0x05) {
-                    uint8_t ack_type = buf[i+3];      // 0x01 = ACK, 0x00 = NAK
+                    uint8_t ack_type = buf[i+3];
                     uint16_t len = buf[i+4] | (buf[i+5] << 8);
-
-                    if (len == 2 && i + 9 < buf_len) {
-                        //fprintf(stderr, "buf:   ");
-                        //print_ubx_bytes(buf + i, 10);
-
+                    if (len == 2) {
                         uint8_t ack_cls = buf[i+6];
                         uint8_t ack_id  = buf[i+7];
                         uint8_t ck_a    = buf[i+8];
                         uint8_t ck_b    = buf[i+9];
 
-                        // (Optional) verify checksum if you want to be strict
-                        uint8_t calc_ck_a = 0, calc_ck_b = 0;
+                        // Compute checksum over class+id (len=2)
+                        uint8_t calc_a = 0, calc_b = 0;
                         for (int j = 2; j < 8; j++) {
-                            calc_ck_a += buf[i+j];
-                            calc_ck_b += calc_ck_a;
+                            calc_a += buf[i+j];
+                            calc_b += calc_a;
                         }
-                        if (calc_ck_a != ck_a || calc_ck_b != ck_b) {
+
+                        if (calc_a != ck_a || calc_b != ck_b) {
                             fprintf(stderr, "UBX ACK/NAK checksum mismatch\n");
-                            i += 10;  // skip this bad packet
+                            i += 10;
                             continue;
                         }
 
@@ -1650,25 +1671,18 @@ static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us, uint8_t filter_cls,
                             return (ack_type == 0x01) ? UBX_ACK_OK : UBX_ACK_NAK;
                         }
 
-                        i += 10; // move to next possible packet
+                        i += 10;
                         continue;
                     }
                 }
                 i++;
             }
 
-            // Remove processed bytes at start if needed
             if (i > 0) {
                 memmove(buf, buf + i, buf_len - i);
                 buf_len -= i;
             }
-        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            perror("read");
-            return UBX_ACK_ERROR;
         }
-
-        usleep(1000); // 1 ms
-        total_wait += 1000;
     }
 
     fprintf(stderr, "UBX ACK timeout\n");
@@ -1843,12 +1857,12 @@ int get_ublox_version(int fd) {
     // 1. Enable UBX output on USB,UART1
 
     // UBX-CFG-PRT for USB: ProtocolOut = UBX
-    if (send_ubx_message(fd, &cfg_prt_uart1_ubx) < 0)
+    if (send_ubx_message(fd, &cfg_prt_uart1_ubxnmea) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
     // UBX-CFG-PRT for UART1: ProtocolOut = UBX
-    if (send_ubx_message(fd, &cfg_prt_usb_ubx) < 0)
+    if (send_ubx_message(fd, &cfg_prt_usb_ubxnmea) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
