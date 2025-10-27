@@ -1546,67 +1546,6 @@ void* gps_thread_func(void *arg) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef enum {
-    UBX_ACK_OK = 0,       // ACK received
-    UBX_ACK_NAK = 1,      // NAK received
-    UBX_ACK_TIMEOUT = -1, // No response in timeout
-    UBX_ACK_ERROR = -2    // UART read/write error
-} ubx_ack_result_t;
-
-#define UBX_ACK_BUF_SIZE 16
-
-static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us) {
-    uint8_t buf[UBX_ACK_BUF_SIZE];
-    size_t buf_len = 0;
-    int total_wait = 0;
-
-    while (total_wait < timeout_us) {
-        ssize_t n = read(fd, buf + buf_len, UBX_ACK_BUF_SIZE - buf_len);
-        if (n > 0) {
-            buf_len += n;
-
-            // Scan buffer for ACK/NAK pattern
-            for (size_t i = 0; i + 3 < buf_len; i++) {
-                if (buf[i] == UBX_SYNC1 && buf[i+1] == UBX_SYNC2 && buf[i+2] == UBX_CLS_ACK) {
-                    if (buf[i+3] == UBX_ID_ACK_ACK) return UBX_ACK_OK;
-                    if (buf[i+3] == UBX_ID_ACK_NAK) return UBX_ACK_NAK;
-                }
-            }
-
-            // Keep last 3 bytes in buffer in case ACK spans next read
-            if (buf_len > 3) {
-                memmove(buf, buf + buf_len - 3, 3);
-                buf_len = 3;
-            }
-        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            perror("read");
-            return UBX_ACK_ERROR;
-        }
-
-        usleep(1000);
-        total_wait += 1000;
-    }
-
-    fprintf(stderr, "UBX ACK timeout\n");
-    return UBX_ACK_TIMEOUT;
-}
-
-static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *pmsg, int timeout_us) {
-    if (!pmsg)
-        return UBX_ACK_ERROR;
-
-    ssize_t written = write(fd, pmsg->data, pmsg->length);
-    if (written != (ssize_t)pmsg->length) {
-        perror("write");
-        return UBX_ACK_ERROR;
-    }
-
-    tcdrain(fd); // ensure bytes have left UART
-    return wait_ubx_ack(fd, timeout_us);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 int configure_serial_raw(int fd) {
     if (tcgetattr(fd, &orig_tio) < 0) { perror("tcgetattr"); return 1; }
 
@@ -1643,12 +1582,126 @@ static int send_ubx_message(int fd, const ubx_msg_t * const pmsg) {
     return 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+typedef enum {
+    UBX_ACK_OK = 0,       // ACK received
+    UBX_ACK_NAK = 1,      // NAK received
+    UBX_ACK_TIMEOUT = -1,
+    UBX_ACK_ERROR = -2
+} ubx_ack_result_t;
+
+// Wait for UBX ACK/NAK
+// fd: file descriptor for UART
+// timeout_us: timeout in microseconds
+// filter_cls/filter_id: optional, set to 0xFF to ignore filtering
+static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us, uint8_t filter_cls, uint8_t filter_id)
+{
+    uint8_t buf[128];  // rolling buffer
+    size_t buf_len = 0;
+    int total_wait = 0;
+
+    while (total_wait < timeout_us) {
+        ssize_t n = read(fd, buf + buf_len, sizeof(buf) - buf_len);
+        if (n > 0) {
+            //fprintf(stderr, "read:  ");
+            //print_ubx_bytes(buf + buf_len, n);
+
+            buf_len += n;
+
+            // Prevent overflow: keep only the last 20 bytes if buffer is nearly full
+            if (buf_len > sizeof(buf) - 20) {
+                memmove(buf, buf + buf_len - 20, 20);
+                buf_len = 20;
+            }
+
+            // Scan buffer for ACK/NAK
+            size_t i = 0;
+            while (i + 9 < buf_len) { // need at least 10 bytes for a full ACK
+                if (buf[i] == 0xB5 && buf[i+1] == 0x62 && buf[i+2] == 0x05) {
+                    uint8_t ack_type = buf[i+3];      // 0x01 = ACK, 0x00 = NAK
+                    uint16_t len = buf[i+4] | (buf[i+5] << 8);
+
+                    if (len == 2 && i + 9 < buf_len) {
+                        //fprintf(stderr, "buf:   ");
+                        //print_ubx_bytes(buf + i, 10);
+
+                        uint8_t ack_cls = buf[i+6];
+                        uint8_t ack_id  = buf[i+7];
+                        uint8_t ck_a    = buf[i+8];
+                        uint8_t ck_b    = buf[i+9];
+
+                        // (Optional) verify checksum if you want to be strict
+                        uint8_t calc_ck_a = 0, calc_ck_b = 0;
+                        for (int j = 2; j < 8; j++) {
+                            calc_ck_a += buf[i+j];
+                            calc_ck_b += calc_ck_a;
+                        }
+                        if (calc_ck_a != ck_a || calc_ck_b != ck_b) {
+                            fprintf(stderr, "UBX ACK/NAK checksum mismatch\n");
+                            i += 10;  // skip this bad packet
+                            continue;
+                        }
+
+                        if ((filter_cls == 0xFF || ack_cls == filter_cls) &&
+                            (filter_id  == 0xFF || ack_id  == filter_id)) {
+                            memmove(buf, buf + i + 10, buf_len - (i + 10));
+                            buf_len -= (i + 10);
+                            return (ack_type == 0x01) ? UBX_ACK_OK : UBX_ACK_NAK;
+                        }
+
+                        i += 10; // move to next possible packet
+                        continue;
+                    }
+                }
+                i++;
+            }
+
+            // Remove processed bytes at start if needed
+            if (i > 0) {
+                memmove(buf, buf + i, buf_len - i);
+                buf_len -= i;
+            }
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            perror("read");
+            return UBX_ACK_ERROR;
+        }
+
+        usleep(1000); // 1 ms
+        total_wait += 1000;
+    }
+
+    fprintf(stderr, "UBX ACK timeout\n");
+    return UBX_ACK_TIMEOUT;
+}
+
+// Send UBX message and wait for ACK/NAK
+static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *msg)
+{
+    if (!msg) return UBX_ACK_ERROR;
+
+    // clear input before sending
+    tcflush(fd, TCIFLUSH);
+
+    // send message
+    //fprintf(stderr, "write: ");
+    //print_ubx(msg);
+    ssize_t written = write(fd, msg->data, msg->length);
+    if (written != (ssize_t)msg->length) {
+        perror("write");
+        return UBX_ACK_ERROR;
+    }
+
+    // Ensure all bytes are transmitted before waiting
+    tcdrain(fd);
+
+    return wait_ubx_ack(fd, 50000,  msg->cls, msg->id); // 50 ms timeout
+}
+
 static int configure_ublox_zda_only(int fd)
 {
     // --- Build the compile-time list ---
     UBX_LIST_BEGIN
-        UBX_REF(cfg_prt_uart1_nmea)
-        UBX_REF(cfg_prt_usb_nmea)
         UBX_REF(cfg_inf_off)
         UBX_REF(cfg_msg_nmea_gga_off)
         UBX_REF(cfg_msg_nmea_gll_off)
@@ -1658,15 +1711,17 @@ static int configure_ublox_zda_only(int fd)
         UBX_REF(cfg_msg_nmea_vtg_off)
         UBX_REF(cfg_msg_nmea_grs_off)
         UBX_REF(cfg_msg_nmea_gst_off)
-        UBX_REF(cfg_msg_nmea_zda_on)
         UBX_REF(cfg_msg_nmea_gbs_off)
         UBX_REF(cfg_msg_nmea_dtm_off)
         UBX_REF(cfg_msg_nmea_gns_off)
+        UBX_REF(cfg_msg_nmea_zda_on)
+        UBX_REF(cfg_prt_uart1_nmea)
+        UBX_REF(cfg_prt_usb_nmea)
     UBX_LIST_END
 
     // --- Send UBX commands ---
     for (size_t i = 0; ubxArrayList[i]; i++) {
-        switch (send_ubx(fd, ubxArrayList[i], 50000)) {
+        switch (send_ubx(fd, ubxArrayList[i])) {
             case UBX_ACK_OK:
                 printf("Configuration accepted.\n");
                 break;
@@ -1787,12 +1842,12 @@ int get_ublox_version(int fd) {
 
     // 1. Enable UBX output on USB,UART1
 
-    // UBX-CFG-PRT for USB: ProtocolOut = UBX + NMEA
+    // UBX-CFG-PRT for USB: ProtocolOut = UBX
     if (send_ubx_message(fd, &cfg_prt_uart1_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
 
-    // UBX-CFG-PRT for UART1: ProtocolOut = UBX + NMEA
+    // UBX-CFG-PRT for UART1: ProtocolOut = UBX
     if (send_ubx_message(fd, &cfg_prt_usb_ubx) < 0)
         return 0;
     usleep(20000); // wait 20 ms
@@ -1809,7 +1864,10 @@ int get_ublox_version(int fd) {
     for (int i = 0; i < ublox_extension_count; i++)
         printf("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
 
-    // 3. Disable UBX output on USB,UART1
+    return 1;
+}
+
+int enable_nmea_output(int fd) {
 
     // UBX-CFG-PRT for USB: ProtocolOut = NMEA
     if (send_ubx_message(fd, &cfg_prt_uart1_nmea) < 0)
@@ -1823,7 +1881,6 @@ int get_ublox_version(int fd) {
 
     return 1;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1978,6 +2035,10 @@ int main(int argc, char *argv[]) {
             usleep(20000); // wait 20 ms
             if (configure_ublox_zda_only(fd) != 0) {
                 fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
+            }
+        } else {
+            if (!enable_nmea_output(fd)) {
+                fprintf(stderr, "Failed to enable NMEA output\n");
             }
         }
     } else {

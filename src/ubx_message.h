@@ -25,7 +25,9 @@
 // --- Struct for UBX message entry ---
 typedef struct {
     const uint8_t * const data;
-    size_t length;
+    const size_t length;
+    const uint8_t cls;   // class for ACK matching
+    const uint8_t id;    // id for ACK matching
 } ubx_msg_t;
 
 // --- Helper macros ---
@@ -52,8 +54,11 @@ static const uint8_t name[] = {                             \
 
 #define UBX_MESSAGE(name, cls, id, ...)                     \
 UBX_MESSAGE_BYTES(CONCAT(_,name),  cls, id, ##__VA_ARGS__)  \
-static const ubx_msg_t name = { CONCAT(_,name),             \
-    sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]) };
+static const ubx_msg_t name = {                             \
+    CONCAT(_,name),                                         \
+    sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]),       \
+    cls,                                                    \
+    id };
 
 
 // Convenience macros for common UBX messages
