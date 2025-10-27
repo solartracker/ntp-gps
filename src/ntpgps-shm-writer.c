@@ -1553,25 +1553,37 @@ typedef enum {
     UBX_ACK_ERROR = -2    // UART read/write error
 } ubx_ack_result_t;
 
+#define UBX_ACK_BUF_SIZE 16
+
 static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us) {
-    uint8_t buf[64];
+    uint8_t buf[UBX_ACK_BUF_SIZE];
+    size_t buf_len = 0;
     int total_wait = 0;
 
     while (total_wait < timeout_us) {
-        ssize_t n = read(fd, buf, sizeof(buf));
+        ssize_t n = read(fd, buf + buf_len, UBX_ACK_BUF_SIZE - buf_len);
         if (n > 0) {
-            for (ssize_t i = 0; i <= n - 4; i++) { // need at least 4 bytes for SYNC+CLS+ID
+            buf_len += n;
+
+            // Scan buffer for ACK/NAK pattern
+            for (size_t i = 0; i + 3 < buf_len; i++) {
                 if (buf[i] == UBX_SYNC1 && buf[i+1] == UBX_SYNC2 && buf[i+2] == UBX_CLS_ACK) {
                     if (buf[i+3] == UBX_ID_ACK_ACK) return UBX_ACK_OK;
                     if (buf[i+3] == UBX_ID_ACK_NAK) return UBX_ACK_NAK;
                 }
+            }
+
+            // Keep last 3 bytes in buffer in case ACK spans next read
+            if (buf_len > 3) {
+                memmove(buf, buf + buf_len - 3, 3);
+                buf_len = 3;
             }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             perror("read");
             return UBX_ACK_ERROR;
         }
 
-        usleep(1000);           // 1 ms polling
+        usleep(1000);
         total_wait += 1000;
     }
 
@@ -1579,19 +1591,18 @@ static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us) {
     return UBX_ACK_TIMEOUT;
 }
 
-static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *pmsg) {
+static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *pmsg, int timeout_us) {
     if (!pmsg)
         return UBX_ACK_ERROR;
 
-    print_ubx(pmsg);
     ssize_t written = write(fd, pmsg->data, pmsg->length);
     if (written != (ssize_t)pmsg->length) {
         perror("write");
         return UBX_ACK_ERROR;
     }
 
-    tcdrain(fd); // ensure all bytes have left UART before waiting
-    return wait_ubx_ack(fd, 50000); // 50 ms timeout
+    tcdrain(fd); // ensure bytes have left UART
+    return wait_ubx_ack(fd, timeout_us);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1655,7 +1666,7 @@ static int configure_ublox_zda_only(int fd)
 
     // --- Send UBX commands ---
     for (size_t i = 0; ubxArrayList[i]; i++) {
-        switch (send_ubx(fd, ubxArrayList[i])) {
+        switch (send_ubx(fd, ubxArrayList[i], 50000)) {
             case UBX_ACK_OK:
                 printf("Configuration accepted.\n");
                 break;
