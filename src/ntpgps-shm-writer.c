@@ -1433,7 +1433,7 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 {
     switch (p->state) {
     case 0: // waiting for sync char 1 (0xB5)
-        if (byte == 0xB5) {
+        if (byte == UBX_SYNC1) {
             p->msg[0] = byte;
             p->length = 1;
             p->state = 1;
@@ -1441,7 +1441,7 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
         return UBX_PARSE_INCOMPLETE;
 
     case 1: // waiting for sync char 2 (0x62)
-        if (byte == 0x62) {
+        if (byte == UBX_SYNC2) {
             p->msg[p->length++] = byte;
             p->state = 2;
             p->ck_a = 0;
