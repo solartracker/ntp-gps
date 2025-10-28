@@ -1412,6 +1412,7 @@ typedef enum {
 typedef struct {
     uint8_t msg[UBX_MAX_MSG_SIZE];  // full message (0xB5..checksum)
     size_t  length;                 // number of bytes currently in msg[]
+    uint8_t *payload;               // pointer to msg[6], the payload
     size_t  payload_len;            // extracted payload length (L field)
     size_t  state;                  // current parser state
     uint8_t cls, id;                // class and ID
@@ -1421,6 +1422,7 @@ typedef struct {
 void ubx_parser_init(ubx_parser_t *p)
 {
     p->length = 0;
+    p->payload = NULL;
     p->payload_len = 0;
     p->state = 0;
     p->cls = 0;
@@ -1501,6 +1503,7 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
         p->ck_b += p->ck_a;
 
         if (p->length == 6 + p->payload_len) {
+            p->payload = &p->msg[6];
             p->state = 7;
         }
         return UBX_PARSE_INCOMPLETE;
@@ -1612,9 +1615,10 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
     switch (result) {
         case UBX_PARSE_OK:
             if (parser.length == 10 && parser.cls == UBX_CLS_ACK &&
-              parser.payload_len == 2 && parser.msg[6] == msg->cls && parser.msg[7] == msg->id) {
+              parser.payload_len == 2 &&
+              parser.payload[0] == msg->cls && parser.payload[1] == msg->id) {
                 if (parser.id == UBX_ID_ACK_ACK) {
-                    printf("Configuration accepted.\n");
+                    printf("Configuration accepted (ACK).\n");
                 } else if (parser.id == UBX_ID_ACK_NAK) {
                     printf("Command rejected (NAK).\n");
                 } else {
@@ -1658,16 +1662,18 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
                 ublox_extension_count = 0;
 
                 // parse payload
-                const uint8_t * const payload = &parser.msg[6];
-                copy_ubx_string(payload, 30, ublox_software_version);
-                copy_ubx_string(payload + 30, 10, ublox_hardware_version);
+                if (parser.payload) {
+                    const uint8_t * const payload = parser.payload;
+                    copy_ubx_string(payload, 30, ublox_software_version);
+                    copy_ubx_string(payload + 30, 10, ublox_hardware_version);
 
-                const char *ext = (char *)(payload + 40);
-                int remaining = parser.payload_len - 40;
-                while (remaining >= 30 && ublox_extension_count < 10) {
-                    copy_ubx_string((const uint8_t *)ext, 30, ublox_extensions[ublox_extension_count++]);
-                    ext += 30;
-                    remaining -= 30;
+                    const char *ext = (char *)(payload + 40);
+                    int remaining = parser.payload_len - 40;
+                    while (remaining >= 30 && ublox_extension_count < 10) {
+                        copy_ubx_string((const uint8_t *)ext, 30, ublox_extensions[ublox_extension_count++]);
+                        ext += 30;
+                        remaining -= 30;
+                    }
                 }
             } else {
                 printf("Unexpected message ID.\n");
