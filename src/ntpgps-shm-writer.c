@@ -1498,6 +1498,10 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
         return UBX_PARSE_INCOMPLETE;
 
     case 6: // reading payload
+        if (p->length >= UBX_MAX_MSG_SIZE) {
+            p->state = 0;
+            return UBX_PARSE_SYNC_ERR;
+        }
         p->msg[p->length++] = byte;
         p->ck_a += byte;
         p->ck_b += p->ck_a;
