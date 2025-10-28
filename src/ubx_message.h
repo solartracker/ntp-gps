@@ -98,12 +98,18 @@ static const ubx_msg_t name = {                             \
 #define UBX_NAV_RELPOSNED(name)  UBX_MESSAGE(name, CLS_NAV, 0x3C)
 
 // Monitoring messages (MON)
-#define UBX_MON_VER(name)        UBX_MESSAGE(name, CLS_MON, 0x04)
-#define UBX_MON_HW(name)         UBX_MESSAGE(name, CLS_MON, 0x09)
-#define UBX_MON_RF(name)         UBX_MESSAGE(name, CLS_MON, 0x38)
-#define UBX_MON_COMMS(name)      UBX_MESSAGE(name, CLS_MON, 0x36)
-#define UBX_MON_TXBUF(name)      UBX_MESSAGE(name, CLS_MON, 0x08)
-#define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, 0x07)
+#define UBX_ID_MON_VER           0x04
+#define UBX_ID_MON_HW            0x09
+#define UBX_ID_MON_RF            0x38
+#define UBX_ID_MON_COMMS         0x36
+#define UBX_ID_MON_TXBUF         0x08
+#define UBX_ID_MON_RXBUF         0x07
+#define UBX_MON_VER(name)        UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_VER)
+#define UBX_MON_HW(name)         UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_HW)
+#define UBX_MON_RF(name)         UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_RF)
+#define UBX_MON_COMMS(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_COMMS)
+#define UBX_MON_TXBUF(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_TXBUF)
+#define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_RXBUF)
 
 // Debug print helper
 static inline void print_ubx_bytes(const uint8_t * const msg, size_t len) {

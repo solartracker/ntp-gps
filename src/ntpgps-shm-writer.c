@@ -1391,6 +1391,407 @@ unsigned parse_nmea_filter(const char *arg)
     return mask;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+#define UBX_MAX_MSG_SIZE 256
+
+typedef enum {
+    UBX_PARSE_INCOMPLETE = 0,  // still accumulating bytes
+    UBX_PARSE_OK,              // message complete and checksum OK
+    UBX_PARSE_CKSUM_ERR,       // checksum failed
+    UBX_PARSE_SYNC_ERR,        // lost sync or invalid structure
+    UBX_PARSE_TIMEOUT,         // timeout waiting for data
+    UBX_SELECT_ERROR,
+    UBX_READ_ERROR,
+    UBX_WRITE_ERROR,
+    UBX_ARG_ERROR,
+    UBX_STOP,
+    UBX_UNEXPECTED
+} ubx_parse_result_t;
+
+typedef struct {
+    uint8_t msg[UBX_MAX_MSG_SIZE];  // full message (0xB5..checksum)
+    size_t  length;                 // number of bytes currently in msg[]
+    size_t  payload_len;            // extracted payload length (L field)
+    size_t  state;                  // current parser state
+    uint8_t cls, id;                // class and ID
+    uint8_t ck_a, ck_b;             // running checksum
+} ubx_parser_t;
+
+void ubx_parser_init(ubx_parser_t *p)
+{
+    p->length = 0;
+    p->payload_len = 0;
+    p->state = 0;
+    p->cls = 0;
+    p->id = 0;
+    p->ck_a = 0;
+    p->ck_b = 0;
+}
+
+ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
+{
+    switch (p->state) {
+    case 0: // waiting for sync char 1 (0xB5)
+        if (byte == 0xB5) {
+            p->msg[0] = byte;
+            p->length = 1;
+            p->state = 1;
+        }
+        return UBX_PARSE_INCOMPLETE;
+
+    case 1: // waiting for sync char 2 (0x62)
+        if (byte == 0x62) {
+            p->msg[p->length++] = byte;
+            p->state = 2;
+            p->ck_a = 0;
+            p->ck_b = 0;
+        } else {
+            p->state = 0;
+            p->length = 0;
+        }
+        return UBX_PARSE_INCOMPLETE;
+
+    case 2: // reading class
+        p->msg[p->length++] = byte;
+        p->cls = byte;
+        p->ck_a += byte;
+        p->ck_b += p->ck_a;
+        p->state = 3;
+        return UBX_PARSE_INCOMPLETE;
+
+    case 3: // reading ID
+        p->msg[p->length++] = byte;
+        p->id = byte;
+        p->ck_a += byte;
+        p->ck_b += p->ck_a;
+        p->state = 4;
+        return UBX_PARSE_INCOMPLETE;
+
+    case 4: // reading length LSB
+        p->msg[p->length++] = byte;
+        p->payload_len = byte;
+        p->ck_a += byte;
+        p->ck_b += p->ck_a;
+        p->state = 5;
+        return UBX_PARSE_INCOMPLETE;
+
+    case 5: // reading length MSB
+        p->msg[p->length++] = byte;
+        p->payload_len |= ((size_t)byte << 8);
+        p->ck_a += byte;
+        p->ck_b += p->ck_a;
+
+        if (p->payload_len > UBX_MAX_MSG_SIZE - 8) {
+            // sanity check (too large)
+            p->state = 0;
+            p->length = 0;
+            return UBX_PARSE_SYNC_ERR;
+        }
+
+        if (p->payload_len == 0)
+            p->state = 7;  // go directly to checksum
+        else
+            p->state = 6;
+        return UBX_PARSE_INCOMPLETE;
+
+    case 6: // reading payload
+        p->msg[p->length++] = byte;
+        p->ck_a += byte;
+        p->ck_b += p->ck_a;
+
+        if (p->length == 6 + p->payload_len) {
+            p->state = 7;
+        }
+        return UBX_PARSE_INCOMPLETE;
+
+    case 7: // checksum A
+        p->msg[p->length++] = byte;
+        if (byte != p->ck_a) {
+            p->state = 0;
+            p->length = 0;
+            return UBX_PARSE_CKSUM_ERR;
+        }
+        p->state = 8;
+        return UBX_PARSE_INCOMPLETE;
+
+    case 8: // checksum B
+        p->msg[p->length++] = byte;
+        if (byte != p->ck_b) {
+            p->state = 0;
+            p->length = 0;
+            return UBX_PARSE_CKSUM_ERR;
+        }
+
+        // message complete and verified
+        p->state = 0;
+        return UBX_PARSE_OK;
+
+    default:
+        p->state = 0;
+        p->length = 0;
+        return UBX_PARSE_SYNC_ERR;
+    }
+}
+
+ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_sec)
+{
+    ubx_parser_init(parser);
+
+    fd_set rfds;
+    struct timeval tv;
+    uint8_t buf[256];
+
+    while (!atomic_load(&stop)) {
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+
+        tv.tv_sec = timeout_sec;
+        tv.tv_usec = 0;
+
+        int retval = select(fd + 1, &rfds, NULL, NULL, &tv);
+        if (retval < 0) {
+            if (errno == EINTR)
+                continue; // interrupted by signal — retry
+            perror("select");
+            return UBX_SELECT_ERROR;
+        } else if (retval == 0) {
+            return UBX_PARSE_TIMEOUT; // timeout
+        }
+
+        // only proceed if data is available
+        if (FD_ISSET(fd, &rfds)) {
+            ssize_t n = read(fd, buf, sizeof(buf));
+            if (n > 0) {
+                fprintf(stderr, "read:  ");
+                print_ubx_bytes(buf, n);
+                for (ssize_t i = 0; i < n; i++) {
+                    ubx_parse_result_t result = ubx_parser_feed(parser, buf[i]);
+                    if (result != UBX_PARSE_INCOMPLETE)
+                        return result; // success or checksum/error
+                }
+            } else if (n < 0 && errno != EAGAIN) {
+                perror("read");
+                return UBX_READ_ERROR;
+            }
+        }
+    }
+    return UBX_STOP;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Send UBX message and wait for ACK/NAK
+static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_parser_t *parser)
+{
+    if (!msg) return UBX_ARG_ERROR;
+
+    // clear input before sending
+    tcflush(fd, TCIFLUSH);
+
+    // send message
+    fprintf(stderr, "write: ");
+    print_ubx(msg);
+    ssize_t written = write(fd, msg->data, msg->length);
+    if (written != (ssize_t)msg->length) {
+        perror("write");
+        return UBX_WRITE_ERROR;
+    }
+
+    // ensure all bytes are transmitted before waiting
+    tcdrain(fd);
+
+    return wait_for_ubx_msg(fd, parser, 1);
+}
+
+static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const msg)
+{
+    ubx_parser_t parser = {0};
+    ubx_parse_result_t result = send_ubx(fd, msg, &parser);
+
+    switch (result) {
+        case UBX_PARSE_OK:
+            if (parser.length == 10 && parser.cls == UBX_CLS_ACK &&
+              parser.payload_len == 2 && parser.msg[6] == msg->cls && parser.msg[7] == msg->id) {
+                if (parser.id == UBX_ID_ACK_ACK) {
+                    printf("Configuration accepted.\n");
+                } else if (parser.id == UBX_ID_ACK_NAK) {
+                    printf("Command rejected (NAK).\n");
+                } else {
+                    printf("Unexpected message ID.\n");
+                }
+            } else {
+                printf("Unexpected message length (%d).\n", parser.length);
+            }
+            break;
+        case UBX_PARSE_CKSUM_ERR:
+            fprintf(stderr, "Parse checksum error.\n");
+            break;
+        case UBX_PARSE_TIMEOUT:
+            fprintf(stderr, "Timeout waiting for ACK.\n");
+            break;
+        case UBX_PARSE_SYNC_ERR:
+            fprintf(stderr, "Parse sync error.\n");
+            break;
+        case UBX_PARSE_INCOMPLETE:
+            fprintf(stderr, "Parse incomplete.\n");
+            break;
+        default:
+            fprintf(stderr, "Unknown error (%d)\n", result);
+            break;
+    }
+
+    return result;
+}
+
+static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * const msg)
+{
+    ubx_parser_t parser = {0};
+    ubx_parse_result_t result = send_ubx(fd, msg, &parser);
+
+    switch (result) {
+        case UBX_PARSE_OK:
+            if (parser.cls == UBX_CLS_MON && parser.id == UBX_ID_MON_VER) { // UBX-MON-VER
+                memset(ublox_software_version, 0, sizeof(ublox_software_version));
+                memset(ublox_hardware_version, 0, sizeof(ublox_hardware_version));
+                memset(ublox_extensions, 0, sizeof(ublox_extensions));
+                ublox_extension_count = 0;
+
+                // parse payload
+                const uint8_t * const payload = &parser.msg[6];
+                copy_ubx_string(payload, 30, ublox_software_version);
+                copy_ubx_string(payload + 30, 10, ublox_hardware_version);
+
+                const char *ext = (char *)(payload + 40);
+                int remaining = parser.payload_len - 40;
+                while (remaining >= 30 && ublox_extension_count < 10) {
+                    copy_ubx_string((const uint8_t *)ext, 30, ublox_extensions[ublox_extension_count++]);
+                    ext += 30;
+                    remaining -= 30;
+                }
+            } else {
+                printf("Unexpected message ID.\n");
+                result = UBX_UNEXPECTED;
+            }
+            break;
+        case UBX_PARSE_CKSUM_ERR:
+            fprintf(stderr, "Parse checksum error.\n");
+            break;
+        case UBX_PARSE_TIMEOUT:
+            fprintf(stderr, "Timeout waiting for ACK.\n");
+            break;
+        case UBX_PARSE_SYNC_ERR:
+            fprintf(stderr, "Parse sync error.\n");
+            break;
+        case UBX_PARSE_INCOMPLETE:
+            fprintf(stderr, "Parse incomplete.\n");
+            break;
+        default:
+            fprintf(stderr, "Unknown error (%d)\n", result);
+            break;
+    }
+
+    return result;
+}
+
+static int configure_ublox_zda_only(int fd)
+{
+    // --- Build the compile-time list ---
+    UBX_LIST_BEGIN
+        UBX_REF(cfg_inf_off)
+        UBX_REF(cfg_msg_nmea_gga_off)
+        UBX_REF(cfg_msg_nmea_gll_off)
+        UBX_REF(cfg_msg_nmea_gsa_off)
+        UBX_REF(cfg_msg_nmea_gsv_off)
+        UBX_REF(cfg_msg_nmea_rmc_off)
+        UBX_REF(cfg_msg_nmea_vtg_off)
+        UBX_REF(cfg_msg_nmea_grs_off)
+        UBX_REF(cfg_msg_nmea_gst_off)
+        UBX_REF(cfg_msg_nmea_gbs_off)
+        UBX_REF(cfg_msg_nmea_dtm_off)
+        UBX_REF(cfg_msg_nmea_gns_off)
+        UBX_REF(cfg_msg_nmea_zda_on)
+        UBX_REF(cfg_prt_uart1_nmea)
+        UBX_REF(cfg_prt_usb_nmea)
+    UBX_LIST_END
+
+    // --- Send UBX commands ---
+    for (size_t i = 0; ubxArrayList[i]; i++) {
+        send_ubx_handle_ack(fd, ubxArrayList[i]);
+        usleep(10000); // 10 ms delay between commands
+    }
+
+    return 0;
+}
+
+// Wait for UBX-MON-VER message using read_ubx_mon_ver()
+int get_ublox_version(int fd) {
+
+    // 1. Enable UBX output on USB,UART1
+
+    // UBX-CFG-PRT for USB: ProtocolOut = UBX
+    if (send_ubx_handle_ack(fd, &cfg_prt_uart1_ubxnmea) != UBX_PARSE_OK)
+        return 0;
+    usleep(20000); // wait 20 ms
+
+    // UBX-CFG-PRT for UART1: ProtocolOut = UBX
+    if (send_ubx_handle_ack(fd, &cfg_prt_usb_ubxnmea) != UBX_PARSE_OK)
+        return 0;
+    usleep(20000); // wait 20 ms
+
+    // 2. Send UBX-MON-VER request
+    if (send_ubx_handle_mon_ver(fd, &mon_ver) != UBX_PARSE_OK)
+        return 0;
+
+    printf("u-blox Software Version: %s\n", ublox_software_version);
+    printf("u-blox Hardware Version: %s\n", ublox_hardware_version);
+    for (int i = 0; i < ublox_extension_count; i++)
+        printf("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
+
+    return 1;
+}
+
+int enable_nmea_output(int fd) {
+
+    // UBX-CFG-PRT for USB: ProtocolOut = NMEA
+    if (send_ubx_handle_ack(fd, &cfg_prt_uart1_nmea) != UBX_PARSE_OK)
+        return 0;
+    usleep(20000); // wait 20 ms
+
+    // UBX-CFG-PRT for UART1: ProtocolOut = NMEA
+    if (send_ubx_handle_ack(fd, &cfg_prt_usb_nmea) != UBX_PARSE_OK)
+        return 0;
+    usleep(20000); // wait 20 ms
+
+    return 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int gps_init(int fd)
+{
+    // Determine GPS type and optionally configure it
+    if (get_ublox_version(fd)) {
+
+        // Configure u-blox GPS to output ZDA only
+        if (ublox_zda_only) {
+            TRACE("Configuring u-blox for ZDA-only output...\n");
+            usleep(20000); // wait 20 ms
+            if (configure_ublox_zda_only(fd) != 0) {
+                fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
+            }
+        } else {
+            if (!enable_nmea_output(fd)) {
+                fprintf(stderr, "Failed to enable NMEA output\n");
+            }
+        }
+    } else {
+        fprintf(stderr, "Failed to get UBX-MON-VER\n");
+    }
+
+    return 1;
+}
+
 static void handle_signal(int sig)
 {
     if (sig == SIGINT || sig == SIGTERM || sig == SIGUSR1)
@@ -1467,6 +1868,8 @@ void* gps_thread_func(void *arg) {
     fd_set rfds;
 
     TRACE("GPS thread started\n");
+
+    gps_init(fd);
 
     while (!atomic_load(&stop)) {
         FD_ZERO(&rfds);
@@ -1576,324 +1979,6 @@ int configure_serial_raw(int fd) {
 void restore_serial(int fd) {
     if (tcsetattr(fd, TCSANOW, &orig_tio) < 0)
         perror("tcsetattr restore");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Send UBX message
-static int send_ubx_message(int fd, const ubx_msg_t * const pmsg) {
-    if (!pmsg)
-        return -1;
-
-    //print_ubx(pmsg);
-    ssize_t written = write(fd, pmsg->data, pmsg->length);
-    if (written != (ssize_t)pmsg->length)
-        return -1;
-
-    tcdrain(fd);
-    return 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-typedef enum {
-    UBX_ACK_OK = 0,       // ACK received
-    UBX_ACK_NAK = 1,      // NAK received
-    UBX_ACK_TIMEOUT = -1,
-    UBX_ACK_ERROR = -2
-} ubx_ack_result_t;
-
-static ubx_ack_result_t wait_ubx_ack(int fd, int timeout_us, uint8_t filter_cls, uint8_t filter_id)
-{
-    uint8_t buf[128];
-    size_t buf_len = 0;
-    struct timeval tv;
-    fd_set rfds;
-    uint64_t start = monotonic_now_us();
-
-    while ((monotonic_now_us() - start) < (uint64_t)timeout_us) {
-        FD_ZERO(&rfds);
-        FD_SET(fd, &rfds);
-
-        tv.tv_sec = 0;
-        tv.tv_usec = 1000;  // 1 ms polling, non-blocking
-
-        int ret = select(fd + 1, &rfds, NULL, NULL, &tv);
-        if (ret < 0) {
-            if (errno == EINTR) continue;
-            perror("select");
-            return UBX_ACK_ERROR;
-        } else if (ret == 0) {
-            continue;  // timeout, loop again
-        }
-
-        if (FD_ISSET(fd, &rfds)) {
-            ssize_t n = read(fd, buf + buf_len, sizeof(buf) - buf_len);
-            if (n <= 0) {
-                if (errno == EINTR) continue;
-                if (errno != EAGAIN && errno != EWOULDBLOCK) return UBX_ACK_ERROR;
-                continue;
-            }
-            fprintf(stderr, "read:  ");
-            print_ubx_bytes(buf + buf_len, n);
-
-            buf_len += n;
-
-            // Scan for full ACK/NAK packets (10 bytes)
-            size_t i = 0;
-            while (i + 9 < buf_len) {
-                if (buf[i] == 0xB5 && buf[i+1] == 0x62 && buf[i+2] == 0x05) {
-                    uint8_t ack_type = buf[i+3];
-                    uint16_t len = buf[i+4] | (buf[i+5] << 8);
-                    if (len == 2) {
-                        uint8_t ack_cls = buf[i+6];
-                        uint8_t ack_id  = buf[i+7];
-                        uint8_t ck_a    = buf[i+8];
-                        uint8_t ck_b    = buf[i+9];
-
-                        // Compute checksum over class+id (len=2)
-                        uint8_t calc_a = 0, calc_b = 0;
-                        for (int j = 2; j < 8; j++) {
-                            calc_a += buf[i+j];
-                            calc_b += calc_a;
-                        }
-
-                        if (calc_a != ck_a || calc_b != ck_b) {
-                            fprintf(stderr, "UBX ACK/NAK checksum mismatch\n");
-                            i += 10;
-                            continue;
-                        }
-
-                        if ((filter_cls == 0xFF || ack_cls == filter_cls) &&
-                            (filter_id  == 0xFF || ack_id  == filter_id)) {
-                            memmove(buf, buf + i + 10, buf_len - (i + 10));
-                            buf_len -= (i + 10);
-                            return (ack_type == 0x01) ? UBX_ACK_OK : UBX_ACK_NAK;
-                        }
-
-                        i += 10;
-                        continue;
-                    }
-                }
-                i++;
-            }
-
-            if (i > 0) {
-                memmove(buf, buf + i, buf_len - i);
-                buf_len -= i;
-            }
-        }
-    }
-
-    fprintf(stderr, "UBX ACK timeout\n");
-    return UBX_ACK_TIMEOUT;
-}
-
-// Send UBX message and wait for ACK/NAK
-static ubx_ack_result_t send_ubx(int fd, const ubx_msg_t *msg)
-{
-    if (!msg) return UBX_ACK_ERROR;
-
-    // clear input before sending
-    tcflush(fd, TCIFLUSH);
-
-    // send message
-    //fprintf(stderr, "write: ");
-    //print_ubx(msg);
-    ssize_t written = write(fd, msg->data, msg->length);
-    if (written != (ssize_t)msg->length) {
-        perror("write");
-        return UBX_ACK_ERROR;
-    }
-
-    // Ensure all bytes are transmitted before waiting
-    tcdrain(fd);
-
-    return wait_ubx_ack(fd, 50000,  msg->cls, msg->id); // 50 ms timeout
-}
-
-static int configure_ublox_zda_only(int fd)
-{
-    // --- Build the compile-time list ---
-    UBX_LIST_BEGIN
-        UBX_REF(cfg_inf_off)
-        UBX_REF(cfg_msg_nmea_gga_off)
-        UBX_REF(cfg_msg_nmea_gll_off)
-        UBX_REF(cfg_msg_nmea_gsa_off)
-        UBX_REF(cfg_msg_nmea_gsv_off)
-        UBX_REF(cfg_msg_nmea_rmc_off)
-        UBX_REF(cfg_msg_nmea_vtg_off)
-        UBX_REF(cfg_msg_nmea_grs_off)
-        UBX_REF(cfg_msg_nmea_gst_off)
-        UBX_REF(cfg_msg_nmea_gbs_off)
-        UBX_REF(cfg_msg_nmea_dtm_off)
-        UBX_REF(cfg_msg_nmea_gns_off)
-        UBX_REF(cfg_msg_nmea_zda_on)
-        UBX_REF(cfg_prt_uart1_nmea)
-        UBX_REF(cfg_prt_usb_nmea)
-    UBX_LIST_END
-
-    // --- Send UBX commands ---
-    for (size_t i = 0; ubxArrayList[i]; i++) {
-        switch (send_ubx(fd, ubxArrayList[i])) {
-            case UBX_ACK_OK:
-                printf("Configuration accepted.\n");
-                break;
-            case UBX_ACK_NAK:
-                fprintf(stderr, "Command rejected (NAK).\n");
-                break;
-            case UBX_ACK_TIMEOUT:
-                fprintf(stderr, "Timeout waiting for ACK.\n");
-                break;
-            default:
-                fprintf(stderr, "Communication error.\n");
-                break;
-        }
-
-        usleep(10000); // 10 ms delay between commands
-    }
-
-    return 0;
-}
-
-// Read and parse UBX-MON-VER using a simple state machine
-static int read_ubx_mon_ver(int fd, uint64_t timeout_ms) {
-    enum {
-        S_SYNC1, S_SYNC2, S_CLASS, S_ID, S_LEN1, S_LEN2,
-        S_PAYLOAD, S_CK_A, S_CK_B
-    } state = S_SYNC1;
-
-    uint8_t cls, id, ck_a = 0, ck_b = 0, len1 = 0, len2 = 0;
-    uint16_t length = 0;
-    uint8_t payload[256];
-    size_t payload_pos = 0;
-
-    uint8_t byte;
-    uint64_t start = monotonic_now_ms();
-
-    while (monotonic_now_ms() - start < timeout_ms) {
-        ssize_t n = read(fd, &byte, 1);
-        if (n <= 0) {
-            usleep(1000);
-            continue;
-        }
-
-        switch (state) {
-            case S_SYNC1:
-                if (byte == UBX_SYNC1) state = S_SYNC2;
-                break;
-            case S_SYNC2:
-                state = (byte == UBX_SYNC2) ? S_CLASS : S_SYNC1;
-                break;
-            case S_CLASS:
-                cls = byte;
-                ck_a = ck_b = byte;
-                state = S_ID;
-                break;
-            case S_ID:
-                id = byte;
-                ck_a += byte; ck_b += ck_a;
-                state = S_LEN1;
-                break;
-            case S_LEN1:
-                len1 = byte;
-                ck_a += byte; ck_b += ck_a;
-                state = S_LEN2;
-                break;
-            case S_LEN2:
-                len2 = byte;
-                ck_a += byte; ck_b += ck_a;
-                length = len1 | (len2 << 8);
-                payload_pos = 0;
-                state = S_PAYLOAD;
-                break;
-            case S_PAYLOAD:
-                if (payload_pos < sizeof(payload))
-                    payload[payload_pos++] = byte;
-                ck_a += byte; ck_b += ck_a;
-                if (payload_pos >= length)
-                    state = S_CK_A;
-                break;
-            case S_CK_A:
-                if (byte == ck_a)
-                    state = S_CK_B;
-                else
-                    state = S_SYNC1; // checksum mismatch
-                break;
-            case S_CK_B:
-                if (byte != ck_b) {
-                    state = S_SYNC1;
-                    break;
-                }
-                if (cls == 0x0A && id == 0x04) { // UBX-MON-VER
-                    memset(ublox_software_version, 0, sizeof(ublox_software_version));
-                    memset(ublox_hardware_version, 0, sizeof(ublox_hardware_version));
-                    memset(ublox_extensions, 0, sizeof(ublox_extensions));
-                    ublox_extension_count = 0;
-
-                    // parse payload
-                    copy_ubx_string(payload, 30, ublox_software_version);
-                    copy_ubx_string(payload + 30, 10, ublox_hardware_version);
-
-                    const char *ext = (char *)(payload + 40);
-                    int remaining = length - 40;
-                    while (remaining >= 30 && ublox_extension_count < 10) {
-                        copy_ubx_string((const uint8_t *)ext, 30, ublox_extensions[ublox_extension_count++]);
-                        ext += 30;
-                        remaining -= 30;
-                    }
-                    return 1;
-                }
-                state = S_SYNC1;
-                break;
-        }
-    }
-    return 0; // timeout
-}
-
-// Wait for UBX-MON-VER message using read_ubx_mon_ver()
-int get_ublox_version(int fd) {
-
-    // 1. Enable UBX output on USB,UART1
-
-    // UBX-CFG-PRT for USB: ProtocolOut = UBX
-    if (send_ubx_message(fd, &cfg_prt_uart1_ubxnmea) < 0)
-        return 0;
-    usleep(20000); // wait 20 ms
-
-    // UBX-CFG-PRT for UART1: ProtocolOut = UBX
-    if (send_ubx_message(fd, &cfg_prt_usb_ubxnmea) < 0)
-        return 0;
-    usleep(20000); // wait 20 ms
-
-    // 2. Send UBX-MON-VER request
-    if (send_ubx_message(fd, &mon_ver) < 0)
-        return 0;
-
-    if (!read_ubx_mon_ver(fd, 500)) // timeout 500 ms
-        return 0;
-
-    printf("u-blox Software Version: %s\n", ublox_software_version);
-    printf("u-blox Hardware Version: %s\n", ublox_hardware_version);
-    for (int i = 0; i < ublox_extension_count; i++)
-        printf("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
-
-    return 1;
-}
-
-int enable_nmea_output(int fd) {
-
-    // UBX-CFG-PRT for USB: ProtocolOut = NMEA
-    if (send_ubx_message(fd, &cfg_prt_uart1_nmea) < 0)
-        return 0;
-    usleep(20000); // wait 20 ms
-
-    // UBX-CFG-PRT for UART1: ProtocolOut = NMEA
-    if (send_ubx_message(fd, &cfg_prt_usb_nmea) < 0)
-        return 0;
-    usleep(20000); // wait 20 ms
-
-    return 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2038,25 +2123,6 @@ int main(int argc, char *argv[]) {
         TRACE("Raw mode enabled on %s\n", dev_path);
     } else {
         TRACE("Raw mode skipped on %s\n", dev_path);
-    }
-
-    // Determine GPS type and optionally configure it
-    if (get_ublox_version(fd)) {
-
-        // Configure u-blox GPS to output ZDA only
-        if (ublox_zda_only) {
-            TRACE("Configuring u-blox for ZDA-only output...\n");
-            usleep(20000); // wait 20 ms
-            if (configure_ublox_zda_only(fd) != 0) {
-                fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
-            }
-        } else {
-            if (!enable_nmea_output(fd)) {
-                fprintf(stderr, "Failed to enable NMEA output\n");
-            }
-        }
-    } else {
-        fprintf(stderr, "Failed to get UBX-MON-VER\n");
     }
 
     // Create Unix socket for accepting user commands
