@@ -1696,7 +1696,7 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 
 static int configure_ublox_zda_only(int fd)
 {
-    // --- Build the compile-time list ---
+    // List of UBX commands to configure the GPS
     UBX_LIST_BEGIN
         UBX_REF(cfg_inf_off)
         UBX_REF(cfg_msg_nmea_gga_off)
@@ -1715,7 +1715,7 @@ static int configure_ublox_zda_only(int fd)
         UBX_REF(cfg_prt_usb_nmea)
     UBX_LIST_END
 
-    // --- Send UBX commands ---
+    // Send UBX commands
     for (size_t i = 0; ubxArrayList[i]; i++) {
         send_ubx_handle_ack(fd, ubxArrayList[i]);
         usleep(10000); // 10 ms delay between commands
@@ -1724,7 +1724,7 @@ static int configure_ublox_zda_only(int fd)
     return 0;
 }
 
-// Wait for UBX-MON-VER message using read_ubx_mon_ver()
+// Wait for UBX-MON-VER message
 int get_ublox_version(int fd) {
 
     // 1. Enable UBX output on USB,UART1
