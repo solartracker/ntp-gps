@@ -1757,8 +1757,8 @@ int get_ublox_version(int fd) {
     return 1;
 }
 
-int enable_nmea_output(int fd) {
-
+int configure_ublox_nmea_only(int fd)
+{
     // UBX-CFG-PRT for USB: ProtocolOut = NMEA
     if (send_ubx_handle_ack(fd, &cfg_prt_uart1_nmea) != UBX_PARSE_OK)
         return 0;
@@ -1787,7 +1787,7 @@ int gps_init(int fd)
                 fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
             }
         } else {
-            if (!enable_nmea_output(fd)) {
+            if (!configure_ublox_nmea_only(fd)) {
                 fprintf(stderr, "Failed to enable NMEA output\n");
             }
         }
