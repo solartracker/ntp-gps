@@ -1739,7 +1739,7 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 
 static int configure_ublox_zda_only(int fd)
 {
-    // List of UBX commands to configure the GPS
+    // UBX commands to configure ZDA only output
     UBX_LIST_BEGIN
         UBX_REF(cfg_inf_off)
         UBX_REF(cfg_msg_nmea_gga_off)
