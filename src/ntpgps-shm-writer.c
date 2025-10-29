@@ -1419,66 +1419,99 @@ typedef struct {
     uint8_t ck_a, ck_b;             // running checksum
 } ubx_parser_t;
 
+typedef enum {
+    UBX_STATE_SYNC1 = 0,
+    UBX_STATE_SYNC2 = 1,
+    UBX_STATE_CLASS = 2,
+    UBX_STATE_ID = 3,
+    UBX_STATE_LEN_LO = 4,
+    UBX_STATE_LEN_HI = 5,
+    UBX_STATE_PAYLOAD = 6,
+    UBX_STATE_CK_A = 7,
+    UBX_STATE_CK_B = 8,
+    UBX_STATE_NMEA = 100
+} ubx_state_t;
+
 void ubx_parser_init(ubx_parser_t *p)
 {
     p->length = 0;
     p->payload = NULL;
     p->payload_len = 0;
-    p->state = 0;
+    p->state = UBX_STATE_SYNC1;
     p->cls = 0;
     p->id = 0;
     p->ck_a = 0;
     p->ck_b = 0;
 }
 
+// state machine for parsing UBX message
 ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 {
+    static char nmea_buf[128];
+    static size_t nmea_pos = 0;
+
     switch (p->state) {
-    case 0: // waiting for sync char 1 (0xB5)
+    case UBX_STATE_SYNC1: // waiting for sync char 1 (0xB5)
         if (byte == UBX_SYNC1) {
             p->msg[0] = byte;
             p->length = 1;
-            p->state = 1;
+            p->state = UBX_STATE_SYNC2;
+        } else if (byte == '$') {
+            // Begin skipping an NMEA sentence
+            nmea_pos = 0;
+            nmea_buf[nmea_pos++] = byte;
+            p->state = UBX_STATE_NMEA;
         }
         return UBX_PARSE_INCOMPLETE;
 
-    case 1: // waiting for sync char 2 (0x62)
+    case UBX_STATE_NMEA:
+        if (nmea_pos < sizeof(nmea_buf) - 1)
+            nmea_buf[nmea_pos++] = byte;
+        if (byte == '\n') {
+            nmea_buf[nmea_pos] = '\0';
+            fprintf(stderr, "Skipped NMEA: %s", nmea_buf);
+            nmea_pos = 0;
+            p->state = UBX_STATE_SYNC1;
+        }
+        return UBX_PARSE_INCOMPLETE;
+
+    case UBX_STATE_SYNC2: // waiting for sync char 2 (0x62)
         if (byte == UBX_SYNC2) {
             p->msg[p->length++] = byte;
-            p->state = 2;
+            p->state = UBX_STATE_CLASS;
             p->ck_a = 0;
             p->ck_b = 0;
         } else {
-            p->state = 0;
+            p->state = UBX_STATE_SYNC1;
             p->length = 0;
         }
         return UBX_PARSE_INCOMPLETE;
 
-    case 2: // reading class
+    case UBX_STATE_CLASS: // reading class
         p->msg[p->length++] = byte;
         p->cls = byte;
         p->ck_a += byte;
         p->ck_b += p->ck_a;
-        p->state = 3;
+        p->state = UBX_STATE_ID;
         return UBX_PARSE_INCOMPLETE;
 
-    case 3: // reading ID
+    case UBX_STATE_ID: // reading ID
         p->msg[p->length++] = byte;
         p->id = byte;
         p->ck_a += byte;
         p->ck_b += p->ck_a;
-        p->state = 4;
+        p->state = UBX_STATE_LEN_LO;
         return UBX_PARSE_INCOMPLETE;
 
-    case 4: // reading length LSB
+    case UBX_STATE_LEN_LO: // reading length LSB
         p->msg[p->length++] = byte;
         p->payload_len = byte;
         p->ck_a += byte;
         p->ck_b += p->ck_a;
-        p->state = 5;
+        p->state = UBX_STATE_LEN_HI;
         return UBX_PARSE_INCOMPLETE;
 
-    case 5: // reading length MSB
+    case UBX_STATE_LEN_HI: // reading length MSB
         p->msg[p->length++] = byte;
         p->payload_len |= ((size_t)byte << 8);
         p->ck_a += byte;
@@ -1486,20 +1519,20 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 
         if (p->payload_len > UBX_MAX_MSG_SIZE - 8) {
             // sanity check (too large)
-            p->state = 0;
+            p->state = UBX_STATE_SYNC1;
             p->length = 0;
             return UBX_PARSE_SYNC_ERR;
         }
 
         if (p->payload_len == 0)
-            p->state = 7;  // go directly to checksum
+            p->state = UBX_STATE_CK_A;  // go directly to checksum
         else
-            p->state = 6;
+            p->state = UBX_STATE_PAYLOAD;
         return UBX_PARSE_INCOMPLETE;
 
-    case 6: // reading payload
+    case UBX_STATE_PAYLOAD: // reading payload
         if (p->length >= UBX_MAX_MSG_SIZE) {
-            p->state = 0;
+            p->state = UBX_STATE_SYNC1;
             return UBX_PARSE_SYNC_ERR;
         }
         p->msg[p->length++] = byte;
@@ -1508,34 +1541,34 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 
         if (p->length == 6 + p->payload_len) {
             p->payload = &p->msg[6];
-            p->state = 7;
+            p->state = UBX_STATE_CK_A;
         }
         return UBX_PARSE_INCOMPLETE;
 
-    case 7: // checksum A
+    case UBX_STATE_CK_A: // checksum A
         p->msg[p->length++] = byte;
         if (byte != p->ck_a) {
-            p->state = 0;
+            p->state = UBX_STATE_SYNC1;
             p->length = 0;
             return UBX_PARSE_CKSUM_ERR;
         }
-        p->state = 8;
+        p->state = UBX_STATE_CK_B;
         return UBX_PARSE_INCOMPLETE;
 
-    case 8: // checksum B
+    case UBX_STATE_CK_B: // checksum B
         p->msg[p->length++] = byte;
         if (byte != p->ck_b) {
-            p->state = 0;
+            p->state = UBX_STATE_SYNC1;
             p->length = 0;
             return UBX_PARSE_CKSUM_ERR;
         }
 
         // message complete and verified
-        p->state = 0;
+        p->state = UBX_STATE_SYNC1;
         return UBX_PARSE_OK;
 
     default:
-        p->state = 0;
+        p->state = UBX_STATE_SYNC1;
         p->length = 0;
         return UBX_PARSE_SYNC_ERR;
     }
