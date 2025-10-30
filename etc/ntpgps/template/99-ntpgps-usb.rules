@@ -33,6 +33,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="1", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:1]
 
@@ -50,6 +51,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="28", \
     ENV{ID_NTPGPS_PPS}="1", \
+    ENV{ID_NTPGPS_PROG}="", \
     MODE="0666"
 [End:11]
 
@@ -66,6 +68,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:2]
 
@@ -82,6 +85,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="1", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:3]
 
@@ -98,6 +102,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:4]
 
@@ -114,6 +119,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="1", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:5]
 
@@ -130,6 +136,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:6]
 
@@ -146,6 +153,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="1", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:7]
 
@@ -162,6 +170,7 @@ __SERIAL__
     ENV{ID_NTPGPS}="1", ENV{ID_NTPGPS_GPSNUM}="%c", \
     ENV{ID_NTPGPS_REFCLOCK}="20", \
     ENV{ID_NTPGPS_PPS}="0", \
+    ENV{ID_NTPGPS_PROG}="ublox7-gpzda", \
     MODE="0666"
 [End:8]
 
