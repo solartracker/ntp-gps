@@ -23,7 +23,7 @@ BindsTo=dev-%i.device
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ntpgps-shm-writer %i
+ExecStart=/usr/local/bin/ntpgps-shm-writer %i --ublox-zda-only
 Restart=always
 RestartSec=1
 #Restart=on-failure
