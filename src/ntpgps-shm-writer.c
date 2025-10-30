@@ -63,6 +63,24 @@
     } while (0)
 #endif
 
+#ifdef DEBUG_TRACE
+  #define TRACE_CALL(cmd) \
+    do { \
+        pthread_mutex_lock(&trace_mutex); \
+        cmd; \
+        pthread_mutex_unlock(&trace_mutex); \
+    } while (0)
+#else
+  #define TRACE_CALL(cmd) \
+    do { \
+        if (atomic_load(&debug_trace)) { \
+            pthread_mutex_lock(&trace_mutex); \
+            cmd; \
+            pthread_mutex_unlock(&trace_mutex); \
+        } \
+    } while (0)
+#endif
+
 #define NTPD_BASE   0x4e545030  /* "NTP0" */
 #define NTPD_SHMKEY (NTPD_BASE + 0)
 
@@ -1469,7 +1487,7 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
             nmea_buf[nmea_pos++] = byte;
         if (byte == '\n') {
             nmea_buf[nmea_pos] = '\0';
-            fprintf(stderr, "Skipped NMEA: %s", nmea_buf);
+            TRACE("Skipped NMEA: %s", nmea_buf);
             nmea_pos = 0;
             p->state = UBX_STATE_SYNC1;
         }
@@ -1603,8 +1621,8 @@ ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_se
         if (FD_ISSET(fd, &rfds)) {
             ssize_t n = read(fd, buf, sizeof(buf));
             if (n > 0) {
-                fprintf(stderr, "read:  ");
-                print_ubx_bytes(buf, n);
+                TRACE("read:  ");
+                TRACE_CALL(print_ubx_bytes(buf, n));
                 for (ssize_t i = 0; i < n; i++) {
                     ubx_parse_result_t result = ubx_parser_feed(parser, buf[i]);
                     if (result != UBX_PARSE_INCOMPLETE)
@@ -1630,8 +1648,8 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
     tcflush(fd, TCIFLUSH);
 
     // send message
-    fprintf(stderr, "write: ");
-    print_ubx(msg);
+    TRACE("write: ");
+    TRACE_CALL(print_ubx(msg));
     ssize_t written = write(fd, msg->data, msg->length);
     if (written != (ssize_t)msg->length) {
         perror("write");
@@ -1655,30 +1673,30 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
               parser.payload_len == 2 &&
               parser.payload[0] == msg->cls && parser.payload[1] == msg->id) {
                 if (parser.id == UBX_ID_ACK_ACK) {
-                    printf("Configuration accepted (ACK).\n");
+                    TRACE("Configuration accepted (ACK).\n");
                 } else if (parser.id == UBX_ID_ACK_NAK) {
-                    printf("Command rejected (NAK).\n");
+                    TRACE("Command rejected (NAK).\n");
                 } else {
-                    printf("Unexpected message ID.\n");
+                    TRACE("Unexpected message ID.\n");
                 }
             } else {
-                printf("Unexpected message length (%d).\n", parser.length);
+                TRACE("Unexpected message length (%d).\n", parser.length);
             }
             break;
         case UBX_PARSE_CKSUM_ERR:
-            fprintf(stderr, "Parse checksum error.\n");
+            TRACE("Parse checksum error.\n");
             break;
         case UBX_PARSE_TIMEOUT:
-            fprintf(stderr, "Timeout waiting for ACK.\n");
+            TRACE("Timeout waiting for ACK.\n");
             break;
         case UBX_PARSE_SYNC_ERR:
-            fprintf(stderr, "Parse sync error.\n");
+            TRACE("Parse sync error.\n");
             break;
         case UBX_PARSE_INCOMPLETE:
-            fprintf(stderr, "Parse incomplete.\n");
+            TRACE("Parse incomplete.\n");
             break;
         default:
-            fprintf(stderr, "Unknown error (%d)\n", result);
+            TRACE("Unknown error (%d)\n", result);
             break;
     }
 
@@ -1713,24 +1731,24 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
                     }
                 }
             } else {
-                printf("Unexpected message ID.\n");
+                TRACE("Unexpected message ID.\n");
                 result = UBX_UNEXPECTED;
             }
             break;
         case UBX_PARSE_CKSUM_ERR:
-            fprintf(stderr, "Parse checksum error.\n");
+            TRACE("Parse checksum error.\n");
             break;
         case UBX_PARSE_TIMEOUT:
-            fprintf(stderr, "Timeout waiting for ACK.\n");
+            TRACE("Timeout waiting for ACK.\n");
             break;
         case UBX_PARSE_SYNC_ERR:
-            fprintf(stderr, "Parse sync error.\n");
+            TRACE("Parse sync error.\n");
             break;
         case UBX_PARSE_INCOMPLETE:
-            fprintf(stderr, "Parse incomplete.\n");
+            TRACE("Parse incomplete.\n");
             break;
         default:
-            fprintf(stderr, "Unknown error (%d)\n", result);
+            TRACE("Unknown error (%d)\n", result);
             break;
     }
 
@@ -1786,10 +1804,10 @@ int get_ublox_version(int fd) {
     if (send_ubx_handle_mon_ver(fd, &mon_ver) != UBX_PARSE_OK)
         return 0;
 
-    printf("u-blox Software Version: %s\n", ublox_software_version);
-    printf("u-blox Hardware Version: %s\n", ublox_hardware_version);
+    TRACE("u-blox Software Version: %s\n", ublox_software_version);
+    TRACE("u-blox Hardware Version: %s\n", ublox_hardware_version);
     for (int i = 0; i < ublox_extension_count; i++)
-        printf("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
+        TRACE("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
 
     return 1;
 }
