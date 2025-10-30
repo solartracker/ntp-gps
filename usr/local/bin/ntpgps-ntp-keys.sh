@@ -4,6 +4,14 @@
 #
 # This script must run as root user.
 #
+# We target mawk 1.3.3 because this is the version included with Debian Buster.
+# Key reasons for sticking with this version rather than using the latest awk features:
+#
+# - mawk does not support string-indexed arrays in the same way gawk does.
+# - Certain features like `nextfile` and `IGNORECASE` are not available in mawk.
+# - POSIX character classes like `[:space:]` for matching all whitespace are
+#   not fully supported, so explicit whitespace lists ([ \t\r\v\f]) are needed.
+#
 # Copyright (C) 2025 Richard Elwell
 #
 # This program is free software: you can redistribute it and/or modify
