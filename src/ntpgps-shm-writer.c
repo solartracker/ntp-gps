@@ -1935,8 +1935,8 @@ void* gps_thread_func(void *arg) {
     while (!atomic_load(&stop)) {
         FD_ZERO(&rfds);
         FD_SET(fd, &rfds);
-        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 }; // 1s timeout
 
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 0 }; // 1s timeout
         int ret = select(fd + 1, &rfds, NULL, NULL, &tv);
 
         if (ret < 0) {
@@ -1944,8 +1944,7 @@ void* gps_thread_func(void *arg) {
                 continue;   // interrupted by signal, retry
             perror("select");
             break;
-        }
-        else if (ret == 0) {
+        } else if (ret == 0) {
             continue;       // timeout, no data
         }
 
