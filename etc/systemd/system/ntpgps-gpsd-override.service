@@ -21,7 +21,7 @@
 Description=GPSD udev override for VK172
 Documentation=man:udevadm(8)
 After=local-fs.target
-Before=ntpgps-gps-ublox7@.service gpsd.socket
+Before=ntpgps-configure@.service gpsd.socket
 Wants=gpsd.socket
 
 [Service]
