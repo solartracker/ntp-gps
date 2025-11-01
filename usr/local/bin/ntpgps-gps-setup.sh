@@ -87,7 +87,9 @@ case "$PROG" in
 esac
 
 # Dynamically generate the NTP authentication keys
-/usr/local/bin/ntpgps-ntp-keys.sh
+if ! /usr/local/bin/ntpgps-ntp-keys.sh; then
+    echo "Could not generate NTP authentication keys.  Continuing..." >&2
+fi
 
 # Dynamically generate the NTP device configuration
 CONF_TEMPLATE=""
