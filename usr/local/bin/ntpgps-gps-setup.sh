@@ -124,7 +124,7 @@ esac
 if [ -n "$CONF_TEMPLATE" ]; then
     sudo mkdir -p "$CONF_DIR"
 
-    tmpfile=$(mktemp "$DRIVER_PATH".XXXXXX") || {
+    tmpfile=$(mktemp "$DRIVER_PATH.XXXXXX") || {
         echo "Error: cannot create temporary file" >&2
         exit 1
     }
