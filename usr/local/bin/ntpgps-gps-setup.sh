@@ -26,10 +26,13 @@ set -euo pipefail
 
 TTYNAME="$1"
 TTYDEV="/dev/$TTYNAME"
-CONF_TMP_PATH="/run/ntpgps/ntpgps.conf"
-CONF_TMP_DIR=$(dirname "$CONF_TMP_PATH")
-DEVICEDATA_DIR="${CONF_TMP_DIR}/devices"
+CONF_PATH="/run/ntpgps/ntpgps.conf"
+CONF_DIR=$(dirname "$CONF_PATH")
+DEVICEDATA_DIR="${CONF_DIR}/devices"
 DEVICEDATA_PATH="${DEVICEDATA_DIR}/${TTYNAME}.txt"
+NTP_KEYS_FAILED=0
+NTP_SETCONFIG_FAILED=0
+NTP_CONFIG_CHANGED=0
 
 ENV_GPSNUM=$(udevadm info -q property -n $TTYDEV | grep '^ID_NTPGPS_GPSNUM=[0-9]*$') || true
 GPSNUM="${ENV_GPSNUM#*=}"
@@ -89,6 +92,7 @@ esac
 # Dynamically generate the NTP authentication keys
 if ! /usr/local/bin/ntpgps-ntp-keys.sh; then
     echo "Could not generate NTP authentication keys.  Continuing..." >&2
+    NTP_KEYS_FAILED=1
 fi
 
 # Dynamically generate the NTP device configuration
@@ -96,17 +100,15 @@ CONF_TEMPLATE=""
 
 case "$REFCLOCK" in
     20)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
+        DRIVER_PATH="$CONF_DIR/gps$GPSNUM.conf"
         if [ "$HASPPS" == "0" ]; then
-          #CONF_TEMPLATE="driver20-gps-gpzda.conf"
           CONF_TEMPLATE="driver20-gps-gpzda+gprmc.conf"
         elif [ "$HASPPS" == "1" ]; then
-          #CONF_TEMPLATE="driver20-gpspps-gpzda.conf"
           CONF_TEMPLATE="driver20-gpspps-gpzda+gprmc.conf"
         fi
         ;;
     28)
-        DRIVER_TMP_PATH="$CONF_TMP_DIR/gps$GPSNUM.conf"
+        DRIVER_PATH="$CONF_DIR/gps$GPSNUM.conf"
         if [ "$HASPPS" == "0" ]; then
           CONF_TEMPLATE="driver28-shm.conf"
         elif [ "$HASPPS" == "1" ]; then
@@ -120,10 +122,17 @@ case "$REFCLOCK" in
 esac
 
 if [ -n "$CONF_TEMPLATE" ]; then
-    sudo mkdir -p "$CONF_TMP_DIR"
+    sudo mkdir -p "$CONF_DIR"
+
+    tmpfile=$(mktemp "$DRIVER_PATH".XXXXXX") || {
+        echo "Error: cannot create temporary file" >&2
+        exit 1
+    }
+    sudo chown root:root "$tmpfile"
+    sudo chmod 644 "$tmpfile"
 
     # Generate the GPS include file safely
-    sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$DRIVER_TMP_PATH" >/dev/null
+    sed "s/%N/$GPSNUM/g" "/etc/ntpgps/template/$CONF_TEMPLATE" | sudo tee "$tmpfile" >/dev/null
 
     case "$REFCLOCK" in
         20) : ;; # nothing for REFCLOCK=20
@@ -131,7 +140,7 @@ if [ -n "$CONF_TEMPLATE" ]; then
             # Replace and preserve formula for clarity
             BASE_KEY=0x4E545030
             NEW_KEY=$(printf "0x%X" $((BASE_KEY + GPSNUM)))
-            sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$DRIVER_TMP_PATH"
+            sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$tmpfile"
             ;;
         *)
             echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
@@ -139,15 +148,25 @@ if [ -n "$CONF_TEMPLATE" ]; then
             ;;
     esac
 
-    # Create the main tmp config if it doesn't exist
-    if [ ! -f "$CONF_TMP_PATH" ]; then
-        sudo cp -p /etc/ntpgps/template/ntpgps.conf "$CONF_TMP_PATH"
+    # Update the driver config file if it is different than the existing file
+    if [ ! -f "$DRIVER_PATH" ] || ! cmp -s "$tmpfile" "$DRIVER_PATH"; then
+        mv -vf "$tmpfile" "$DRIVER_PATH"
+        NTP_CONFIG_CHANGED=1
+    else
+        rm -f "$tmpfile"
+    fi
+
+    # Create the main config if it doesn't exist
+    if [ ! -f "$CONF_PATH" ]; then
+        sudo cp -p /etc/ntpgps/template/ntpgps.conf "$CONF_PATH"
+        NTP_CONFIG_CHANGED=1
     fi
 
     # Append the GPS include line if not already present (handles slashes safely)
-    if [ -f "$CONF_TMP_PATH" ]; then
-        if ! sudo grep -Fxq "includefile $DRIVER_TMP_PATH" "$CONF_TMP_PATH"; then
-            echo "includefile $DRIVER_TMP_PATH" | sudo tee -a "$CONF_TMP_PATH" >/dev/null
+    if [ -f "$CONF_PATH" ]; then
+        if ! sudo grep -Fxq "includefile $DRIVER_PATH" "$CONF_PATH"; then
+            echo "includefile $DRIVER_PATH" | sudo tee -a "$CONF_PATH" >/dev/null
+            NTP_CONFIG_CHANGED=1
         fi
     fi
 fi
@@ -155,24 +174,62 @@ fi
 # Ensure low latency
 setserial "$TTYDEV" low_latency
 
+ntp_restart() {
+    # Ensure that NTP can find our root config file
+    for conf in /etc/ntp.conf /etc/ntpsec/ntp.conf; do
+        if [ -f "$conf" ]; then
+            if ! grep -q "includefile $CONF_PATH" "$conf"; then
+                echo "includefile $CONF_PATH" | sudo tee -a "$conf"
+            fi
+        fi
+    done
+
+    # Restart NTP if active
+    if systemctl is-active --quiet ntp.service; then
+        echo "NTP configuration has changed. Restarting NTP..."
+        sudo systemctl restart --no-block ntp.service
+    fi
+    return 0
+}
+
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
-        case "$REFCLOCK" in
-            20|28)
-                # Add the refclock to the list of NTP network peers
-                /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.$REFCLOCK.$GPSNUM
-
-                if [ "$REFCLOCK" = "28" ]; then
-                    if [ "$HASPPS" == "1" ]; then
-                        /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.22.$GPSNUM
+        if [ $NTP_KEYS_FAILED -eq 1]; then
+            if [ $NTP_CONFIG_CHANGED -eq 1 ]; then
+                ntp_restart
+            if
+        else
+            # Using NTP authentication keys, control commands are sent to configure NTP
+            # instead of restarting the NTP service just to re-read ntp.conf
+            case "$REFCLOCK" in
+                20|28)
+                    # Add the refclock to the list of NTP network peers
+                    if ! /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.$REFCLOCK.$GPSNUM; then
+                        NTP_SETCONFIG_FAILED=1
+                    else
+                        if [ "$REFCLOCK" = "28" ]; then
+                            if [ "$HASPPS" == "1" ]; then
+                                if ! /usr/local/bin/ntpgps-ntp-setconfig.sh 127.127.22.$GPSNUM; then
+                                    NTP_SETCONFIG_FAILED=1
+                                fi
+                            fi
+                        fi
                     fi
-                fi
-                ;;
-            *)
-                echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
-                exit 1
-                ;;
-        esac
+
+                    if [ $NTP_SETCONFIG_FAILED -eq 1 ]; then
+                        if [ $NTP_CONFIG_CHANGED -eq 1 ]; then
+                            # something has gone wrong, probably NTP authentication,
+                            # so we restart NTP to re-read ntp.conf if we changed it
+                            ntp_restart
+                        if
+                    fi
+                    ;;
+                *)
+                    echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
     fi
 fi
 
