@@ -197,7 +197,7 @@ if command -v systemctl >/dev/null; then
         if [ $NTP_KEYS_FAILED -eq 1]; then
             if [ $NTP_CONFIG_CHANGED -eq 1 ]; then
                 ntp_restart
-            if
+            fi
         else
             # Using NTP authentication keys, control commands are sent to configure NTP
             # instead of restarting the NTP service just to re-read ntp.conf
@@ -221,7 +221,7 @@ if command -v systemctl >/dev/null; then
                             # something has gone wrong, probably NTP authentication,
                             # so we restart NTP to re-read ntp.conf if we changed it
                             ntp_restart
-                        if
+                        fi
                     fi
                     ;;
                 *)
