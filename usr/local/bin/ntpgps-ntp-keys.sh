@@ -173,6 +173,10 @@ remove_ntpkeys() {
         # Regular file at /etc/ntpgps/ntp.keys — remove it directly
         rm -vf "$KEYS_PATH"
     fi
+
+    rm -f "$CONF_AUTH_PATH"
+    NTP_RESTART_NEEDED=1
+
     return 0
 }
 
@@ -355,9 +359,6 @@ else
     echo "Error: No NTP key generator found (ntp-keygen or ntpkeygen)."
     exit 1
 fi
-
-rm -f "$CONF_AUTH_PATH" # new keys.conf is created below
-NTP_RESTART_NEEDED=1
 
 # Link the NTP authentication keys into our NTP configuration
 if [ -f "$KEYS_PATH" ]; then
