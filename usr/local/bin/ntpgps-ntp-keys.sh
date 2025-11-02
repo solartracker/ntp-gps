@@ -4,13 +4,14 @@
 #
 # This script must run as root user.
 #
-# We target mawk 1.3.3 because this is the version included with Debian Buster.
-# Key reasons for sticking with this version rather than using the latest awk features:
+# We target mawk 1.3.3 because it is included by default on Pi OS (Debian Buster).
+# The key reason for sticking with this version is compatibility with the default
+# system environment rather than relying on newer awk features.
 #
-# - mawk does not support string-indexed arrays in the same way gawk does.
-# - Certain features like `nextfile` and `IGNORECASE` are not available in mawk.
-# - POSIX character classes like `[:space:]` for matching all whitespace are
-#   not fully supported, so explicit whitespace lists ([ \t\r\v\f]) are needed.
+# - mawk does not support string-indexed arrays like gawk does.
+# - Features such as `nextfile` and `IGNORECASE` are unavailable in mawk 1.3.3.
+# - POSIX character classes (e.g., `[:space:]`) are not fully supported, so
+#   explicit whitespace lists ([ \t\r\v\f]) must be used instead.
 #
 # Copyright (C) 2025 Richard Elwell
 #
