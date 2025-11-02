@@ -194,7 +194,7 @@ ntp_restart() {
 
 if command -v systemctl >/dev/null; then
     if systemctl is-active --quiet ntp.service; then
-        if [ $NTP_KEYS_FAILED -eq 1]; then
+        if [ $NTP_KEYS_FAILED -eq 1 ]; then
             if [ $NTP_CONFIG_CHANGED -eq 1 ]; then
                 ntp_restart
             fi
