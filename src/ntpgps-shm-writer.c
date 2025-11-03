@@ -1586,21 +1586,26 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
         // message complete and verified
         p->state = UBX_STATE_SYNC1;
         if (p->filter_active) {
+            bool ignore_message = false;
             switch (p->filter_type) {
             case UBX_FILTER_CLS_ID:
                 if (p->cls != p->filter_cls || p->id != p->filter_id)
-                    return UBX_PARSE_INCOMPLETE;
+                    ignore_message = true;
                 break;
             case UBX_FILTER_ACK:
                 if (p->cls != UBX_CLS_ACK || (p->id != UBX_ID_ACK_ACK && p->id != UBX_ID_ACK_NAK))
-                    return UBX_PARSE_INCOMPLETE;
+                    ignore_message = true;
                 if (p->payload_len != p->filter_payload_len)
-                    return UBX_PARSE_INCOMPLETE;
+                    ignore_message = true;
                 if (p->payload[0] != p->filter_payload[0] || p->payload[1] != p->filter_payload[1])
-                    return UBX_PARSE_INCOMPLETE;
+                    ignore_message = true;
                 break;
             default:
                 return UBX_PARSE_FILTER_ERR;
+            }
+            if (ignore_message) {
+                TRACE("Skipped %s\n", disassemble_ubx_bytes(p->msg, p->length));
+                return UBX_PARSE_INCOMPLETE;
             }
             p->filter_active = 0; // filter satisfied
         }

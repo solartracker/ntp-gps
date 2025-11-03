@@ -55,6 +55,7 @@ typedef struct {
 // --- Helper macros ---
 #define CONCAT2(a,b) a##b
 #define CONCAT(a,b) CONCAT2(a,b)
+#define SIZEOF(a) sizeof(a)/sizeof(a[0])
 
 // Macro to define a UBX message with optional payload
 // __VA_ARGS__ can be empty
@@ -343,8 +344,14 @@ static const char * const ubx_id_name(uint8_t cls, uint8_t id)
 }
 
 // Disassemble UBX message
-#define PAYLOAD_STR_MAX 2048
-static void disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
+static char disassemble_ubx_output_str[2048];
+static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
+    char *output_str = disassemble_ubx_output_str;
+    size_t output_str_max = SIZEOF(disassemble_ubx_output_str);
+
+    if (!output_str || output_str_max == 0)
+        return NULL;
+
     uint8_t ubx1 = 0;
     uint8_t ubx2 = 0;
     uint8_t cls = 0;
@@ -359,6 +366,7 @@ static void disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     uint8_t ck_b_ = 0;
     bool ck_valid = false;
 
+    *output_str = '\0';
     if (len >= 1) ubx1 = msg[0];
     if (len >= 2) ubx2 = msg[1];
     if (len >= 3) cls = msg[2];
@@ -389,17 +397,20 @@ static void disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
         }
     }
 
-    char payload_str[PAYLOAD_STR_MAX];
-    char *p = payload_str;
-    uint16_t payload_len_max_print = payload_len < (PAYLOAD_STR_MAX / 5) ? payload_len : (PAYLOAD_STR_MAX / 5);
+    char *p = output_str;
+    const uint16_t payload_len_max = (output_str_max / 5) - 100;
+    uint16_t payload_len_max_print = payload_len < payload_len_max ? payload_len : payload_len_max;
+
+    p += sprintf(p, "%s-%s-%s (len={%u, %s}, checksum={%02X %02X, %s}, payload={",
+           ubx_name(ubx1, ubx2), ubx_class_name(cls), ubx_id_name(cls, id),
+           payload_len_raw, payload_len_valid ? "VALID" : "INVALID",
+           ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
     for (uint16_t i = 0; i < payload_len_max_print; i++) {
         p += sprintf(p, "%s%02X", i ? " " : "", payload[i]);
     }
+    p += sprintf(p, "})");
 
-    printf("%s-%s-%s (len={%u, %s}, checksum={%02X %02X, %s}, payload={%s})\n",
-           ubx_name(ubx1, ubx2), ubx_class_name(cls), ubx_id_name(cls, id),
-           payload_len_raw, payload_len_valid ? "VALID" : "INVALID",
-           ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID", payload_str);
+    return output_str;
 }
 
 
