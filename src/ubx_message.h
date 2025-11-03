@@ -57,7 +57,6 @@ typedef struct {
 #define CONCAT(a,b) CONCAT2(a,b)
 #define SIZEOF(a) ( (sizeof(a)) / (sizeof((a)[0])) )
 
-
 // Macro to define a UBX message with optional payload
 // __VA_ARGS__ can be empty
 #define UBX_SYNC1 0xB5
