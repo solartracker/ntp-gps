@@ -1414,18 +1414,10 @@ unsigned parse_nmea_filter(const char *arg)
 #define UBX_MAX_MSG_SIZE 256
 
 typedef enum {
-    UBX_PARSE_INCOMPLETE = 0,  // still accumulating bytes
-    UBX_PARSE_OK,              // message complete and checksum OK
-    UBX_PARSE_CKSUM_ERR,       // checksum failed
-    UBX_PARSE_SYNC_ERR,        // lost sync or invalid structure
-    UBX_PARSE_TIMEOUT,         // timeout waiting for data
-    UBX_SELECT_ERROR,
-    UBX_READ_ERROR,
-    UBX_WRITE_ERROR,
-    UBX_ARG_ERROR,
-    UBX_STOP,
-    UBX_UNEXPECTED
-} ubx_parse_result_t;
+    UBX_FILTER_NONE = 0,
+    UBX_FILTER_CLS_ID,              // match cls, id
+    UBX_FILTER_ACK                  // match cls, id and payload bytes
+} ubx_filter_t;
 
 typedef struct {
     uint8_t msg[UBX_MAX_MSG_SIZE];  // full message (0xB5..checksum)
@@ -1435,6 +1427,12 @@ typedef struct {
     size_t  state;                  // current parser state
     uint8_t cls, id;                // class and ID
     uint8_t ck_a, ck_b;             // running checksum
+    ubx_filter_t filter_type;       // what filter to apply
+    uint8_t filter_cls;             // CLS we are waiting for
+    uint8_t filter_id;              // ID we are waiting for
+    uint8_t *filter_payload;        // Payload we are waiting for
+    size_t filter_payload_len;      // Payload length we are waiting for
+    int filter_active;              // flag: 1 = filter active
 } ubx_parser_t;
 
 typedef enum {
@@ -1460,9 +1458,12 @@ void ubx_parser_init(ubx_parser_t *p)
     p->id = 0;
     p->ck_a = 0;
     p->ck_b = 0;
+    p->filter_cls = 0;
+    p->filter_id = 0;
+    p->filter_active = 0;
 }
 
-// state machine for parsing UBX message
+// state machine for parsing UBX response
 ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 {
     static char nmea_buf[128];
@@ -1583,6 +1584,25 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 
         // message complete and verified
         p->state = UBX_STATE_SYNC1;
+        if (p->filter_active) {
+            switch (p->filter_type) {
+            case UBX_FILTER_CLS_ID:
+                if (p->cls != p->filter_cls || p->id != p->filter_id)
+                    return UBX_PARSE_INCOMPLETE;
+                break;
+            case UBX_FILTER_ACK:
+                if (p->cls != UBX_CLS_ACK || (p->id != UBX_ID_ACK_ACK && p->id != UBX_ID_ACK_NAK))
+                    return UBX_PARSE_INCOMPLETE;
+                if (p->payload_len != p->filter_payload_len)
+                    return UBX_PARSE_INCOMPLETE;
+                if (p->payload[0] != p->filter_payload[0] || p->payload[1] != p->filter_payload[1])
+                    return UBX_PARSE_INCOMPLETE;
+                break;
+            default:
+                return UBX_PARSE_FILTER_ERR;
+            }
+            p->filter_active = 0; // filter satisfied
+        }
         return UBX_PARSE_OK;
 
     default:
@@ -1594,8 +1614,6 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 
 ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_sec)
 {
-    ubx_parser_init(parser);
-
     fd_set rfds;
     struct timeval tv;
     uint8_t buf[256];
@@ -1659,12 +1677,29 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
     // ensure all bytes are transmitted before waiting
     tcdrain(fd);
 
-    return wait_for_ubx_msg(fd, parser, 1);
+    if (!parser)
+        // ignore UBX response message or ACK/NAK, if any
+        return UBX_PARSE_OK;
+    else
+        return wait_for_ubx_msg(fd, parser, 1);
+}
+
+static ubx_parse_result_t send_ubx_no_wait(int fd, const ubx_msg_t * const msg)
+{
+    return send_ubx(fd, msg, NULL);
 }
 
 static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const msg)
 {
     ubx_parser_t parser = {0};
+    ubx_parser_init(&parser);
+
+    parser.filter_type = UBX_FILTER_ACK;
+    uint8_t filter_payload[] = { msg->cls, msg->id };
+    parser.filter_payload = filter_payload;
+    parser.filter_payload_len = sizeof(filter_payload) / sizeof(filter_payload[0]);
+    parser.filter_active = 1;
+
     ubx_parse_result_t result = send_ubx(fd, msg, &parser);
 
     switch (result) {
@@ -1706,6 +1741,13 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
 static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * const msg)
 {
     ubx_parser_t parser = {0};
+    ubx_parser_init(&parser);
+
+    parser.filter_type = UBX_FILTER_CLS_ID;
+    parser.filter_cls = msg->cls;
+    parser.filter_id = msg->id;
+    parser.filter_active = 1;
+
     ubx_parse_result_t result = send_ubx(fd, msg, &parser);
 
     switch (result) {
@@ -1758,29 +1800,27 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 static int configure_ublox_zda_only(int fd)
 {
     // UBX commands to configure ZDA only output
-    UBX_LIST_BEGIN
-        UBX_REF(cfg_inf_off)
-        UBX_REF(cfg_msg_nmea_gga_off)
-        UBX_REF(cfg_msg_nmea_gll_off)
-        UBX_REF(cfg_msg_nmea_gsa_off)
-        UBX_REF(cfg_msg_nmea_gsv_off)
-        UBX_REF(cfg_msg_nmea_rmc_off)
-        UBX_REF(cfg_msg_nmea_vtg_off)
-        UBX_REF(cfg_msg_nmea_grs_off)
-        UBX_REF(cfg_msg_nmea_gst_off)
-        UBX_REF(cfg_msg_nmea_gbs_off)
-        UBX_REF(cfg_msg_nmea_dtm_off)
-        UBX_REF(cfg_msg_nmea_gns_off)
-        UBX_REF(cfg_msg_nmea_zda_on)
-        UBX_REF(cfg_prt_uart1_nmea)
-        UBX_REF(cfg_prt_usb_nmea)
-    UBX_LIST_END
+    UBX_BEGIN_LIST
+        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gsv_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_rmc_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_vtg_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_grs_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gst_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gbs_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_dtm_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gns_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
+        UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
+    UBX_END_LIST
 
-    // Send UBX commands
-    for (size_t i = 0; ubxArrayList[i]; i++) {
-        send_ubx_handle_ack(fd, ubxArrayList[i]);
-        usleep(10000); // 10 ms delay between commands
-    }
+    // Send all UBX commands
+    UBX_INVOKE(fd);
 
     return 0;
 }
@@ -1791,18 +1831,19 @@ int get_ublox_version(int fd) {
     // 1. Enable UBX output on USB,UART1
 
     // UBX-CFG-PRT for USB: ProtocolOut = UBX
-    if (send_ubx_handle_ack(fd, &cfg_prt_uart1_ubxnmea) != UBX_PARSE_OK)
+    if (send_ubx_no_wait(fd, &cfg_prt_uart1_ubxnmea) != UBX_PARSE_OK)
         return 0;
-    usleep(20000); // wait 20 ms
+    usleep(5000); // wait 5 ms
 
     // UBX-CFG-PRT for UART1: ProtocolOut = UBX
-    if (send_ubx_handle_ack(fd, &cfg_prt_usb_ubxnmea) != UBX_PARSE_OK)
+    if (send_ubx_no_wait(fd, &cfg_prt_usb_ubxnmea) != UBX_PARSE_OK)
         return 0;
-    usleep(20000); // wait 20 ms
+    usleep(5000); // wait 5 ms
 
     // 2. Send UBX-MON-VER request
     if (send_ubx_handle_mon_ver(fd, &mon_ver) != UBX_PARSE_OK)
         return 0;
+    usleep(5000); // wait 5 ms
 
     TRACE("u-blox Software Version: %s\n", ublox_software_version);
     TRACE("u-blox Hardware Version: %s\n", ublox_hardware_version);
@@ -1815,14 +1856,14 @@ int get_ublox_version(int fd) {
 int configure_ublox_nmea_only(int fd)
 {
     // UBX-CFG-PRT for USB: ProtocolOut = NMEA
-    if (send_ubx_handle_ack(fd, &cfg_prt_uart1_nmea) != UBX_PARSE_OK)
+    if (send_ubx_no_wait(fd, &cfg_prt_uart1_nmea) != UBX_PARSE_OK)
         return 0;
-    usleep(20000); // wait 20 ms
+    usleep(5000); // wait 5 ms
 
     // UBX-CFG-PRT for UART1: ProtocolOut = NMEA
-    if (send_ubx_handle_ack(fd, &cfg_prt_usb_nmea) != UBX_PARSE_OK)
+    if (send_ubx_no_wait(fd, &cfg_prt_usb_nmea) != UBX_PARSE_OK)
         return 0;
-    usleep(20000); // wait 20 ms
+    usleep(5000); // wait 5 ms
 
     return 1;
 }
@@ -1837,7 +1878,6 @@ int gps_init(int fd)
         // Configure u-blox GPS to output ZDA only
         if (ublox_zda_only) {
             TRACE("Configuring u-blox for ZDA-only output...\n");
-            usleep(20000); // wait 20 ms
             if (configure_ublox_zda_only(fd) != 0) {
                 fprintf(stderr, "Failed to configure u-blox ZDA-only mode\n");
             }

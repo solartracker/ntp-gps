@@ -30,6 +30,28 @@ typedef struct {
     const uint8_t id;    // id for ACK matching
 } ubx_msg_t;
 
+typedef enum {
+    UBX_PARSE_INCOMPLETE = 0,  // still accumulating bytes
+    UBX_PARSE_OK,              // message complete and checksum OK
+    UBX_PARSE_CKSUM_ERR,       // checksum failed
+    UBX_PARSE_SYNC_ERR,        // lost sync or invalid structure
+    UBX_PARSE_FILTER_ERR,      // bad filter type
+    UBX_PARSE_TIMEOUT,         // timeout waiting for data
+    UBX_SELECT_ERROR,
+    UBX_READ_ERROR,
+    UBX_WRITE_ERROR,
+    UBX_ARG_ERROR,
+    UBX_STOP,
+    UBX_UNEXPECTED
+} ubx_parse_result_t;
+
+typedef ubx_parse_result_t (*ubx_sender_t)(int fd, const ubx_msg_t * const msg);
+
+typedef struct {
+    const ubx_msg_t * const msg;
+    const ubx_sender_t invoke;
+} ubx_entry_t;
+
 // --- Helper macros ---
 #define CONCAT2(a,b) a##b
 #define CONCAT(a,b) CONCAT2(a,b)
@@ -60,11 +82,20 @@ static const ubx_msg_t name = {                             \
     cls,                                                    \
     id };
 
+// --- Macros to create and invoke a list of UBX messages ---
+#define UBX_BEGIN_LIST static const ubx_entry_t ubxArrayList[] = {
+#define UBX_ITEM(name, func) { &name, func },
+#define UBX_END_LIST         { NULL, NULL } };
+#define UBX_INVOKE(fd) \
+    do { \
+        for (size_t i = 0; ubxArrayList[i].msg; i++) { \
+            ubxArrayList[i].invoke(fd, ubxArrayList[i].msg); \
+            usleep(5000); /* 5 ms delay between commands */ \
+        } \
+    } while (0)
+
 
 // Convenience macros for common UBX messages
-
-#define UBX_MESSAGE_ARGS(a) a.data,a.length
-#define UBX_MESSAGE_ARGS_2(a) a,sizeof(a)
 
 #include "ubx_class.h"
 
@@ -137,31 +168,6 @@ static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
         }
     }
 }
-
-// --- Wrap an existing UBX message in a ubx_msg_t with underscore prefix ---
-#define UBX_ITEM(name) \
-    static const ubx_msg_t CONCAT(_, name) = { \
-        name, sizeof(name) / sizeof(name[0]) };
-
-// --- Macro to define a message and its list entry ---
-// Byte array keeps the clean name, struct gets the _ prefix
-#define UBX_ITEM_CREATE(generator_macro, name, ...) \
-    generator_macro(name, ##__VA_ARGS__);       \
-    static const ubx_msg_t CONCAT(_, name) = { name, sizeof(name)/sizeof(name[0]) };
-
-// --- Macro to define a message and its ubx_msg_t entry ---
-// Byte array gets the _ prefix, struct keeps the clean name
-#define UBX_ITEM_CREATE_2(generator_macro, name, ...) \
-    generator_macro(CONCAT(_,name), ##__VA_ARGS__);       \
-    static const ubx_msg_t name = { CONCAT(_,name), sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]) };
-
-// --- Macros to delimit a list ---
-#define UBX_LIST_BEGIN static const ubx_msg_t * const ubxArrayList[] = {
-#define UBX_LIST_END   NULL };
-
-// --- Reference the wrapper automatically ---
-#define UBX_REF(name) &name,
-#define UBX_REF_2(name) &CONCAT(_, name),
 
 
 #endif // UBX_MESSAGES_H
