@@ -55,7 +55,8 @@ typedef struct {
 // --- Helper macros ---
 #define CONCAT2(a,b) a##b
 #define CONCAT(a,b) CONCAT2(a,b)
-#define SIZEOF(a) sizeof(a)/sizeof(a[0])
+#define SIZEOF(a) ( (sizeof(a)) / (sizeof((a)[0])) )
+
 
 // Macro to define a UBX message with optional payload
 // __VA_ARGS__ can be empty
