@@ -64,34 +64,34 @@ typedef struct {
 #define UBX_LEN_LO(...) ((UBX_PAYLOAD_LEN(__VA_ARGS__)) & 0xFF)
 #define UBX_LEN_HI(...) ((UBX_PAYLOAD_LEN(__VA_ARGS__)) >> 8 & 0xFF)
 
-#define UBX_MESSAGE_BYTES(name, cls, id, ...)               \
-static const uint8_t name[] = {                             \
-    UBX_SYNC1, UBX_SYNC2,                                   \
-    cls, id,                                                \
-    UBX_LEN_LO(__VA_ARGS__),                                \
-    UBX_LEN_HI(__VA_ARGS__),                                \
-    ##__VA_ARGS__,                                          \
+#define UBX_MESSAGE_BYTES(name, cls, id, ...)                  \
+static const uint8_t name[] = {                                \
+    UBX_SYNC1, UBX_SYNC2,                                      \
+    cls, id,                                                   \
+    UBX_LEN_LO(__VA_ARGS__),                                   \
+    UBX_LEN_HI(__VA_ARGS__),                                   \
+    ##__VA_ARGS__,                                             \
     (PP_SUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF, \
     (PP_CSUM(cls, id, UBX_LEN_LO(__VA_ARGS__), UBX_LEN_HI(__VA_ARGS__), ##__VA_ARGS__)) & 0xFF };
 
-#define UBX_MESSAGE(name, cls, id, ...)                     \
-UBX_MESSAGE_BYTES(CONCAT(_,name),  cls, id, ##__VA_ARGS__)  \
-static const ubx_msg_t name = {                             \
-    CONCAT(_,name),                                         \
-    sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]),       \
-    cls,                                                    \
+#define UBX_MESSAGE(name, cls, id, ...)                        \
+UBX_MESSAGE_BYTES(CONCAT(_,name),  cls, id, ##__VA_ARGS__)     \
+static const ubx_msg_t name = {                                \
+    CONCAT(_,name),                                            \
+    sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]),          \
+    cls,                                                       \
     id };
 
 // --- Macros to create and invoke a list of UBX messages ---
 #define UBX_BEGIN_LIST static const ubx_entry_t ubxArrayList[] = {
 #define UBX_ITEM(name, func) { &name, func },
 #define UBX_END_LIST         { NULL, NULL } };
-#define UBX_INVOKE(fd) \
-    do { \
-        for (size_t i = 0; ubxArrayList[i].msg; i++) { \
-            ubxArrayList[i].invoke(fd, ubxArrayList[i].msg); \
-            usleep(5000); /* 5 ms delay between commands */ \
-        } \
+#define UBX_INVOKE(fd)                                         \
+    do {                                                       \
+        for (size_t i = 0; ubxArrayList[i].msg; i++) {         \
+            ubxArrayList[i].invoke(fd, ubxArrayList[i].msg);   \
+            usleep(5000); /* 5 ms delay between commands */    \
+        }                                                      \
     } while (0)
 
 
