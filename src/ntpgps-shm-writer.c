@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <unistd.h>
@@ -1678,8 +1679,7 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
     tcdrain(fd);
 
     if (!parser)
-        // ignore UBX response message or ACK/NAK, if any
-        return UBX_PARSE_OK;
+        return UBX_PARSE_OK; // ignore UBX response
     else
         return wait_for_ubx_msg(fd, parser, 1);
 }
