@@ -140,7 +140,7 @@ if [ -n "$CONF_TEMPLATE" ]; then
             # Replace and preserve formula for clarity
             BASE_KEY=0x4E545030
             NEW_KEY=$(printf "0x%X" $((BASE_KEY + GPSNUM)))
-            sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030+$GPSNUM)/" "$tmpfile"
+            sudo sed -i "s/0x4E545030+$GPSNUM/$NEW_KEY (0x4E545030 + $GPSNUM)/" "$tmpfile"
             ;;
         *)
             echo "Error: Unknown refclock value '$REFCLOCK' for $TTYDEV" >&2
