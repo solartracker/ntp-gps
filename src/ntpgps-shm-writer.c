@@ -1433,7 +1433,7 @@ typedef struct {
     uint8_t filter_id;              // ID we are waiting for
     uint8_t *filter_payload;        // Payload we are waiting for
     size_t filter_payload_len;      // Payload length we are waiting for
-    int filter_active;              // flag: 1 = filter active
+    bool filter_active;             // flag: true = filter active
 } ubx_parser_t;
 
 typedef enum {
@@ -1459,9 +1459,12 @@ void ubx_parser_init(ubx_parser_t *p)
     p->id = 0;
     p->ck_a = 0;
     p->ck_b = 0;
+    p->filter_type = UBX_FILTER_NONE;
     p->filter_cls = 0;
     p->filter_id = 0;
-    p->filter_active = 0;
+    p->filter_payload = NULL;
+    p->filter_payload_len = 0;
+    p->filter_active = false;
 }
 
 // state machine for parsing UBX response
@@ -1607,7 +1610,7 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
                 TRACE("Skipped %s\n", disassemble_ubx_bytes(p->msg, p->length));
                 return UBX_PARSE_INCOMPLETE;
             }
-            p->filter_active = 0; // filter satisfied
+            p->filter_active = false; // filter satisfied
         }
         return UBX_PARSE_OK;
 
@@ -1702,7 +1705,7 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
     uint8_t filter_payload[] = { msg->cls, msg->id };
     parser.filter_payload = filter_payload;
     parser.filter_payload_len = sizeof(filter_payload) / sizeof(filter_payload[0]);
-    parser.filter_active = 1;
+    parser.filter_active = true;
 
     ubx_parse_result_t result = send_ubx(fd, msg, &parser);
 
@@ -1751,7 +1754,7 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
     parser.filter_type = UBX_FILTER_CLS_ID;
     parser.filter_cls = msg->cls;
     parser.filter_id = msg->id;
-    parser.filter_active = 1;
+    parser.filter_active = true;
 
     ubx_parse_result_t result = send_ubx(fd, msg, &parser);
 
