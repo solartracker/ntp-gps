@@ -225,14 +225,34 @@ static const ubx_msg_t name = {                                \
 #define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_RXBUF)
 
 // Debug print helper
-static inline void print_ubx_bytes(const uint8_t * const msg, size_t len) {
-    for (size_t i = 0; i < len; i++)
-        printf("%02X ", msg[i]);
-    printf("\n");
+
+/*
+static char ubx_message_output_str[2048];
+static char *format_ubx_bytes(const uint8_t * const msg, size_t len) {
+    char *output_str = ubx_message_output_str;
+    size_t output_str_max = SIZEOF(ubx_message_output_str);
+
+    if (!output_str || output_str_max == 0)
+        return NULL;
+
+    *output_str = '\0';
+
+    char *p = output_str;
+    const uint16_t len_max = (output_str_max / 5) - 100;
+    uint16_t len_max_print = len < len_max ? len : len_max;
+
+    for (uint16_t i = 0; i < len_max_print; i++) {
+        p += sprintf(p, "%s%02X", i ? " " : "", msg[i]);
+    }
+
+    return output_str;
 }
-static inline void print_ubx(const ubx_msg_t * const pmsg) {
-    if (pmsg) print_ubx_bytes(pmsg->data, pmsg->length);
+static char *format_ubx(const ubx_msg_t * const msg) {
+    if (!msg)
+        return NULL;
+    return format_ubx_bytes(msg->data, msg->length);
 }
+*/
 
 // Copy string helper
 static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
@@ -250,6 +270,8 @@ static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
         }
     }
 }
+
+// --- Disassemble UBX message ---
 
 static const char * const ubx_name(uint8_t ubx1, uint8_t ubx2)
 {
@@ -343,7 +365,6 @@ static const char * const ubx_id_name(uint8_t cls, uint8_t id)
     }
 }
 
-// Disassemble UBX message
 static char disassemble_ubx_output_str[2048];
 static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     char *output_str = disassemble_ubx_output_str;
@@ -351,6 +372,8 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
 
     if (!output_str || output_str_max == 0)
         return NULL;
+
+    *output_str = '\0';
 
     uint8_t ubx1 = 0;
     uint8_t ubx2 = 0;
@@ -366,7 +389,6 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     uint8_t ck_b_ = 0;
     bool ck_valid = false;
 
-    *output_str = '\0';
     if (len >= 1) ubx1 = msg[0];
     if (len >= 2) ubx2 = msg[1];
     if (len >= 3) cls = msg[2];
@@ -401,17 +423,29 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     const uint16_t payload_len_max = (output_str_max / 5) - 100;
     uint16_t payload_len_max_print = payload_len < payload_len_max ? payload_len : payload_len_max;
 
-    p += sprintf(p, "%s-%s-%s (len={%u, %s}, checksum={%02X %02X, %s}, payload={",
+    p += sprintf(p, "%s-%s-%s (len={%u, %s}, payload={",
            ubx_name(ubx1, ubx2), ubx_class_name(cls), ubx_id_name(cls, id),
-           payload_len_raw, payload_len_valid ? "VALID" : "INVALID",
-           ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
+           payload_len_raw, payload_len_valid ? "VALID" : "INVALID");
+
     for (uint16_t i = 0; i < payload_len_max_print; i++) {
         p += sprintf(p, "%s%02X", i ? " " : "", payload[i]);
     }
-    p += sprintf(p, "})");
+
+    if (cls == UBX_CLS_ACK && (id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
+        p += sprintf(p, ", UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
+    }
+
+    p += sprintf(p, "}, checksum={%02X %02X, %s})",
+            ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
 
     return output_str;
 }
+static char *disassemble_ubx(const ubx_msg_t * const msg) {
+    if (!msg)
+        return NULL;
+    return disassemble_ubx_bytes(msg->data, msg->length);
+}
+
 
 
 #endif // UBX_MESSAGES_H

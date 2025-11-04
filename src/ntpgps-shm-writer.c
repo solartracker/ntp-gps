@@ -1645,8 +1645,7 @@ ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_se
         if (FD_ISSET(fd, &rfds)) {
             ssize_t n = read(fd, buf, sizeof(buf));
             if (n > 0) {
-                TRACE("read:  ");
-                TRACE_CALL(print_ubx_bytes(buf, n));
+                //TRACE("Read:  %s\n", format_ubx_bytes(buf, n));
                 for (ssize_t i = 0; i < n; i++) {
                     ubx_parse_result_t result = ubx_parser_feed(parser, buf[i]);
                     if (result != UBX_PARSE_INCOMPLETE)
@@ -1672,8 +1671,8 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
     tcflush(fd, TCIFLUSH);
 
     // send message
-    TRACE("write: ");
-    TRACE_CALL(print_ubx(msg));
+    //TRACE("Write: %s\n", format_ubx(msg));
+    TRACE("Write   %s\n", disassemble_ubx(msg));
     ssize_t written = write(fd, msg->data, msg->length);
     if (written != (ssize_t)msg->length) {
         perror("write");
@@ -1709,6 +1708,7 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
 
     switch (result) {
         case UBX_PARSE_OK:
+            TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
             if (parser.length == 10 && parser.cls == UBX_CLS_ACK &&
               parser.payload_len == 2 &&
               parser.payload[0] == msg->cls && parser.payload[1] == msg->id) {
@@ -1757,6 +1757,7 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 
     switch (result) {
         case UBX_PARSE_OK:
+            TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
             if (parser.cls == UBX_CLS_MON && parser.id == UBX_ID_MON_VER) { // UBX-MON-VER
                 memset(ublox_software_version, 0, sizeof(ublox_software_version));
                 memset(ublox_hardware_version, 0, sizeof(ublox_hardware_version));
