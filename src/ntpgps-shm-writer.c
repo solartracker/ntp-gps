@@ -1805,51 +1805,37 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 
 static int configure_ublox_zda_only(int fd)
 {
-    // UBX commands to configure ZDA only output
     UBX_BEGIN_LIST
-        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
-        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gsv_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_rmc_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_vtg_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_grs_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gst_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gbs_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_dtm_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_gns_off,  send_ubx_handle_ack)
-        UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
         UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
         UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
+        UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gll_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gsa_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gsv_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_rmc_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_vtg_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_grs_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gst_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gbs_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_dtm_off,  send_ubx_no_wait)
+        UBX_ITEM(cfg_msg_nmea_gns_off,  send_ubx_no_wait)
     UBX_END_LIST
-
-    // Send all UBX commands
     UBX_INVOKE(fd);
 
     return 0;
 }
 
 // Wait for UBX-MON-VER message
-int get_ublox_version(int fd) {
-
-    // 1. Enable UBX output on USB,UART1
-
-    // UBX-CFG-PRT for USB: ProtocolOut = UBX
-    if (send_ubx_no_wait(fd, &cfg_prt_uart1_ubxnmea) != UBX_PARSE_OK)
-        return 0;
-    usleep(5000); // wait 5 ms
-
-    // UBX-CFG-PRT for UART1: ProtocolOut = UBX
-    if (send_ubx_no_wait(fd, &cfg_prt_usb_ubxnmea) != UBX_PARSE_OK)
-        return 0;
-    usleep(5000); // wait 5 ms
-
-    // 2. Send UBX-MON-VER request
-    if (send_ubx_handle_mon_ver(fd, &mon_ver) != UBX_PARSE_OK)
-        return 0;
-    usleep(5000); // wait 5 ms
+int get_ublox_version(int fd)
+{
+    UBX_BEGIN_LIST
+        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_handle_ack)
+        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_handle_ack)
+        UBX_ITEM(mon_ver,               send_ubx_handle_mon_ver)
+    UBX_END_LIST
+    UBX_INVOKE(fd);
 
     TRACE("u-blox Software Version: %s\n", ublox_software_version);
     TRACE("u-blox Hardware Version: %s\n", ublox_hardware_version);
@@ -1861,15 +1847,12 @@ int get_ublox_version(int fd) {
 
 int configure_ublox_nmea_only(int fd)
 {
-    // UBX-CFG-PRT for USB: ProtocolOut = NMEA
-    if (send_ubx_no_wait(fd, &cfg_prt_uart1_nmea) != UBX_PARSE_OK)
-        return 0;
-    usleep(5000); // wait 5 ms
-
-    // UBX-CFG-PRT for UART1: ProtocolOut = NMEA
-    if (send_ubx_no_wait(fd, &cfg_prt_usb_nmea) != UBX_PARSE_OK)
-        return 0;
-    usleep(5000); // wait 5 ms
+    UBX_BEGIN_LIST
+        UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
+        UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
+    UBX_END_LIST
+    UBX_INVOKE(fd);
 
     return 1;
 }
