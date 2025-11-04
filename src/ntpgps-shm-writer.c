@@ -1806,8 +1806,8 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 static int configure_ublox_zda_only(int fd)
 {
     UBX_BEGIN_LIST
-        UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
         UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
         UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
         UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_no_wait)
         UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_no_wait)
