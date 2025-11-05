@@ -1748,20 +1748,12 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
         ubx_parse_result_t res = wait_for_ubx_msg(fd, parser, 1);
 
         if (res == UBX_PARSE_OK) {
-            // We got a matching ACK or NAK
-            if (parser->cls == UBX_CLS_ACK) {
-                if (parser->id == UBX_ID_ACK_ACK)
-                    return UBX_PARSE_OK;       // success
-                if (parser->id == UBX_ID_ACK_NAK) {
-                    TRACE("NAK received for cls=0x%02X id=0x%02X\n",
-                          msg->cls, msg->id);
-                    return UBX_RECEIVED_NAK;   // don't retry
-                }
-            } else {
-                // Handle other UBX response messages
-                // Example: parser->cls == UBX_CLS_MON && parser->id == UBX_ID_MON_VER
-                return UBX_PARSE_OK;
+            if (parser->cls == UBX_CLS_ACK && parser->id == UBX_ID_ACK_NAK) {
+                TRACE("NAK received for cls=0x%02X id=0x%02X\n",
+                      msg->cls, msg->id);
+                return UBX_RECEIVED_NAK;
             }
+            return UBX_PARSE_OK;
         }
 
         if (res == UBX_PARSE_CKSUM_ERR)
