@@ -1748,11 +1748,8 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
         ubx_parse_result_t res = wait_for_ubx_msg(fd, parser, 1);
 
         if (res == UBX_PARSE_OK) {
-            if (parser->cls == UBX_CLS_ACK && parser->id == UBX_ID_ACK_NAK) {
-                TRACE("NAK received for cls=0x%02X id=0x%02X\n",
-                      msg->cls, msg->id);
+            if (parser->cls == UBX_CLS_ACK && parser->id == UBX_ID_ACK_NAK)
                 return UBX_RECEIVED_NAK;
-            }
             return UBX_PARSE_OK;
         }
 
@@ -1792,6 +1789,7 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
 
     switch (result) {
         case UBX_PARSE_OK:
+        case UBX_RECEIVED_NAK:
             TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
             if (parser.length == 10 && parser.cls == UBX_CLS_ACK &&
               parser.payload_len == 2 &&
