@@ -1757,6 +1757,10 @@ static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_pars
                           msg->cls, msg->id);
                     return UBX_RECEIVED_NAK;   // don't retry
                 }
+            } else {
+                // Handle other UBX response messages
+                // Example: parser->cls == UBX_CLS_MON && parser->id == UBX_ID_MON_VER
+                return UBX_PARSE_OK;
             }
         }
 
@@ -1870,21 +1874,23 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 static int configure_ublox_zda_only(int fd)
 {
     UBX_BEGIN_LIST
+        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_ITEM(cfg_inf_off,           send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gsv_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_rmc_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_vtg_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_grs_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gst_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gbs_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_dtm_off,  send_ubx_handle_ack)
+        UBX_ITEM(cfg_msg_nmea_gns_off,  send_ubx_handle_ack)
         UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
         UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
-        UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_zda_on,   send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gga_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gll_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gsa_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gsv_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_rmc_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_vtg_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_grs_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gst_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gbs_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_dtm_off,  send_ubx_no_wait)
-        UBX_ITEM(cfg_msg_nmea_gns_off,  send_ubx_no_wait)
     UBX_END_LIST
     UBX_INVOKE(fd);
 
@@ -1895,8 +1901,8 @@ static int configure_ublox_zda_only(int fd)
 int get_ublox_version(int fd)
 {
     UBX_BEGIN_LIST
-        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_handle_ack)
-        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_handle_ack)
+        UBX_ITEM(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
+        UBX_ITEM(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
         UBX_ITEM(mon_ver,               send_ubx_handle_mon_ver)
     UBX_END_LIST
     UBX_INVOKE(fd);
@@ -1912,9 +1918,9 @@ int get_ublox_version(int fd)
 int configure_ublox_nmea_only(int fd)
 {
     UBX_BEGIN_LIST
+        UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
         UBX_ITEM(cfg_prt_usb_nmea,      send_ubx_no_wait)
         UBX_ITEM(cfg_prt_uart1_nmea,    send_ubx_no_wait)
-        UBX_ITEM(cfg_inf_off,           send_ubx_no_wait)
     UBX_END_LIST
     UBX_INVOKE(fd);
 
