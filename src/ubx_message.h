@@ -30,21 +30,7 @@ typedef struct {
     const uint8_t id;            // id for ACK matching
 } ubx_msg_t;
 
-typedef enum {
-    UBX_PARSE_INCOMPLETE = 0,  // still accumulating bytes
-    UBX_PARSE_OK,              // message complete and checksum OK
-    UBX_PARSE_CKSUM_ERR,       // checksum failed
-    UBX_PARSE_SYNC_ERR,        // lost sync or invalid structure
-    UBX_PARSE_FILTER_ERR,      // bad filter type
-    UBX_PARSE_TIMEOUT,         // timeout waiting for data
-    UBX_SELECT_ERROR,
-    UBX_READ_ERROR,
-    UBX_WRITE_ERROR,
-    UBX_ARG_ERROR,
-    UBX_STOP,
-    UBX_UNEXPECTED
-} ubx_parse_result_t;
-
+typedef enum ubx_parse_result ubx_parse_result_t;
 typedef ubx_parse_result_t (*ubx_sender_t)(int fd, const ubx_msg_t * const msg);
 
 typedef struct {
@@ -226,14 +212,9 @@ static const ubx_msg_t name = {                                \
 
 // Debug print helper
 
-/*
-static char ubx_message_output_str[2048];
-static char *format_ubx_bytes(const uint8_t * const msg, size_t len) {
-    char *output_str = ubx_message_output_str;
-    size_t output_str_max = SIZEOF(ubx_message_output_str);
-
-    if (!output_str || output_str_max == 0)
-        return NULL;
+static inline char *format_ubx_bytes(const uint8_t * const msg, size_t len) {
+    static _Thread_local char output_str[2048];
+    size_t output_str_max = SIZEOF(output_str);
 
     *output_str = '\0';
 
@@ -247,12 +228,11 @@ static char *format_ubx_bytes(const uint8_t * const msg, size_t len) {
 
     return output_str;
 }
-static char *format_ubx(const ubx_msg_t * const msg) {
+static inline char *format_ubx(const ubx_msg_t * const msg) {
     if (!msg)
         return NULL;
     return format_ubx_bytes(msg->data, msg->length);
 }
-*/
 
 // Copy string helper
 static inline void copy_ubx_string(const uint8_t *src, size_t len, char *dst)
@@ -365,13 +345,9 @@ static const char * const ubx_id_name(uint8_t cls, uint8_t id)
     }
 }
 
-static char disassemble_ubx_output_str[2048];
 static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
-    char *output_str = disassemble_ubx_output_str;
-    size_t output_str_max = SIZEOF(disassemble_ubx_output_str);
-
-    if (!output_str || output_str_max == 0)
-        return NULL;
+    static _Thread_local char output_str[2048];
+    size_t output_str_max = SIZEOF(output_str);
 
     *output_str = '\0';
 

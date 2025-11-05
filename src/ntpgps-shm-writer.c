@@ -1467,6 +1467,47 @@ void ubx_parser_init(ubx_parser_t *p)
     p->filter_active = false;
 }
 
+typedef enum ubx_parse_result {
+    UBX_PARSE_INCOMPLETE = 0,  // still accumulating bytes
+    UBX_PARSE_OK,              // message complete and checksum OK
+    UBX_PARSE_CKSUM_ERR,       // checksum failed
+    UBX_PARSE_SYNC_ERR,        // lost sync or invalid structure
+    UBX_PARSE_FILTER_ERR,      // bad filter type
+    UBX_PARSE_TIMEOUT,         // timeout while parsing data
+    UBX_SELECT_TIMEOUT,        // timeout while reading data
+    UBX_SELECT_ERROR,
+    UBX_READ_ERROR,
+    UBX_WRITE_ERROR,
+    UBX_RECEIVED_NAK,
+    UBX_ARG_ERROR,
+    UBX_STOP,
+    UBX_UNEXPECTED
+} ubx_parse_result_t;
+
+static const char * const result_text(ubx_parse_result_t res)
+{
+    switch(res) {
+    case UBX_PARSE_INCOMPLETE:  return "Parse incomplete";
+    case UBX_PARSE_OK:          return "Success";
+    case UBX_PARSE_CKSUM_ERR:   return "Parse checksum error";
+    case UBX_PARSE_SYNC_ERR:    return "Parse sync error";
+    case UBX_PARSE_FILTER_ERR:  return "Unknown filter type";
+    case UBX_PARSE_TIMEOUT:     return "Timeout waiting for ACK or response";
+    case UBX_SELECT_TIMEOUT:    return "Timeout waiting for select()";
+    case UBX_SELECT_ERROR:      return "Error returned by select()";
+    case UBX_READ_ERROR:        return "Error returned by read()";
+    case UBX_WRITE_ERROR:       return "Error returned by write()";
+    case UBX_RECEIVED_NAK:      return "Device rejected the message";
+    case UBX_ARG_ERROR:         return "Bad argument passed to function";
+    case UBX_STOP:              return "Stop signal received";
+    case UBX_UNEXPECTED:        return "Unexpected error occurred";
+    default: {
+        static _Thread_local char buf[64];
+        snprintf(buf, sizeof(buf), "Unknown result code (%d)", res);
+        return buf;
+    }}
+}
+
 // state machine for parsing UBX response
 ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
 {
@@ -1621,13 +1662,21 @@ ubx_parse_result_t ubx_parser_feed(ubx_parser_t *p, uint8_t byte)
     }
 }
 
+#define UBX_PARSE_TIMEOUT_MS 500
 ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_sec)
 {
     fd_set rfds;
     struct timeval tv;
     uint8_t buf[256];
+    uint64_t start_ms = monotonic_now_ms();
 
     while (!atomic_load(&stop)) {
+        // ---- Check for ACK/NAK timeout ----
+        uint64_t elapsed_ms = monotonic_now_ms() - start_ms;
+        if (elapsed_ms > UBX_PARSE_TIMEOUT_MS)
+            return UBX_PARSE_TIMEOUT;
+
+        // ---- Wait for incoming data ----
         FD_ZERO(&rfds);
         FD_SET(fd, &rfds);
 
@@ -1641,7 +1690,7 @@ ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_se
             perror("select");
             return UBX_SELECT_ERROR;
         } else if (retval == 0) {
-            return UBX_PARSE_TIMEOUT; // timeout
+            return UBX_SELECT_TIMEOUT; // I/O timeout
         }
 
         // only proceed if data is available
@@ -1666,29 +1715,65 @@ ubx_parse_result_t wait_for_ubx_msg(int fd, ubx_parser_t *parser, int timeout_se
 ////////////////////////////////////////////////////////////////////////////////
 
 // Send UBX message and wait for ACK/NAK
+#define UBX_MAX_RETRIES 3
 static ubx_parse_result_t send_ubx(int fd, const ubx_msg_t * const msg, ubx_parser_t *parser)
 {
     if (!msg) return UBX_ARG_ERROR;
 
-    // clear input before sending
-    tcflush(fd, TCIFLUSH);
+    ubx_parser_t parser_starting_state = {0};
+    if (parser) parser_starting_state = *parser;
 
-    // send message
-    //TRACE("Write: %s\n", format_ubx(msg));
-    TRACE("Write   %s\n", disassemble_ubx(msg));
-    ssize_t written = write(fd, msg->data, msg->length);
-    if (written != (ssize_t)msg->length) {
-        perror("write");
-        return UBX_WRITE_ERROR;
+    for (int attempt = 1; attempt <= UBX_MAX_RETRIES; attempt++) {
+        // reset parser
+        if (parser) *parser = parser_starting_state;
+
+        // clear input before sending
+        tcflush(fd, TCIFLUSH);
+
+        // send message
+        //TRACE("Write: %s\n", format_ubx(msg));
+        TRACE("Write   %s\n", disassemble_ubx(msg));
+        ssize_t written = write(fd, msg->data, msg->length);
+        if (written != (ssize_t)msg->length) {
+            perror("write");
+            return UBX_WRITE_ERROR;
+        }
+
+        // ensure all bytes are transmitted before waiting
+        tcdrain(fd);
+
+        if (!parser)
+            return UBX_PARSE_OK; // ignore UBX response
+
+        ubx_parse_result_t res = wait_for_ubx_msg(fd, parser, 1);
+
+        if (res == UBX_PARSE_OK) {
+            // We got a matching ACK or NAK
+            if (parser->cls == UBX_CLS_ACK) {
+                if (parser->id == UBX_ID_ACK_ACK)
+                    return UBX_PARSE_OK;       // success
+                if (parser->id == UBX_ID_ACK_NAK) {
+                    TRACE("NAK received for cls=0x%02X id=0x%02X\n",
+                          msg->cls, msg->id);
+                    return UBX_RECEIVED_NAK;   // don't retry
+                }
+            }
+        }
+
+        if (res == UBX_PARSE_CKSUM_ERR)
+            return UBX_PARSE_CKSUM_ERR; // hard failure
+
+        TRACE("No ACK for cls=0x%02X id=0x%02X (attempt %d/%d)\n",
+              msg->cls, msg->id, attempt, UBX_MAX_RETRIES);
+
+        // small delay before retry
+        usleep(20000 * attempt);
     }
 
-    // ensure all bytes are transmitted before waiting
-    tcdrain(fd);
+    TRACE("Gave up after %d retries waiting for ACK 0x%02X/0x%02X\n",
+          UBX_MAX_RETRIES, msg->cls, msg->id);
 
-    if (!parser)
-        return UBX_PARSE_OK; // ignore UBX response
-    else
-        return wait_for_ubx_msg(fd, parser, 1);
+    return UBX_PARSE_TIMEOUT;
 }
 
 static ubx_parse_result_t send_ubx_no_wait(int fd, const ubx_msg_t * const msg)
@@ -1726,20 +1811,8 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
                 TRACE("Unexpected message length (%d).\n", parser.length);
             }
             break;
-        case UBX_PARSE_CKSUM_ERR:
-            TRACE("Parse checksum error.\n");
-            break;
-        case UBX_PARSE_TIMEOUT:
-            TRACE("Timeout waiting for ACK.\n");
-            break;
-        case UBX_PARSE_SYNC_ERR:
-            TRACE("Parse sync error.\n");
-            break;
-        case UBX_PARSE_INCOMPLETE:
-            TRACE("Parse incomplete.\n");
-            break;
         default:
-            TRACE("Unknown error (%d)\n", result);
+            TRACE("%s\n", result_text(result));
             break;
     }
 
@@ -1786,20 +1859,8 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
                 result = UBX_UNEXPECTED;
             }
             break;
-        case UBX_PARSE_CKSUM_ERR:
-            TRACE("Parse checksum error.\n");
-            break;
-        case UBX_PARSE_TIMEOUT:
-            TRACE("Timeout waiting for ACK.\n");
-            break;
-        case UBX_PARSE_SYNC_ERR:
-            TRACE("Parse sync error.\n");
-            break;
-        case UBX_PARSE_INCOMPLETE:
-            TRACE("Parse incomplete.\n");
-            break;
         default:
-            TRACE("Unknown error (%d)\n", result);
+            TRACE("%s\n", result_text(result));
             break;
     }
 
