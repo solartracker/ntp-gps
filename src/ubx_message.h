@@ -345,6 +345,29 @@ static const char * const ubx_id_name(uint8_t cls, uint8_t id)
     }
 }
 
+static const char * const ubx_nmea_name(uint16_t nmea_id)
+{
+    switch(nmea_id) {
+    case 0xF000: return "GGA";
+    case 0xF001: return "GLL";
+    case 0xF002: return "GSA";
+    case 0xF003: return "GSV";
+    case 0xF004: return "RMC";
+    case 0xF005: return "VTG";
+    case 0xF006: return "GRS";
+    case 0xF007: return "GST";
+    case 0xF008: return "ZDA";
+    case 0xF009: return "GBS";
+    case 0xF00A: return "DTM";
+    case 0xF00D: return "GNS";
+    case 0xF00E: return "THS";
+    case 0xF00F: return "VLW";
+    case 0xF010: return "UTC";
+    case 0xF00B: return "RLM";
+    default:     return "???";
+    }
+}
+
 static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     static _Thread_local char output_str[2048];
     size_t output_str_max = SIZEOF(output_str);
@@ -399,19 +422,33 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     const uint16_t payload_len_max = (output_str_max / 5) - 100;
     uint16_t payload_len_max_print = payload_len < payload_len_max ? payload_len : payload_len_max;
 
-    p += sprintf(p, "%s-%s-%s (len={%u, %s}, payload={",
+    // UBX-CLS-ID message format
+    p += sprintf(p, "%s-%s-%s (len={%u: %s}, payload={",
            ubx_name(ubx1, ubx2), ubx_class_name(cls), ubx_id_name(cls, id),
            payload_len_raw, payload_len_valid ? "VALID" : "INVALID");
 
+    // payload bytes
     for (uint16_t i = 0; i < payload_len_max_print; i++) {
         p += sprintf(p, "%s%02X", i ? " " : "", payload[i]);
     }
 
-    if (cls == UBX_CLS_ACK && (id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
-        p += sprintf(p, ", UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
+    // annotate the payload bytes
+    if (cls == UBX_CLS_ACK) {
+        if ((id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
+            p += sprintf(p, ": UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
+        }
+    } else if (cls == UBX_CLS_CFG) {
+        if (id == UBX_ID_CFG_MSG) {
+            const uint16_t nmea_id = (payload[0] << 8) | payload[1];
+            if (nmea_id >= 0xF000 && nmea_id <= 0xF010) {
+                p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d", 
+                        ubx_nmea_name(nmea_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
+            }
+        }
     }
 
-    p += sprintf(p, "}, checksum={%02X %02X, %s})",
+    // checksum
+    p += sprintf(p, "}, checksum={%02X %02X: %s})",
             ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
 
     return output_str;
