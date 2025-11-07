@@ -1795,7 +1795,7 @@ static ubx_parse_result_t send_ubx_handle_ack(int fd, const ubx_msg_t * const ms
               parser.payload_len == 2 &&
               parser.payload[0] == msg->cls && parser.payload[1] == msg->id) {
                 if (parser.id == UBX_ID_ACK_ACK) {
-                    TRACE("Configuration accepted (ACK).\n");
+                    TRACE("Command accepted (ACK).\n");
                 } else if (parser.id == UBX_ID_ACK_NAK) {
                     TRACE("Command rejected (NAK).\n");
                 } else {
@@ -1893,6 +1893,9 @@ int get_ublox_version(int fd)
     UBX_BEGIN_LIST
         UBX_FUNCTION(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
         UBX_FUNCTION(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_FUNCTION(cfg_prt,               send_ubx_handle_ack)
+        UBX_FUNCTION(cfg_prt_usb,           send_ubx_handle_ack)
+        UBX_FUNCTION(cfg_prt_uart1,         send_ubx_handle_ack)
         UBX_FUNCTION(mon_ver,               send_ubx_handle_mon_ver)
     UBX_END_LIST
     UBX_INVOKE(fd);

@@ -609,62 +609,67 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     p += sprintf(p, "}");
 
     // annotate the payload bytes
-    if (cls == UBX_CLS_ACK) {
-        if ((id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
-            p += sprintf(p, ": UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
-        }
-    } else if (cls == UBX_CLS_CFG) {
-        if (id == UBX_ID_CFG_MSG) {
-            const uint16_t msg_id = payload[0] << 8 | payload[1];
-            if (msg_id >= 0xF000 && msg_id <= 0xF010) {
-                p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
-                        ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
+    if (payload_len > 0) {
+        if (cls == UBX_CLS_ACK) {
+            if ((id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
+                p += sprintf(p, ": UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
             }
-        } else if (id == UBX_ID_CFG_PRT && payload_len > 0) {
-            const ubx_cfg_prt_t *prt = (const ubx_cfg_prt_t *)payload;
+        } else if (cls == UBX_CLS_CFG) {
+            if (id == UBX_ID_CFG_MSG) {
+                const uint16_t msg_id = payload[0] << 8 | payload[1];
+                if (msg_id >= 0xF000 && msg_id <= 0xF010) {
+                    p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
+                            ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
+                }
+            } else if (id == UBX_ID_CFG_PRT) {
+                p += sprintf(p, ": Target=%s", ubx_port_str(payload[0]));
 
-            p += sprintf(p, ": Target=%s ProtocolIn=%s ProtocolOut=%s",
-                         ubx_port_str(prt->target),
-                         ubx_protocol_str(prt->protocolIn),
-                         ubx_protocol_str(prt->protocolOut));
+                if (payload_len == 20) {
+                    const ubx_cfg_prt_t *prt = (const ubx_cfg_prt_t *)payload;
 
-            switch(prt->target) {
-            case UBX_PORT_I2C:
-                p += sprintf(p, " SlaveAddr=0x%02X Clock=%u",
-                             prt->i2c.i2c_slave_addr,
-                             prt->baudRate);
-                break;
+                    p += sprintf(p, " ProtocolIn=%s ProtocolOut=%s",
+                                 ubx_protocol_str(prt->protocolIn),
+                                 ubx_protocol_str(prt->protocolOut));
 
-            case UBX_PORT_UART1:
-            case UBX_PORT_UART2:
-                p += sprintf(p, " Baudrate=%u Databits=%s Stopbits=%s Parity=%s BitOrder=%s",
-                             prt->baudRate,
-                             ubx_databits_str(prt->uart.charLen),
-                             ubx_stopbits_str(prt->uart.stopBits),
-                             ubx_parity_str(prt->uart.parity),
-                             ubx_bitorder_str(prt->uart.bitOrder));
-                break;
+                    switch(prt->target) {
+                    case UBX_PORT_I2C:
+                        p += sprintf(p, " SlaveAddr=0x%02X Clock=%u",
+                                     prt->i2c.i2c_slave_addr,
+                                     prt->baudRate);
+                        break;
 
-            case UBX_PORT_USB:
-                // nothing extra for USB
-                break;
+                    case UBX_PORT_UART1:
+                    case UBX_PORT_UART2:
+                        p += sprintf(p, " Baudrate=%u Databits=%s Stopbits=%s Parity=%s BitOrder=%s",
+                                     prt->baudRate,
+                                     ubx_databits_str(prt->uart.charLen),
+                                     ubx_stopbits_str(prt->uart.stopBits),
+                                     ubx_parity_str(prt->uart.parity),
+                                     ubx_bitorder_str(prt->uart.bitOrder));
+                        break;
 
-            case UBX_PORT_SPI:
-                p += sprintf(p, " Clock=%u CPOL=%u CPHA=%u MSBfirst=%u",
-                             prt->baudRate,
-                             prt->spi.cpol,
-                             prt->spi.cpha,
-                             prt->spi.msbFirst);
-                break;
+                    case UBX_PORT_USB:
+                        // nothing extra for USB
+                        break;
+
+                    case UBX_PORT_SPI:
+                        p += sprintf(p, " Clock=%u CPOL=%u CPHA=%u MSBfirst=%u",
+                                     prt->baudRate,
+                                     prt->spi.cpol,
+                                     prt->spi.cpha,
+                                     prt->spi.msbFirst);
+                        break;
+                    }
+
+                    // TX-ready / PIO
+                    p += sprintf(p, " TxReadyGPIO=%u InversePol=%u Threshold=%u ExtTimeout=%u",
+                                 prt->pio, prt->inversePol, prt->threshold, prt->extTimeout);
+
+                    // Port flags
+                    p += sprintf(p, " PortEnable=%u TxReadyEnable=%u InversePol=%u ExtFeatures=0x%02X",
+                                 prt->portEnable, prt->txReadyEnable, prt->inversePolFlags, prt->extFeatures);
+                }
             }
-
-            // TX-ready / PIO
-            p += sprintf(p, " TxReadyGPIO=%u InversePol=%u Threshold=%u ExtTimeout=%u",
-                         prt->pio, prt->inversePol, prt->threshold, prt->extTimeout);
-
-            // Port flags
-            p += sprintf(p, " PortEnable=%u TxReadyEnable=%u InversePol=%u ExtFeatures=0x%02X",
-                         prt->portEnable, prt->txReadyEnable, prt->inversePolFlags, prt->extFeatures);
         }
     }
 
