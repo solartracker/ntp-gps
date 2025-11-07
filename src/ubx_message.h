@@ -27,6 +27,7 @@
 typedef struct {
     const uint8_t * const data;
     const size_t length;
+    const size_t payload_len;
     const uint8_t cls;           // class for ACK matching
     const uint8_t id;            // id for ACK matching
 } ubx_msg_t;
@@ -67,6 +68,7 @@ UBX_MESSAGE_BYTES(CONCAT(_,name),  cls, id, ##__VA_ARGS__)     \
 static const ubx_msg_t name = {                                \
     CONCAT(_,name),                                            \
     sizeof(CONCAT(_,name))/sizeof(CONCAT(_,name)[0]),          \
+    UBX_PAYLOAD_LEN(__VA_ARGS__),                              \
     cls,                                                       \
     id };
 
