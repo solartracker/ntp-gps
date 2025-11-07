@@ -21,6 +21,7 @@
 *******************************************************************************/
 
 #include "pp_utils.h"
+#include <inttypes.h>
 
 // --- Struct for UBX message entry ---
 typedef struct {
@@ -71,14 +72,23 @@ static const ubx_msg_t name = {                                \
 
 // --- Macros to create and invoke a list of UBX messages ---
 #define UBX_BEGIN_LIST static const ubx_entry_t ubxArrayList[] = {
-#define UBX_ITEM(name, func) { &name, func },
-#define UBX_END_LIST         { NULL, NULL } };
-#define UBX_INVOKE(fd)                                         \
-    do {                                                       \
-        for (size_t i = 0; ubxArrayList[i].msg; i++) {         \
-            ubxArrayList[i].invoke(fd, ubxArrayList[i].msg);   \
-            usleep(5000); /* 5 ms delay between commands */    \
-        }                                                      \
+#define UBX_FUNCTION(name, func) { &name, func },
+#define UBX_ITEM(name)           { &name, NULL },
+#define UBX_END_LIST             { NULL, NULL } };
+#define UBX_INVOKE(fd)                                              \
+    do {                                                            \
+        for (size_t i = 0; ubxArrayList[i].msg; i++) {              \
+            if (ubxArrayList[i].invoke) {                           \
+                ubxArrayList[i].invoke(fd, ubxArrayList[i].msg);    \
+                usleep(5000); /* 5 ms delay between commands */     \
+            }                                                       \
+        }                                                           \
+    } while (0)
+#define UBX_DISASSEMBLE()                                           \
+    do {                                                            \
+        for (size_t i = 0; ubxArrayList[i].msg; i++) {              \
+            printf("%s\n\n", disassemble_ubx(ubxArrayList[i].msg)); \
+        }                                                           \
     } while (0)
 
 
@@ -215,7 +225,6 @@ static const ubx_msg_t name = {                                \
 static inline char *format_ubx_bytes(const uint8_t * const msg, size_t len) {
     static _Thread_local char output_str[2048];
     size_t output_str_max = SIZEOF(output_str);
-
     *output_str = '\0';
 
     char *p = output_str;
@@ -345,9 +354,9 @@ static const char * const ubx_id_name(uint8_t cls, uint8_t id)
     }
 }
 
-static const char * const ubx_nmea_name(uint16_t nmea_id)
+static const char * const ubx_nmea_name(uint16_t id)
 {
-    switch(nmea_id) {
+    switch(id) {
     case 0xF000: return "GGA";
     case 0xF001: return "GLL";
     case 0xF002: return "GSA";
@@ -368,10 +377,176 @@ static const char * const ubx_nmea_name(uint16_t nmea_id)
     }
 }
 
+#define UBX_PORT_I2C    0
+#define UBX_PORT_UART1  1
+#define UBX_PORT_UART2  2
+#define UBX_PORT_USB    3
+#define UBX_PORT_SPI    4
+static const char * const ubx_port_str(uint8_t target)
+{
+    switch(target) {
+    case UBX_PORT_I2C:    return "I2C";
+    case UBX_PORT_UART1:  return "UART1";
+    case UBX_PORT_UART2:  return "UART2";
+    case UBX_PORT_USB:    return "USB";
+    case UBX_PORT_SPI:    return "SPI";
+    default:              return "???";
+    }
+}
+
+#define UBX_PROTO_UBX     (1 << 0)
+#define UBX_PROTO_NMEA    (1 << 1)
+#define UBX_PROTO_RTCM2   (1 << 2)
+#define UBX_PROTO_RTCM3   (1 << 5)
+#define UBX_PROTO_SPARTN  (1 << 6)
+#define UBX_PROTO_USER0   (1 << 12)
+#define UBX_PROTO_USER1   (1 << 13)
+#define UBX_PROTO_USER2   (1 << 14)
+#define UBX_PROTO_USER3   (1 << 15)
+#define UBX_PROTO_ALL (UBX_PROTO_UBX | UBX_PROTO_NMEA |                         \
+                       UBX_PROTO_RTCM2 | UBX_PROTO_RTCM3 | UBX_PROTO_SPARTN |   \
+                       UBX_PROTO_USER0 | UBX_PROTO_USER1 | UBX_PROTO_USER2 | UBX_PROTO_USER3)
+static const char * const ubx_protocol_str(uint16_t mask)
+{
+    if ((mask & UBX_PROTO_ALL) == 0) {
+        if (mask)
+            return "(invalid)";
+        else
+            return "(none)";
+    }
+
+    static _Thread_local char buffers[4][128];
+    static _Thread_local int index = 0;
+    char *output_str = buffers[index];
+    index = (index + 1) % (sizeof(buffers) / sizeof(buffers[0]));
+    *output_str = '\0';
+    char *p = output_str;
+
+    if (mask & UBX_PROTO_UBX)     p += sprintf(p, "UBX+");
+    if (mask & UBX_PROTO_NMEA)    p += sprintf(p, "NMEA+");
+    if (mask & UBX_PROTO_RTCM2)   p += sprintf(p, "RTCM2+");
+    if (mask & UBX_PROTO_RTCM3)   p += sprintf(p, "RTCM3+");
+    if (mask & UBX_PROTO_SPARTN)  p += sprintf(p, "SPARTN+");
+    if (mask & UBX_PROTO_USER0)   p += sprintf(p, "USER0+");
+    if (mask & UBX_PROTO_USER1)   p += sprintf(p, "USER1+");
+    if (mask & UBX_PROTO_USER2)   p += sprintf(p, "USER2+");
+    if (mask & UBX_PROTO_USER3)   p += sprintf(p, "USER3+");
+
+    if (p > output_str)
+        *(--p) = '\0';        // remove trailing '+'
+
+    return output_str;
+}
+
+static const char * const ubx_databits_str(uint8_t val)
+{
+    switch(val) {
+    case 0:    return "5";
+    case 1:    return "6";
+    case 2:    return "7";
+    case 3:    return "8";
+    default:   return "???";
+    }
+}
+
+static const char * const ubx_parity_str(uint8_t parity)
+{
+    if (parity == 0)                                  return "Even";
+    else if (parity == 1)                             return "Odd";
+    else if ((parity & 4) == 4 && (parity & 2) == 0)  return "None";
+    else if ((parity & 2) == 2)                       return "Reserved";
+    else                                              return "(invalid)";
+}
+
+static const char * const ubx_stopbits_str(uint8_t val)
+{
+    switch(val) {
+    case 0:    return "1";
+    case 1:    return "1.5";
+    case 2:    return "2";
+    case 3:    return "0.5";
+    default:   return "???";
+    }
+}
+
+static const char * const ubx_bitorder_str(uint8_t bitorder)
+{
+  return (bitorder == 0) ? "LSBfirst" : "MSBfirst";
+}
+
+// UBX-CFG-PRT payload (20 bytes) — M8/M10 series
+typedef struct __attribute__((packed)) {
+    uint8_t  target;       // 0: Port type
+    uint8_t  reserved0;    // 1: Reserved
+
+    // TX-Ready / Extended Timeout / PIO (offsets 2-3)
+    union {
+        uint16_t txReady;
+        struct {
+            uint16_t pio           : 4;  // bits 0-3: GPIO pin used for TX-ready
+            uint16_t inversePol    : 1;  // bit 4: Inverse polarity
+            uint16_t threshold     : 3;  // bits 5-7: Threshold before TX-ready asserted
+            uint16_t reserved_tx0  : 1;  // bit 8: reserved
+            uint16_t extTimeout    : 1;  // bit 9: Extended TX timeout enable
+            uint16_t reserved_tx1  : 6;  // bits 10-15: reserved
+        };
+    };
+
+    // Mode (offsets 4-7)
+    union {
+        uint32_t mode;
+
+        // UART mode
+        struct {
+            uint32_t reserved0 : 6;  // bits 0-5 (unused/reserved)
+            uint32_t charLen   : 2;  // bits 6-7
+            uint32_t reserved1 : 1;  // bit 8
+            uint32_t parity    : 3;  // bits 9-11
+            uint32_t stopBits  : 2;  // bits 12-13
+            uint32_t reservedU : 2;  // bits 14-15
+            uint32_t bitOrder  : 1;  // bit 16
+            uint32_t reservedV : 15; // bits 17-31
+        } uart;
+
+        // I2C mode
+        struct {
+            uint32_t i2c_slave_addr : 7;  // bits 0-6: 7-bit slave address
+            uint32_t reservedI      : 25;
+        } i2c;
+
+        // SPI mode
+        struct {
+            uint32_t cpol       : 1;  // Clock polarity
+            uint32_t cpha       : 1;  // Clock phase
+            uint32_t msbFirst   : 1;  // MSB first
+            uint32_t reservedS  : 29;
+        } spi;
+    };
+
+    uint32_t baudRate;     // 8-11: UART baud / I2C/SPI clock
+
+    uint16_t protocolIn;   // 12-13: Input protocol bitmask (LSB first)
+    uint16_t protocolOut;  // 14-15: Output protocol bitmask (LSB first)
+
+    // Port flags (offsets 16-17)
+    union {
+        uint16_t flags;
+        struct {
+            uint16_t portEnable      : 1;  // bit 0: port enabled
+            uint16_t txReadyEnable   : 1;  // bit 1: TX-ready feature active
+            uint16_t reservedF0      : 1;
+            uint16_t inversePolFlags : 1;  // bit 3: inverse polarity alternative
+            uint16_t reservedF1      : 4;  // bits 4-7: reserved
+            uint16_t extFeatures     : 8;  // bits 8-15: extended / vendor-specific
+        };
+    };
+
+    uint16_t reserved1;    // 18-19: Reserved
+} ubx_cfg_prt_t;
+
 static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     static _Thread_local char output_str[2048];
     size_t output_str_max = SIZEOF(output_str);
-
     *output_str = '\0';
 
     uint8_t ubx1 = 0;
@@ -423,7 +598,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     uint16_t payload_len_max_print = payload_len < payload_len_max ? payload_len : payload_len_max;
 
     // UBX-CLS-ID message format
-    p += sprintf(p, "%s-%s-%s (len={%u: %s}, payload={",
+    p += sprintf(p, "%s-%s-%s (len={%u}: %s, payload={",
            ubx_name(ubx1, ubx2), ubx_class_name(cls), ubx_id_name(cls, id),
            payload_len_raw, payload_len_valid ? "VALID" : "INVALID");
 
@@ -431,6 +606,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     for (uint16_t i = 0; i < payload_len_max_print; i++) {
         p += sprintf(p, "%s%02X", i ? " " : "", payload[i]);
     }
+    p += sprintf(p, "}");
 
     // annotate the payload bytes
     if (cls == UBX_CLS_ACK) {
@@ -439,16 +615,61 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
         }
     } else if (cls == UBX_CLS_CFG) {
         if (id == UBX_ID_CFG_MSG) {
-            const uint16_t nmea_id = (payload[0] << 8) | payload[1];
-            if (nmea_id >= 0xF000 && nmea_id <= 0xF010) {
-                p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d", 
-                        ubx_nmea_name(nmea_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
+            const uint16_t msg_id = payload[0] << 8 | payload[1];
+            if (msg_id >= 0xF000 && msg_id <= 0xF010) {
+                p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
+                        ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
             }
+        } else if (id == UBX_ID_CFG_PRT) {
+            const ubx_cfg_prt_t *prt = (const ubx_cfg_prt_t *)payload;
+
+            p += sprintf(p, ": Target=%s ProtocolIn=%s ProtocolOut=%s",
+                         ubx_port_str(prt->target),
+                         ubx_protocol_str(prt->protocolIn),
+                         ubx_protocol_str(prt->protocolOut));
+
+            switch(prt->target) {
+            case UBX_PORT_I2C:
+                p += sprintf(p, " SlaveAddr=0x%02X Clock=%u",
+                             prt->i2c.i2c_slave_addr,
+                             prt->baudRate);
+                break;
+
+            case UBX_PORT_UART1:
+            case UBX_PORT_UART2:
+                p += sprintf(p, " Baudrate=%u Databits=%s Stopbits=%s Parity=%s BitOrder=%s",
+                             prt->baudRate,
+                             ubx_databits_str(prt->uart.charLen),
+                             ubx_stopbits_str(prt->uart.stopBits),
+                             ubx_parity_str(prt->uart.parity),
+                             ubx_bitorder_str(prt->uart.bitOrder));
+                break;
+
+            case UBX_PORT_USB:
+                // nothing extra for USB
+                break;
+
+            case UBX_PORT_SPI:
+                p += sprintf(p, " Clock=%u CPOL=%u CPHA=%u MSBfirst=%u",
+                             prt->baudRate,
+                             prt->spi.cpol,
+                             prt->spi.cpha,
+                             prt->spi.msbFirst);
+                break;
+            }
+
+            // TX-ready / PIO
+            p += sprintf(p, " TxReadyGPIO=%u InversePol=%u Threshold=%u ExtTimeout=%u",
+                         prt->pio, prt->inversePol, prt->threshold, prt->extTimeout);
+
+            // Port flags
+            p += sprintf(p, " PortEnable=%u TxReadyEnable=%u InversePol=%u ExtFeatures=0x%02X",
+                         prt->portEnable, prt->txReadyEnable, prt->inversePolFlags, prt->extFeatures);
         }
     }
 
     // checksum
-    p += sprintf(p, "}, checksum={%02X %02X: %s})",
+    p += sprintf(p, ", checksum={%02X %02X}: %s)",
             ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
 
     return output_str;
@@ -458,7 +679,6 @@ static char *disassemble_ubx(const ubx_msg_t * const msg) {
         return NULL;
     return disassemble_ubx_bytes(msg->data, msg->length);
 }
-
 
 
 #endif // UBX_MESSAGES_H
