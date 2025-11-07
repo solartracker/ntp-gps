@@ -26,6 +26,18 @@
 
 // --- Define UBX messages ---
 
+// UBX-CFG-PRT
+// Polls the configuration of the used I/O Port
+UBX_CFG_PRT(cfg_prt)
+
+// UBX-CFG-PRT Target=UART1
+// Polls the configuration for one I/O Port: UART1
+UBX_CFG_PRT(cfg_prt_uart1, 0x01)
+
+// UBX-CFG-PRT Target=USB
+// Polls the configuration for one I/O Port: USB
+UBX_CFG_PRT(cfg_prt_usb, 0x03)
+
 // UBX-CFG-PRT Target=UART1 ProtocolIn=UBX+NMEA+RTCM2 ProtocolOut=UBX Baudrate=9600 Databits=8 Stopbits=1 Parity=None BitOrder=LsbFirst ExtendedTxTimeout=off TxReadyFeature=off
 UBX_CFG_PRT(cfg_prt_uart1_ubx, 0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x80,0x25,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00)
 

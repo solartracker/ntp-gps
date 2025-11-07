@@ -174,21 +174,21 @@ static const ubx_msg_t name = {                                \
 #define UBX_ID_CFG_PM2           0x3B
 #define UBX_ID_CFG_GNSS          0x3E
 #define UBX_ID_CFG_PWR           0x57
-#define UBX_CFG_PRT(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PRT,   __VA_ARGS__)
-#define UBX_CFG_MSG(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_MSG,   __VA_ARGS__)
-#define UBX_CFG_INF(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_INF,   __VA_ARGS__)
-#define UBX_CFG_RST(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_RST,   __VA_ARGS__)
-#define UBX_CFG_DAT(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_DAT,   __VA_ARGS__)
-#define UBX_CFG_TP(name, ...)    UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_TP,    __VA_ARGS__)
-#define UBX_CFG_RATE(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_RATE,  __VA_ARGS__)
-#define UBX_CFG_CFG(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_CFG,   __VA_ARGS__)
-#define UBX_CFG_USB(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_USB,   __VA_ARGS__)
-#define UBX_CFG_NAVX5(name, ...) UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_NAVX5, __VA_ARGS__)
-#define UBX_CFG_NAV5(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_NAV5,  __VA_ARGS__)
-#define UBX_CFG_TP5(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_TP5,   __VA_ARGS__)
-#define UBX_CFG_PM2(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PM2,   __VA_ARGS__)
-#define UBX_CFG_GNSS(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_GNSS,  __VA_ARGS__)
-#define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PWR,   __VA_ARGS__)
+#define UBX_CFG_PRT(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PRT,   ##__VA_ARGS__)
+#define UBX_CFG_MSG(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_MSG,   ##__VA_ARGS__)
+#define UBX_CFG_INF(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_INF,   ##__VA_ARGS__)
+#define UBX_CFG_RST(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_RST,   ##__VA_ARGS__)
+#define UBX_CFG_DAT(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_DAT,   ##__VA_ARGS__)
+#define UBX_CFG_TP(name, ...)    UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_TP,    ##__VA_ARGS__)
+#define UBX_CFG_RATE(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_RATE,  ##__VA_ARGS__)
+#define UBX_CFG_CFG(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_CFG,   ##__VA_ARGS__)
+#define UBX_CFG_USB(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_USB,   ##__VA_ARGS__)
+#define UBX_CFG_NAVX5(name, ...) UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_NAVX5, ##__VA_ARGS__)
+#define UBX_CFG_NAV5(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_NAV5,  ##__VA_ARGS__)
+#define UBX_CFG_TP5(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_TP5,   ##__VA_ARGS__)
+#define UBX_CFG_PM2(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PM2,   ##__VA_ARGS__)
+#define UBX_CFG_GNSS(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_GNSS,  ##__VA_ARGS__)
+#define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PWR,   ##__VA_ARGS__)
 
 // Acknowledge messages (ACK)
 #define UBX_ID_ACK_NAK           0x00
@@ -620,7 +620,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                 p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
                         ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
             }
-        } else if (id == UBX_ID_CFG_PRT) {
+        } else if (id == UBX_ID_CFG_PRT && payload_len > 0) {
             const ubx_cfg_prt_t *prt = (const ubx_cfg_prt_t *)payload;
 
             p += sprintf(p, ": Target=%s ProtocolIn=%s ProtocolOut=%s",
