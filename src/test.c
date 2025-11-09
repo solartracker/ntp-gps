@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include "ubx_defs.h"
+#include "ubx_disassemble.h"
 
 static void disassemble_msg_list()
 {
@@ -64,11 +65,28 @@ static void disassemble_msg_list()
 
 int main()
 {
-    UBX_CFG_PRT(zzz, 0x01,0x00,0xFF,0x06,0xD0,0x08,0x00,0x00,0x80,0x25,0x00,0x00,0x23,0x00,0x03,0x00,0x02,0x00,0x00,0x00)
-    printf("%s\n", disassemble_ubx(&zzz));
+    UBX_CFG_PRT(zzz, 0x01,0x00,0x5F,0x23,0xD0,0x08,0x00,0x00,0x80,0x25,0x00,0x00,0x23,0x00,0x03,0x00,0x02,0x00,0x00,0x00)
+    printf("%s\n", format_ubx(&zzz));
+    printf("payload_len=%u(%u)\n", zzz.payload_len, sizeof(ubx_cfg_prt_t));
+    //const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)zzz.payload;
+    ubx_cfg_prt_t *prt = (ubx_cfg_prt_t *)zzz.payload;
+    printf("prt:               %p\n", (void *)prt);
+    //prt->target = 1;
+    printf("target:            %u (%s)\n", prt->target, ubx_port_str(prt->target));
+    printf("protocolIn:        %s\n", ubx_protocol_str(prt->protocolIn));
+    printf("protocolOut:       %s\n", ubx_protocol_str(prt->protocolOut));
+    printf("txReady.en:        %u\n", prt->en);
+    printf("txReady.pol:       %u(%s)\n", prt->pol, ubx_polarity_str(prt->pol));
+    printf("txReady.pin:       %u\n", prt->pin);
+    printf("txReady.thres:     %u(%s)\n", prt->thres, ubx_threshold_str(prt->thres));
+    printf("mode.databits:     %s\n", ubx_databits_str(prt->uart.charLen));
+    printf("mode.stopbits:     %s\n", ubx_stopbits_str(prt->uart.stopBits));
+    printf("mode.parity:       %s\n", ubx_parity_str(prt->uart.parity));
+    printf("mode.bitorder:     %s\n", ubx_bitorder_str(prt->uart.bitOrder));
+    printf("baudRate:          %u\n", prt->baudRate);
+    printf("extendedTxTimeout: %u\n", prt->extendedTxTimeout);
 
-
-
+    printf("\n");
     return 0;
 }
 

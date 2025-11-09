@@ -44,6 +44,7 @@
 #include <signal.h>
 #include <time.h>
 #include "ubx_defs.h"
+#include "ubx_disassemble.h"
 
 
 #ifdef DEBUG_TRACE
