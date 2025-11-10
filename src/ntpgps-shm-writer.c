@@ -1841,8 +1841,10 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
                     if (copy_len > sizeof(mon_ver_payload)) copy_len = sizeof(mon_ver_payload);
                     memcpy(mon_ver_payload, parser.payload, copy_len);
 
-                    if (mon_ver_payload_len > sizeof(ubx_mon_ver_t))
-                        mon_ver_extensions_count = (mon_ver_payload_len - sizeof(ubx_mon_ver_t)) / sizeof(((ubx_mon_ver_t *)0)->extensions[0]);
+                    // calculate the number of extensions
+                    // (i.e. the number of elements in a flexible array member)
+                    if (mon_ver_payload_len > sizeof(*mon_ver))
+                        mon_ver_extensions_count = (mon_ver_payload_len - sizeof(*mon_ver)) / sizeof(mon_ver->extensions[0]);
                 }
             } else {
                 TRACE("Unexpected message ID.\n");
