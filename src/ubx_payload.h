@@ -23,6 +23,7 @@
 
 #pragma pack(push, 1)
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // UBX-ACK-ACK payload (2 bytes)
 typedef struct __attribute__((packed)) {
@@ -31,12 +32,14 @@ typedef struct __attribute__((packed)) {
 } ubx_ack_ack_t;
 
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // UBX-ACK-NAK payload (2 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t clsID;   // 0: Class ID of rejected message
     uint8_t msgID;   // 1: Message ID of rejected message
 } ubx_ack_nak_t;
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -539,9 +542,19 @@ typedef struct __attribute__((packed)) {
     char extensions[][30];
 } ubx_mon_ver_t;
 
+// overlay ubx_mon_ver_t onto the raw payload bytes
+typedef struct __attribute__((packed)) {
+    union {
+        ubx_mon_ver_t fields;
+        uint8_t raw[2048];
+    };
+    size_t payload_len;
+    size_t ext_count;
+} ubx_mon_ver_payload_t;
+
+
 
 
 #pragma pack(pop)
 
 #endif // UBX_PAYLOAD_H
-

@@ -134,11 +134,7 @@ enum nmea_filter_t {
     NMEA_ZDA = 1 << 3,   // covers both ZDA and ZDG
 };
 
-uint8_t mon_ver_payload[2048] = {0};
-size_t mon_ver_payload_len = 0;
-size_t mon_ver_extensions_count = 0;
-const ubx_mon_ver_t * const mon_ver = (const ubx_mon_ver_t * const)&mon_ver_payload[0];;
-
+ubx_mon_ver_payload_t mon_ver = {0};
 ubx_cfg_prt_t cfg_prt = {0};
 
 #define SOCKET_DIR "/run/ntpgps"
@@ -1832,19 +1828,19 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
         case UBX_PARSE_OK:
             TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
             if (parser.cls == UBX_CLS_MON && parser.id == UBX_ID_MON_VER) { // UBX-MON-VER
-                memset(mon_ver_payload, 0, sizeof(mon_ver_payload));
-                mon_ver_payload_len = parser.payload_len;
-                mon_ver_extensions_count = 0;
+                memset(mon_ver.raw, 0, sizeof(mon_ver.raw));
+                mon_ver.payload_len = parser.payload_len;
+                mon_ver.ext_count = 0;
 
                 if (parser.payload) {
-                    size_t copy_len = mon_ver_payload_len;
-                    if (copy_len > sizeof(mon_ver_payload)) copy_len = sizeof(mon_ver_payload);
-                    memcpy(mon_ver_payload, parser.payload, copy_len);
+                    size_t copy_len = mon_ver.payload_len;
+                    if (copy_len > sizeof(mon_ver.raw)) copy_len = sizeof(mon_ver.raw);
+                    memcpy(mon_ver.raw, parser.payload, copy_len);
 
                     // calculate the number of extensions
                     // (i.e. the number of elements in a flexible array member)
-                    if (mon_ver_payload_len > sizeof(*mon_ver))
-                        mon_ver_extensions_count = (mon_ver_payload_len - sizeof(*mon_ver)) / sizeof(mon_ver->extensions[0]);
+                    if (mon_ver.payload_len > sizeof(mon_ver.fields))
+                        mon_ver.ext_count = (mon_ver.payload_len - sizeof(mon_ver.fields)) / sizeof(mon_ver.fields.extensions[0]);
                 }
             } else {
                 TRACE("Unexpected message ID.\n");
@@ -1931,10 +1927,10 @@ int get_ublox_version(int fd)
     UBX_INVOKE(fd);
 
     TRACE("u-blox Device Port: %u(%s)\n", cfg_prt.portID, ubx_port_str(cfg_prt.portID));
-    TRACE("u-blox Software Version: %s\n", mon_ver->swVersion);
-    TRACE("u-blox Hardware Version: %s\n", mon_ver->hwVersion);
-    for (int i = 0; i < mon_ver_extensions_count; i++)
-        TRACE("u-blox Extension[%d]: %s\n", i, mon_ver->extensions[i]);
+    TRACE("u-blox Software Version: %s\n", mon_ver.fields.swVersion);
+    TRACE("u-blox Hardware Version: %s\n", mon_ver.fields.hwVersion);
+    for (int i = 0; i < mon_ver.ext_count; i++)
+        TRACE("u-blox Extension[%d]: %s\n", i, mon_ver.fields.extensions[i]);
 
     return 1;
 }
