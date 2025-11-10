@@ -25,9 +25,10 @@ Notes:
 Credits:
 - Geodesic algorithm: Charles Karney, GeographicLib (C++), https://geographiclib.sourceforge.io/
 - Python guidance: OpenAI GPT
-- Script and copyright: Richard Elwell, 2025
+- Script and copyright: Richard Elwell
 
 License:
+Copyright (C) 2025 Richard Elwell
 GNU General Public License v3 or later; see https://www.gnu.org/licenses/
 This program is distributed WITHOUT ANY WARRANTY.
 """
