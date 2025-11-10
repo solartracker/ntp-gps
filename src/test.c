@@ -1,5 +1,5 @@
 /*******************************************************************************
- test_ubx.c
+ test.c
 
  Copyright (C) 2025 Richard Elwell
 
@@ -28,37 +28,40 @@
 static void disassemble_msg_list()
 {
     UBX_BEGIN_LIST
-        UBX_ITEM(cfg_prt_uart1_ubx)
-        UBX_ITEM(cfg_prt_uart1_nmea)
-        UBX_ITEM(cfg_prt_uart1_ubxnmea)
-        UBX_ITEM(cfg_prt_usb_ubx)
-        UBX_ITEM(cfg_prt_usb_nmea)
-        UBX_ITEM(cfg_prt_usb_ubxnmea)
-        UBX_ITEM(cfg_tp)
-        UBX_ITEM(cfg_tp5)
-        UBX_ITEM(cfg_rate)
-        UBX_ITEM(cfg_gnss_glonass_configure_off)
-        UBX_ITEM(cfg_gnss_glonass_configure_on)
-        UBX_ITEM(cfg_gnss_glonass_off)
-        UBX_ITEM(cfg_inf_off)
-        UBX_ITEM(cfg_msg_nmea_gga_off)
-        UBX_ITEM(cfg_msg_nmea_gll_off)
-        UBX_ITEM(cfg_msg_nmea_gsa_off)
-        UBX_ITEM(cfg_msg_nmea_gsv_off)
-        UBX_ITEM(cfg_msg_nmea_rmc_off)
-        UBX_ITEM(cfg_msg_nmea_vtg_off)
-        UBX_ITEM(cfg_msg_nmea_grs_off)
-        UBX_ITEM(cfg_msg_nmea_gst_off)
-        UBX_ITEM(cfg_msg_nmea_zda_on)
-        UBX_ITEM(cfg_msg_nmea_gbs_off)
-        UBX_ITEM(cfg_msg_nmea_dtm_off)
-        UBX_ITEM(cfg_msg_nmea_gns_off)
-        UBX_ITEM(cfg_msg_nmea_ths_off)
-        UBX_ITEM(cfg_msg_nmea_vlw_off)
-        UBX_ITEM(cfg_msg_nmea_utc_off)
-        UBX_ITEM(cfg_msg_nmea_rlm_off)
-        UBX_ITEM(cfg_cfg_bbr_flash)
-        UBX_ITEM(mon_ver)
+        UBX_ITEM(get_cfg_prt)
+        UBX_ITEM(get_cfg_prt_uart1)
+        UBX_ITEM(get_cfg_prt_usb)
+        UBX_ITEM(set_cfg_prt_uart1_ubx)
+        UBX_ITEM(set_cfg_prt_uart1_nmea)
+        UBX_ITEM(set_cfg_prt_uart1_ubxnmea)
+        UBX_ITEM(set_cfg_prt_usb_ubx)
+        UBX_ITEM(set_cfg_prt_usb_nmea)
+        UBX_ITEM(set_cfg_prt_usb_ubxnmea)
+        UBX_ITEM(set_cfg_tp)
+        UBX_ITEM(set_cfg_tp5)
+        UBX_ITEM(set_cfg_rate)
+        UBX_ITEM(set_cfg_gnss_glonass_configure_off)
+        UBX_ITEM(set_cfg_gnss_glonass_configure_on)
+        UBX_ITEM(set_cfg_gnss_glonass_off)
+        UBX_ITEM(set_cfg_inf_off)
+        UBX_ITEM(set_cfg_msg_nmea_gga_off)
+        UBX_ITEM(set_cfg_msg_nmea_gll_off)
+        UBX_ITEM(set_cfg_msg_nmea_gsa_off)
+        UBX_ITEM(set_cfg_msg_nmea_gsv_off)
+        UBX_ITEM(set_cfg_msg_nmea_rmc_off)
+        UBX_ITEM(set_cfg_msg_nmea_vtg_off)
+        UBX_ITEM(set_cfg_msg_nmea_grs_off)
+        UBX_ITEM(set_cfg_msg_nmea_gst_off)
+        UBX_ITEM(set_cfg_msg_nmea_zda_on)
+        UBX_ITEM(set_cfg_msg_nmea_gbs_off)
+        UBX_ITEM(set_cfg_msg_nmea_dtm_off)
+        UBX_ITEM(set_cfg_msg_nmea_gns_off)
+        UBX_ITEM(set_cfg_msg_nmea_ths_off)
+        UBX_ITEM(set_cfg_msg_nmea_vlw_off)
+        UBX_ITEM(set_cfg_msg_nmea_utc_off)
+        UBX_ITEM(set_cfg_msg_nmea_rlm_off)
+        UBX_ITEM(set_cfg_cfg_bbr_flash)
+        UBX_ITEM(get_mon_ver)
     UBX_END_LIST
     UBX_DISASSEMBLE();
 }
@@ -71,8 +74,8 @@ int main()
     //const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)zzz.payload;
     ubx_cfg_prt_t *prt = (ubx_cfg_prt_t *)zzz.payload;
     printf("prt:               %p\n", (void *)prt);
-    //prt->target = 1;
-    printf("target:            %u (%s)\n", prt->target, ubx_port_str(prt->target));
+    //prt->portID = 1;
+    printf("portID:            %u(%s)\n", prt->portID, ubx_port_str(prt->portID));
     printf("protocolIn:        %s\n", ubx_protocol_str(prt->protocolIn));
     printf("protocolOut:       %s\n", ubx_protocol_str(prt->protocolOut));
     printf("txReady.en:        %u\n", prt->en);

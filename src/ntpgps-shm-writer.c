@@ -134,10 +134,12 @@ enum nmea_filter_t {
     NMEA_ZDA = 1 << 3,   // covers both ZDA and ZDG
 };
 
-char ublox_software_version[64];
-char ublox_hardware_version[64];
-char ublox_extensions[10][64];
-int ublox_extension_count = 0;
+uint8_t mon_ver_payload[2048] = {0};
+size_t mon_ver_payload_len = 0;
+size_t mon_ver_extensions_count = 0;
+const ubx_mon_ver_t * const mon_ver = (const ubx_mon_ver_t * const)&mon_ver_payload[0];;
+
+ubx_cfg_prt_t cfg_prt = {0};
 
 #define SOCKET_DIR "/run/ntpgps"
 const char socket_dir[] = SOCKET_DIR;
@@ -1830,24 +1832,51 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
         case UBX_PARSE_OK:
             TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
             if (parser.cls == UBX_CLS_MON && parser.id == UBX_ID_MON_VER) { // UBX-MON-VER
-                memset(ublox_software_version, 0, sizeof(ublox_software_version));
-                memset(ublox_hardware_version, 0, sizeof(ublox_hardware_version));
-                memset(ublox_extensions, 0, sizeof(ublox_extensions));
-                ublox_extension_count = 0;
+                memset(mon_ver_payload, 0, sizeof(mon_ver_payload));
+                mon_ver_payload_len = parser.payload_len;
+                mon_ver_extensions_count = 0;
 
-                // parse payload
                 if (parser.payload) {
-                    const uint8_t * const payload = parser.payload;
-                    copy_ubx_string(payload, 30, ublox_software_version);
-                    copy_ubx_string(payload + 30, 10, ublox_hardware_version);
+                    size_t copy_len = mon_ver_payload_len;
+                    if (copy_len > sizeof(mon_ver_payload)) copy_len = sizeof(mon_ver_payload);
+                    memcpy(mon_ver_payload, parser.payload, copy_len);
 
-                    const char *ext = (char *)(payload + 40);
-                    int remaining = parser.payload_len - 40;
-                    while (remaining >= 30 && ublox_extension_count < 10) {
-                        copy_ubx_string((const uint8_t *)ext, 30, ublox_extensions[ublox_extension_count++]);
-                        ext += 30;
-                        remaining -= 30;
-                    }
+                    if (mon_ver_payload_len > sizeof(ubx_mon_ver_t))
+                        mon_ver_extensions_count = (mon_ver_payload_len - sizeof(ubx_mon_ver_t)) / sizeof(((ubx_mon_ver_t *)0)->extensions[0]);
+                }
+            } else {
+                TRACE("Unexpected message ID.\n");
+                result = UBX_UNEXPECTED;
+            }
+            break;
+        default:
+            TRACE("%s\n", result_text(result));
+            break;
+    }
+
+    return result;
+}
+
+static ubx_parse_result_t send_ubx_handle_cfg_prt(int fd, const ubx_msg_t * const msg)
+{
+    ubx_parser_t parser = {0};
+    ubx_parser_init(&parser);
+
+    parser.filter_type = UBX_FILTER_CLS_ID;
+    parser.filter_cls = msg->cls;
+    parser.filter_id = msg->id;
+    parser.filter_active = true;
+
+    ubx_parse_result_t result = send_ubx(fd, msg, &parser);
+
+    switch (result) {
+        case UBX_PARSE_OK:
+            TRACE("Read    %s\n", disassemble_ubx_bytes(parser.msg, parser.length));
+            if (parser.cls == UBX_CLS_CFG && parser.id == UBX_ID_CFG_PRT) { // UBX-CFG-PRT
+                memset(&cfg_prt, 0, sizeof(cfg_prt));
+
+                if (parser.payload && parser.payload_len == sizeof(cfg_prt)) {
+                    memcpy(&cfg_prt, parser.payload, sizeof(cfg_prt));
                 }
             } else {
                 TRACE("Unexpected message ID.\n");
@@ -1865,23 +1894,23 @@ static ubx_parse_result_t send_ubx_handle_mon_ver(int fd, const ubx_msg_t * cons
 static int configure_ublox_zda_only(int fd)
 {
     UBX_BEGIN_LIST
-        UBX_FUNCTION(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
-        UBX_FUNCTION(cfg_inf_off,           send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gsv_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_rmc_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_vtg_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_grs_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gst_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gbs_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_dtm_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_msg_nmea_gns_off,  send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_prt_usb_nmea,      send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt_uart1_nmea,    send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_inf_off,           send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gsv_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_rmc_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_vtg_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_grs_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gst_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gbs_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_dtm_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_msg_nmea_gns_off,  send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_prt_usb_nmea,      send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_uart1_nmea,    send_ubx_no_wait)
     UBX_END_LIST
     UBX_INVOKE(fd);
 
@@ -1892,19 +1921,18 @@ static int configure_ublox_zda_only(int fd)
 int get_ublox_version(int fd)
 {
     UBX_BEGIN_LIST
-        UBX_FUNCTION(cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt,               send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_prt_usb,           send_ubx_handle_ack)
-        UBX_FUNCTION(cfg_prt_uart1,         send_ubx_handle_ack)
-        UBX_FUNCTION(mon_ver,               send_ubx_handle_mon_ver)
+        UBX_FUNCTION(set_cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_FUNCTION(get_cfg_prt,               send_ubx_handle_cfg_prt)
+        UBX_FUNCTION(get_mon_ver,               send_ubx_handle_mon_ver)
     UBX_END_LIST
     UBX_INVOKE(fd);
 
-    TRACE("u-blox Software Version: %s\n", ublox_software_version);
-    TRACE("u-blox Hardware Version: %s\n", ublox_hardware_version);
-    for (int i = 0; i < ublox_extension_count; i++)
-        TRACE("u-blox Extension[%d]: %s\n", i, ublox_extensions[i]);
+    TRACE("u-blox Device Port: %u(%s)\n", cfg_prt.portID, ubx_port_str(cfg_prt.portID));
+    TRACE("u-blox Software Version: %s\n", mon_ver->swVersion);
+    TRACE("u-blox Hardware Version: %s\n", mon_ver->hwVersion);
+    for (int i = 0; i < mon_ver_extensions_count; i++)
+        TRACE("u-blox Extension[%d]: %s\n", i, mon_ver->extensions[i]);
 
     return 1;
 }
@@ -1912,9 +1940,9 @@ int get_ublox_version(int fd)
 int configure_ublox_nmea_only(int fd)
 {
     UBX_BEGIN_LIST
-        UBX_FUNCTION(cfg_inf_off,           send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt_usb_nmea,      send_ubx_no_wait)
-        UBX_FUNCTION(cfg_prt_uart1_nmea,    send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_inf_off,           send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_usb_nmea,      send_ubx_no_wait)
+        UBX_FUNCTION(set_cfg_prt_uart1_nmea,    send_ubx_no_wait)
     UBX_END_LIST
     UBX_INVOKE(fd);
 

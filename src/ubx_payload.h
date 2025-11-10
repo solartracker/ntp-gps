@@ -24,7 +24,7 @@
 // UBX-CFG-PRT payload (20 bytes)
 #pragma pack(push, 1)
 typedef struct __attribute__((packed)) {
-    uint8_t  target;       // 0: Port type
+    uint8_t  portID;       // 0: Port type
     uint8_t  reserved0;    // 1: Reserved
 
     // TX-Ready / Extended Timeout / PIO (offsets 2-3)

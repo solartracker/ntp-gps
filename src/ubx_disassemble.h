@@ -141,14 +141,9 @@ static const char * const ubx_nmea_name(uint16_t id)
     }
 }
 
-#define UBX_PORT_I2C    0
-#define UBX_PORT_UART1  1
-#define UBX_PORT_UART2  2
-#define UBX_PORT_USB    3
-#define UBX_PORT_SPI    4
-static const char * const ubx_port_str(uint8_t target)
+static const char * const ubx_port_str(uint8_t portID)
 {
-    switch(target) {
+    switch(portID) {
     case UBX_PORT_I2C:    return "I2C";
     case UBX_PORT_UART1:  return "UART1";
     case UBX_PORT_UART2:  return "UART2";
@@ -158,18 +153,6 @@ static const char * const ubx_port_str(uint8_t target)
     }
 }
 
-#define UBX_PROTO_UBX     (1 << 0)
-#define UBX_PROTO_NMEA    (1 << 1)
-#define UBX_PROTO_RTCM2   (1 << 2)
-#define UBX_PROTO_RTCM3   (1 << 5)
-#define UBX_PROTO_SPARTN  (1 << 6)
-#define UBX_PROTO_USER0   (1 << 12)
-#define UBX_PROTO_USER1   (1 << 13)
-#define UBX_PROTO_USER2   (1 << 14)
-#define UBX_PROTO_USER3   (1 << 15)
-#define UBX_PROTO_ALL (UBX_PROTO_UBX | UBX_PROTO_NMEA |                         \
-                       UBX_PROTO_RTCM2 | UBX_PROTO_RTCM3 | UBX_PROTO_SPARTN |   \
-                       UBX_PROTO_USER0 | UBX_PROTO_USER1 | UBX_PROTO_USER2 | UBX_PROTO_USER3)
 static const char * const ubx_protocol_str(uint16_t mask)
 {
     if ((mask & UBX_PROTO_ALL) == 0) {
@@ -332,7 +315,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                             ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
                 }
             } else if (id == UBX_ID_CFG_PRT) {
-                p += sprintf(p, ": Target=%s", ubx_port_str(payload[0]));
+                p += sprintf(p, ": PortID=%s", ubx_port_str(payload[0]));
 
                 if (payload_len == 20) {
                     const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)payload;
@@ -341,7 +324,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                                  ubx_protocol_str(prt->protocolIn),
                                  ubx_protocol_str(prt->protocolOut));
 
-                    switch(prt->target) {
+                    switch(prt->portID) {
                     case UBX_PORT_I2C:
                         p += sprintf(p, " SlaveAddr=0x%02X Clock=%u",
                                      prt->i2c.i2c_slave_addr,

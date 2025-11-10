@@ -193,6 +193,25 @@ static const ubx_msg_t name = {                                \
 #define UBX_CFG_GNSS(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_GNSS,  ##__VA_ARGS__)
 #define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PWR,   ##__VA_ARGS__)
 
+#define UBX_PORT_I2C    0
+#define UBX_PORT_UART1  1
+#define UBX_PORT_UART2  2
+#define UBX_PORT_USB    3
+#define UBX_PORT_SPI    4
+
+#define UBX_PROTO_UBX     (1 << 0)
+#define UBX_PROTO_NMEA    (1 << 1)
+#define UBX_PROTO_RTCM2   (1 << 2)
+#define UBX_PROTO_RTCM3   (1 << 5)
+#define UBX_PROTO_SPARTN  (1 << 6)
+#define UBX_PROTO_USER0   (1 << 12)
+#define UBX_PROTO_USER1   (1 << 13)
+#define UBX_PROTO_USER2   (1 << 14)
+#define UBX_PROTO_USER3   (1 << 15)
+#define UBX_PROTO_ALL (UBX_PROTO_UBX | UBX_PROTO_NMEA |                         \
+                       UBX_PROTO_RTCM2 | UBX_PROTO_RTCM3 | UBX_PROTO_SPARTN |   \
+                       UBX_PROTO_USER0 | UBX_PROTO_USER1 | UBX_PROTO_USER2 | UBX_PROTO_USER3)
+
 // Acknowledge messages (ACK)
 #define UBX_ID_ACK_NAK           0x00
 #define UBX_ID_ACK_ACK           0x01
@@ -222,6 +241,7 @@ static const ubx_msg_t name = {                                \
 #define UBX_MON_COMMS(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_COMMS)
 #define UBX_MON_TXBUF(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_TXBUF)
 #define UBX_MON_RXBUF(name)      UBX_MESSAGE(name, CLS_MON, UBX_ID_MON_RXBUF)
+
 
 // Debug print helper
 
