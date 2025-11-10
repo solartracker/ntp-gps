@@ -1926,11 +1926,12 @@ int get_ublox_version(int fd)
     UBX_END_LIST
     UBX_INVOKE(fd);
 
+    const ubx_mon_ver_t *ver = &mon_ver.fields;
     TRACE("u-blox Device Port: %u(%s)\n", cfg_prt.portID, ubx_port_str(cfg_prt.portID));
-    TRACE("u-blox Software Version: %s\n", mon_ver.fields.swVersion);
-    TRACE("u-blox Hardware Version: %s\n", mon_ver.fields.hwVersion);
+    TRACE("u-blox Software Version: %s\n", ver->swVersion);
+    TRACE("u-blox Hardware Version: %s\n", ver->hwVersion);
     for (int i = 0; i < mon_ver.ext_count; i++)
-        TRACE("u-blox Extension[%d]: %s\n", i, mon_ver.fields.extensions[i]);
+        TRACE("u-blox Extension[%d]: %s\n", i, ver->extensions[i]);
 
     return 1;
 }
