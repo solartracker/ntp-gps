@@ -1,5 +1,5 @@
-#ifndef UBX_PAYLOAD_H
-#define UBX_PAYLOAD_H
+#ifndef UBX_WIRE_H
+#define UBX_WIRE_H
 /*******************************************************************************
  ubx_wire.h
 
@@ -72,4 +72,4 @@ typedef union {
 
 #pragma pack(pop)
 
-#endif // UBX_PAYLOAD_H
+#endif // UBX_WIRE_H
