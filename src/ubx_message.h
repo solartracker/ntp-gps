@@ -26,7 +26,7 @@
 #define UBX_MAX_MSG_SIZE 1024
 #define UBX_MAX_PAYLOAD_SIZE (UBX_MAX_MSG_SIZE - UBX_MIN_MSG_SIZE)
 
-// --- Struct for UBX message entry ---
+// --- Struct for generic UBX message ---
 typedef struct {
     const uint8_t * const data;
     const size_t length;
@@ -37,11 +37,11 @@ typedef struct {
 } ubx_msg_t;
 
 typedef enum ubx_parse_result ubx_parse_result_t;
-typedef ubx_parse_result_t (*ubx_sender_t)(int fd, const ubx_msg_t * const msg);
+typedef ubx_parse_result_t (*ubx_handler_t)(int fd, const ubx_msg_t * const msg);
 
 typedef struct {
     const ubx_msg_t * const msg;
-    const ubx_sender_t invoke;
+    const ubx_handler_t invoke;
 } ubx_entry_t;
 
 // --- Helper macros ---
