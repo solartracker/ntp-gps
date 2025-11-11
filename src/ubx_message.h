@@ -22,9 +22,9 @@
 #include "pp_utils.h"
 #include <inttypes.h>
 
-#define UBX_MIN_MESSAGE_SIZE 8
+#define UBX_MIN_MSG_SIZE 8
 #define UBX_MAX_MSG_SIZE 1024
-#define UBX_MAX_PAYLOAD_SIZE (UBX_MAX_MSG_SIZE - UBX_MIN_MESSAGE_SIZE)
+#define UBX_MAX_PAYLOAD_SIZE (UBX_MAX_MSG_SIZE - UBX_MIN_MSG_SIZE)
 
 // --- Struct for UBX message entry ---
 typedef struct {

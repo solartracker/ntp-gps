@@ -263,10 +263,10 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     if (len >= 6) {
         payload_len = msg[4] | (msg[5] << 8);
         payload_len_raw = payload_len;
-        if (payload_len > len - UBX_MIN_MESSAGE_SIZE) {
+        if (payload_len > len - UBX_MIN_MSG_SIZE) {
             // payload_len is too big, mark packet invalid
             payload_len_valid = false;
-            payload_len = len - UBX_MIN_MESSAGE_SIZE;  // truncate
+            payload_len = len - UBX_MIN_MSG_SIZE;  // truncate
         } else {
             payload_len_valid = true;
         }
@@ -275,7 +275,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     if (len >= (7 + payload_len)) ck_a = msg[len - 2];
     if (len >= (8 + payload_len)) ck_b = msg[len - 1];
 
-    if (len >= UBX_MIN_MESSAGE_SIZE) {
+    if (len >= UBX_MIN_MSG_SIZE) {
         uint16_t ck_pos = 6 + payload_len;
         if (ck_pos < len - 1) {
             for (uint16_t i = 2; i < ck_pos; i++) {
