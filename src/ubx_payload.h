@@ -546,7 +546,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     union {
         ubx_mon_ver_t fields;
-        uint8_t raw[2048];
+        uint8_t raw[UBX_MAX_PAYLOAD_SIZE];
     };
     size_t payload_len;
     size_t ext_count;
