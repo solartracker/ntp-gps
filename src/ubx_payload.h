@@ -141,8 +141,7 @@ typedef union {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// One configuration block (8 bytes each)
-#define UBX_CFG_GNSS_MAX_BLOCKS 8  // adjust as needed for your device
+// UBX-CFG-GNSS payload (4 + numConfigBlocks*8 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t  gnssId;      // GNSS identifier
     uint8_t  resTrkCh;    // Number of reserved tracking channels
@@ -159,18 +158,17 @@ typedef struct __attribute__((packed)) {
     };
 } ubx_cfg_gnss_block_t;
 
-// Main UBX-CFG-GNSS message (variable-length)
 typedef struct __attribute__((packed)) {
     uint8_t  msgVer;          // Message version (always 0x00 or 0x01)
     uint8_t  numTrkChHw;      // Number of HW tracking channels
     uint8_t  numTrkChUse;     // Number of usable tracking channels
     uint8_t  numConfigBlocks; // Number of GNSS configuration blocks
-    ubx_cfg_gnss_block_t blocks[UBX_CFG_GNSS_MAX_BLOCKS]; // repeated blocks
+    ubx_cfg_gnss_block_t blocks[]; // repeated blocks
 } ubx_cfg_gnss_t;
 
 typedef union {
-    ubx_cfg_gnss_t parsed;
-    uint8_t raw[4 + UBX_CFG_GNSS_MAX_BLOCKS * 8];
+    ubx_cfg_gnss_t fields;
+    uint8_t raw[UBX_MAX_PAYLOAD_SIZE];
 } ubx_cfg_gnss_u;
 
 

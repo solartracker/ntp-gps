@@ -237,6 +237,26 @@ static const char * const ubx_threshold_str(uint8_t val)
     return output_str;
 }
 
+static const char * const ubx_gnss_str(uint8_t gnssID)
+{
+    switch(gnssID) {
+    case UBX_GNSS_GPS:      return "GPS";
+    case UBX_GNSS_SBAS:     return "SBAS";
+    case UBX_GNSS_GALILEO:  return "Galileo";
+    case UBX_GNSS_BEIDOU:   return "BeiDou";
+    case UBX_GNSS_IMES:     return "IMES";
+    case UBX_GNSS_QZSS:     return "QZSS";
+    case UBX_GNSS_GLONASS:  return "GLONASS";
+    case UBX_GNSS_NAVIC:    return "NAVIC";
+    default:                return "???";
+    }
+}
+
+static const char * const ubx_enabled_str(uint8_t val)
+{
+    return (val == 0) ? "off" : "on";
+}
+
 static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
     static _Thread_local char output_str[2048];
     size_t output_str_max = SIZEOF(output_str);
@@ -300,22 +320,23 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
         p += sprintf(p, "%s%02X", i ? " " : "", payload[i]);
     }
     p += sprintf(p, "}");
+    p += sprintf(p, ": {");
 
     // annotate the payload bytes
     if (payload_len > 0) {
         if (cls == UBX_CLS_ACK) {
             if ((id == UBX_ID_ACK_NAK || id == UBX_ID_ACK_ACK) && payload_len == 2) {
-                p += sprintf(p, ": UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
+                p += sprintf(p, "UBX-%s-%s", ubx_class_name(payload[0]), ubx_id_name(payload[0], payload[1]));
             }
         } else if (cls == UBX_CLS_CFG) {
             if (id == UBX_ID_CFG_MSG) {
                 const uint16_t msg_id = payload[0] << 8 | payload[1];
                 if (msg_id >= 0xF000 && msg_id <= 0xF010) {
-                    p += sprintf(p, ": NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
+                    p += sprintf(p, "NMEA-Gx%s I2C=%d UART1=%d UART2=%d USB=%d SPI=%d",
                             ubx_nmea_name(msg_id), payload[2], payload[3], payload[4], payload[5], payload[6]);
                 }
             } else if (id == UBX_ID_CFG_PRT) {
-                p += sprintf(p, ": PortID=%s", ubx_port_str(payload[0]));
+                p += sprintf(p, "PortID=%s", ubx_port_str(payload[0]));
 
                 if (payload_len == 20) {
                     const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)payload;
@@ -364,11 +385,24 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                     // Port flags
                     p += sprintf(p, " ExtendedTxTimeout=%u", prt->extendedTxTimeout);
                 }
+            } else if (id == UBX_ID_CFG_GNSS) {
+                const ubx_cfg_gnss_t * const gnss = (const ubx_cfg_gnss_t * const)payload;
+
+                p += sprintf(p, "Version=%u ChannelsAvailable=%u ChannelsToUse=%u NumConfigBlocks=%u",
+                             gnss->msgVer, gnss->numTrkChHw, gnss->numTrkChUse, gnss->numConfigBlocks);
+
+                for (int i = 0; i < gnss->numConfigBlocks; i++) {
+                    const ubx_cfg_gnss_block_t * const b = &(gnss->blocks[i]);
+                    p += sprintf(p, " %u:[%s(%u)=%s min=%u max=%u signal=%u]", (i + 1),
+                                 ubx_gnss_str(b->gnssId), b->gnssId, ubx_enabled_str(b->enable),
+                                 b->resTrkCh, b->maxTrkCh, b->sigCfgMask);
+                }
             }
         }
     }
 
     // checksum
+    p += sprintf(p, "}");
     p += sprintf(p, ", checksum={%02X %02X}: %s)",
             ck_a_, ck_b_, ck_valid ? "VALID" : "INVALID");
 

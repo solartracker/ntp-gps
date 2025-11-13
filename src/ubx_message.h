@@ -197,6 +197,7 @@ static const ubx_msg_t name = {                                \
 #define UBX_CFG_GNSS(name, ...)  UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_GNSS,  ##__VA_ARGS__)
 #define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PWR,   ##__VA_ARGS__)
 
+// UBX-CFG-PRT
 #define UBX_PORT_I2C    0
 #define UBX_PORT_UART1  1
 #define UBX_PORT_UART2  2
@@ -215,6 +216,16 @@ static const ubx_msg_t name = {                                \
 #define UBX_PROTO_ALL (UBX_PROTO_UBX | UBX_PROTO_NMEA |                         \
                        UBX_PROTO_RTCM2 | UBX_PROTO_RTCM3 | UBX_PROTO_SPARTN |   \
                        UBX_PROTO_USER0 | UBX_PROTO_USER1 | UBX_PROTO_USER2 | UBX_PROTO_USER3)
+
+// UBX-CFG-GNSS
+#define UBX_GNSS_GPS       0
+#define UBX_GNSS_SBAS      1
+#define UBX_GNSS_GALILEO   2
+#define UBX_GNSS_BEIDOU    3
+#define UBX_GNSS_IMES      4
+#define UBX_GNSS_QZSS      5
+#define UBX_GNSS_GLONASS   6
+#define UBX_GNSS_NAVIC     7
 
 // Acknowledge messages (ACK)
 #define UBX_ID_ACK_NAK           0x00

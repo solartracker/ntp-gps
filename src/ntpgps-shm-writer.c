@@ -1887,6 +1887,30 @@ static ubx_parse_result_t send_ubx_handle_cfg_prt(int fd, const ubx_msg_t * cons
     return result;
 }
 
+static ubx_parse_result_t send_ubx_handle_cfg_gnss(int fd, const ubx_msg_t * const msg)
+{
+    ubx_parser_t parser = {0};
+    ubx_parser_init(&parser);
+
+    parser.filter_type = UBX_FILTER_CLS_ID;
+    parser.filter_cls = msg->cls;
+    parser.filter_id = msg->id;
+    parser.filter_active = true;
+
+    ubx_parse_result_t result = send_ubx(fd, msg, &parser);
+
+    switch (result) {
+        case UBX_PARSE_OK:
+            TRACE("Read    %s\n", disassemble_ubx_bytes(parser.raw, parser.length));
+            break;
+        default:
+            TRACE("%s\n", result_text(result));
+            break;
+    }
+
+    return result;
+}
+
 static int configure_ublox_zda_only(int fd)
 {
     UBX_BEGIN_LIST
@@ -1894,6 +1918,7 @@ static int configure_ublox_zda_only(int fd)
         UBX_FUNCTION(set_cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
         UBX_FUNCTION(set_cfg_inf_off,           send_ubx_handle_ack)
         UBX_FUNCTION(set_cfg_msg_nmea_zda_on,   send_ubx_handle_ack)
+        UBX_FUNCTION(set_cfg_gnss_glonass_configure_off, send_ubx_handle_ack)
         UBX_FUNCTION(set_cfg_msg_nmea_gga_off,  send_ubx_handle_ack)
         UBX_FUNCTION(set_cfg_msg_nmea_gll_off,  send_ubx_handle_ack)
         UBX_FUNCTION(set_cfg_msg_nmea_gsa_off,  send_ubx_handle_ack)
@@ -1919,6 +1944,7 @@ int get_ublox_version(int fd)
     UBX_BEGIN_LIST
         UBX_FUNCTION(set_cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
         UBX_FUNCTION(set_cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
+        UBX_FUNCTION(get_cfg_gnss,              send_ubx_handle_cfg_gnss)
         UBX_FUNCTION(get_cfg_prt,               send_ubx_handle_cfg_prt)
         UBX_FUNCTION(get_mon_ver,               send_ubx_handle_mon_ver)
     UBX_END_LIST
