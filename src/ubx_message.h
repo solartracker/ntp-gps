@@ -198,34 +198,57 @@ static const ubx_msg_t name = {                                \
 #define UBX_CFG_PWR(name, ...)   UBX_MESSAGE(name, CLS_CFG, UBX_ID_CFG_PWR,   ##__VA_ARGS__)
 
 // UBX-CFG-PRT
-#define UBX_PORT_I2C    0
-#define UBX_PORT_UART1  1
-#define UBX_PORT_UART2  2
-#define UBX_PORT_USB    3
-#define UBX_PORT_SPI    4
+#define UBX_PORT_I2C             0
+#define UBX_PORT_UART1           1
+#define UBX_PORT_UART2           2
+#define UBX_PORT_USB             3
+#define UBX_PORT_SPI             4
 
-#define UBX_PROTO_UBX     (1 << 0)
-#define UBX_PROTO_NMEA    (1 << 1)
-#define UBX_PROTO_RTCM2   (1 << 2)
-#define UBX_PROTO_RTCM3   (1 << 5)
-#define UBX_PROTO_SPARTN  (1 << 6)
-#define UBX_PROTO_USER0   (1 << 12)
-#define UBX_PROTO_USER1   (1 << 13)
-#define UBX_PROTO_USER2   (1 << 14)
-#define UBX_PROTO_USER3   (1 << 15)
-#define UBX_PROTO_ALL (UBX_PROTO_UBX | UBX_PROTO_NMEA |                         \
-                       UBX_PROTO_RTCM2 | UBX_PROTO_RTCM3 | UBX_PROTO_SPARTN |   \
-                       UBX_PROTO_USER0 | UBX_PROTO_USER1 | UBX_PROTO_USER2 | UBX_PROTO_USER3)
+#define UBX_PROTO_UBX            0
+#define UBX_PROTO_NMEA           1
+#define UBX_PROTO_RTCM2          2
+#define UBX_PROTO_RAW            3
+#define UBX_PROTO_RTCM3          5
+#define UBX_PROTO_SPARTN         6
+#define UBX_PROTO_USER0          12
+#define UBX_PROTO_USER1          13
+#define UBX_PROTO_USER2          14
+#define UBX_PROTO_USER3          15
+
+#define UBX_PROTO_MASK_UBX       (1 << UBX_PROTO_UBX)
+#define UBX_PROTO_MASK_NMEA      (1 << UBX_PROTO_NMEA)
+#define UBX_PROTO_MASK_RTCM2     (1 << UBX_PROTO_RTCM2)
+#define UBX_PROTO_MASK_RTCM3     (1 << UBX_PROTO_RTCM3)
+#define UBX_PROTO_MASK_SPARTN    (1 << UBX_PROTO_SPARTN)
+#define UBX_PROTO_MASK_USER0     (1 << UBX_PROTO_USER0)
+#define UBX_PROTO_MASK_USER1     (1 << UBX_PROTO_USER1)
+#define UBX_PROTO_MASK_USER2     (1 << UBX_PROTO_USER2)
+#define UBX_PROTO_MASK_USER3     (1 << UBX_PROTO_USER3)
+#define UBX_PROTO_MASK_ALL       (UBX_PROTO_MASK_UBX | UBX_PROTO_MASK_NMEA |                              \
+                                  UBX_PROTO_MASK_RTCM2 | UBX_PROTO_MASK_RTCM3 | UBX_PROTO_MASK_SPARTN |   \
+                                  UBX_PROTO_MASK_USER0 | UBX_PROTO_MASK_USER1 | UBX_PROTO_MASK_USER2 | UBX_PROTO_MASK_USER3)
+
+// UBX-CFG-INF
+#define UBX_INF_MASK_ERROR       (1 << 0)
+#define UBX_INF_MASK_WARNING     (1 << 1)
+#define UBX_INF_MASK_NOTICE      (1 << 2)
+#define UBX_INF_MASK_TEST        (1 << 3)
+#define UBX_INF_MASK_DEBUG       (1 << 4)
+#define UBX_INF_MASK_reserved5   (1 << 5)
+#define UBX_INF_MASK_reserved6   (1 << 6)
+#define UBX_INF_MASK_USER        (1 << 7)
+#define UBX_INF_MASK_ALL         0xFF
+#define UBX_INF_MASK_NONE        0x00
 
 // UBX-CFG-GNSS
-#define UBX_GNSS_GPS       0
-#define UBX_GNSS_SBAS      1
-#define UBX_GNSS_GALILEO   2
-#define UBX_GNSS_BEIDOU    3
-#define UBX_GNSS_IMES      4
-#define UBX_GNSS_QZSS      5
-#define UBX_GNSS_GLONASS   6
-#define UBX_GNSS_NAVIC     7
+#define UBX_GNSS_GPS             0
+#define UBX_GNSS_SBAS            1
+#define UBX_GNSS_GALILEO         2
+#define UBX_GNSS_BEIDOU          3
+#define UBX_GNSS_IMES            4
+#define UBX_GNSS_QZSS            5
+#define UBX_GNSS_GLONASS         6
+#define UBX_GNSS_NAVIC           7
 
 // Acknowledge messages (ACK)
 #define UBX_ID_ACK_NAK           0x00

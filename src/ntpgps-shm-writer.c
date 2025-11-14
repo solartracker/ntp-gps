@@ -1887,7 +1887,7 @@ static ubx_parse_result_t send_ubx_handle_cfg_prt(int fd, const ubx_msg_t * cons
     return result;
 }
 
-static ubx_parse_result_t send_ubx_handle_cfg_gnss(int fd, const ubx_msg_t * const msg)
+static ubx_parse_result_t send_ubx_handle_generic(int fd, const ubx_msg_t * const msg)
 {
     ubx_parser_t parser = {0};
     ubx_parser_init(&parser);
@@ -1944,7 +1944,8 @@ int get_ublox_version(int fd)
     UBX_BEGIN_LIST
         UBX_FUNCTION(set_cfg_prt_usb_ubxnmea,   send_ubx_no_wait)
         UBX_FUNCTION(set_cfg_prt_uart1_ubxnmea, send_ubx_no_wait)
-        UBX_FUNCTION(get_cfg_gnss,              send_ubx_handle_cfg_gnss)
+        UBX_FUNCTION(get_cfg_gnss,              send_ubx_handle_generic)
+        UBX_FUNCTION(get_cfg_inf_nmea,          send_ubx_handle_generic)
         UBX_FUNCTION(get_cfg_prt,               send_ubx_handle_cfg_prt)
         UBX_FUNCTION(get_mon_ver,               send_ubx_handle_mon_ver)
     UBX_END_LIST

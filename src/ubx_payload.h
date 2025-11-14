@@ -25,6 +25,7 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-ACK-ACK payload (2 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t clsID;   // 0: Class ID of acknowledged message
@@ -34,6 +35,7 @@ typedef struct __attribute__((packed)) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-ACK-NAK payload (2 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t clsID;   // 0: Class ID of rejected message
@@ -43,6 +45,7 @@ typedef struct __attribute__((packed)) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-CFG-CFG payload (12 + optional 1 byte)
 typedef struct __attribute__((packed)) {
     // clearMask (offset 0-3)
@@ -91,6 +94,7 @@ typedef union {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-CFG-CFG-U5 payload (12 + optional 1 byte)
 typedef struct __attribute__((packed)) {
     // clearMask (offset 0-3)
@@ -141,6 +145,7 @@ typedef union {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-CFG-GNSS payload (4 + numConfigBlocks*8 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t  gnssId;      // GNSS identifier
@@ -174,51 +179,37 @@ typedef union {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/**
- * UBX-CFG-INF (Information message configuration)
- * Version: DATA1
- * Size: [0..n] * 10 bytes
- */
-#define UBX_CFG_INF_MAX_CONFIGS 6  // maximum configurations supported (adjust if needed)
+
+// UBX-CFG-INF payload (10 bytes)
 typedef struct __attribute__((packed)) {
-    uint8_t protocolID;   // Protocol identifier (UBX, NMEA, RTCM, etc.)
-    uint8_t reserved0[3]; // Reserved (must be 0)
+    uint8_t protocolID;            // Protocol identifier (UBX, NMEA, RTCM, etc.)
+    uint8_t reserved0[3];          // Reserved (must be 0)
     union {
         struct {
-            uint8_t ERROR    : 1;  // Bit 0
-            uint8_t WARNING  : 1;  // Bit 1
-            uint8_t NOTICE   : 1;  // Bit 2
-            uint8_t TEST     : 1;  // Bit 3
-            uint8_t DEBUG    : 1;  // Bit 4
-            uint8_t reserved : 3;  // Bits 5–7
+            uint8_t ERROR     : 1;  // Bit 0
+            uint8_t WARNING   : 1;  // Bit 1
+            uint8_t NOTICE    : 1;  // Bit 2
+            uint8_t TEST      : 1;  // Bit 3
+            uint8_t DEBUG     : 1;  // Bit 4
+            uint8_t reserved5 : 1;  // Bit 5
+            uint8_t reserved6 : 1;  // Bit 6
+            uint8_t USER      : 1;  // Bit 7
         };
-        uint8_t mask; // raw bitmask
-    } infMsgMask[UBX_CFG_INF_MAX_CONFIGS]; // 6 message masks (one per interface)
-} ubx_cfg_inf_data1_t;
+        uint8_t mask;              // raw bitmask
+    } infMsgMask[6];
+} ubx_cfg_inf_t;
 
-
-/**
- * UBX-CFG-INF (Poll request by protocol ID)
- * Version: POLLID
- * Size: 1 byte
- */
+// UBX-CFG-INF payload (1 byte)
 typedef struct __attribute__((packed)) {
-    uint8_t protocolID; // Protocol identifier to poll
+    uint8_t protocolID;            // Protocol identifier to poll
 } ubx_cfg_inf_pollid_t;
 
-
-/**
- * Union form for direct payload access (raw or parsed)
- */
+// Union form for direct payload access (raw or parsed)
 typedef union {
-    ubx_cfg_inf_data1_t parsed;
-    uint8_t raw[1 + 3 + UBX_CFG_INF_MAX_CONFIGS];  // 10 bytes total
-} ubx_cfg_inf_data1_u;
-
-typedef union {
-    ubx_cfg_inf_pollid_t parsed;
-    uint8_t raw[1]; // 1 byte
-} ubx_cfg_inf_pollid_u;
+    ubx_cfg_inf_t fields;
+    ubx_cfg_inf_pollid_t pollid;
+    uint8_t raw[UBX_MAX_PAYLOAD_SIZE];
+} ubx_cfg_inf_u;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -463,6 +454,7 @@ typedef union {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-CFG-PRT payload (20 bytes)
 typedef struct __attribute__((packed)) {
     uint8_t  portID;       // 0: Port type
@@ -531,6 +523,7 @@ typedef struct __attribute__((packed)) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+
 // UBX-MON-VER payload (40 + [0..n]*30 bytes)
 typedef struct __attribute__((packed)) {
     char swVersion[30];   // e.g. "1.00 (59842)"

@@ -153,9 +153,26 @@ static const char * const ubx_port_str(uint8_t portID)
     }
 }
 
-static const char * const ubx_protocol_str(uint16_t mask)
+static const char * const ubx_protocol_str(uint16_t protocolID)
 {
-    if ((mask & UBX_PROTO_ALL) == 0) {
+    switch(protocolID) {
+    case UBX_PROTO_UBX:      return "UBX";
+    case UBX_PROTO_NMEA:     return "NMEA";
+    case UBX_PROTO_RTCM2:    return "RTCM2";
+    case UBX_PROTO_RAW:      return "RAW";
+    case UBX_PROTO_RTCM3:    return "RTCM3";
+    case UBX_PROTO_SPARTN:   return "SPARTN";
+    case UBX_PROTO_USER0:    return "USER0";
+    case UBX_PROTO_USER1:    return "USER1";
+    case UBX_PROTO_USER2:    return "USER2";
+    case UBX_PROTO_USER3:    return "USER3";
+    default:                 return "???";
+    }
+}
+
+static const char * const ubx_protocols_str(uint16_t mask)
+{
+    if ((mask & UBX_PROTO_MASK_ALL) == 0) {
         if (mask)
             return "(invalid)";
         else
@@ -169,15 +186,42 @@ static const char * const ubx_protocol_str(uint16_t mask)
     *output_str = '\0';
     char *p = output_str;
 
-    if (mask & UBX_PROTO_UBX)     p += sprintf(p, "UBX+");
-    if (mask & UBX_PROTO_NMEA)    p += sprintf(p, "NMEA+");
-    if (mask & UBX_PROTO_RTCM2)   p += sprintf(p, "RTCM2+");
-    if (mask & UBX_PROTO_RTCM3)   p += sprintf(p, "RTCM3+");
-    if (mask & UBX_PROTO_SPARTN)  p += sprintf(p, "SPARTN+");
-    if (mask & UBX_PROTO_USER0)   p += sprintf(p, "USER0+");
-    if (mask & UBX_PROTO_USER1)   p += sprintf(p, "USER1+");
-    if (mask & UBX_PROTO_USER2)   p += sprintf(p, "USER2+");
-    if (mask & UBX_PROTO_USER3)   p += sprintf(p, "USER3+");
+    if (mask & UBX_PROTO_MASK_UBX)     p += sprintf(p, "UBX+");
+    if (mask & UBX_PROTO_MASK_NMEA)    p += sprintf(p, "NMEA+");
+    if (mask & UBX_PROTO_MASK_RTCM2)   p += sprintf(p, "RTCM2+");
+    if (mask & UBX_PROTO_MASK_RTCM3)   p += sprintf(p, "RTCM3+");
+    if (mask & UBX_PROTO_MASK_SPARTN)  p += sprintf(p, "SPARTN+");
+    if (mask & UBX_PROTO_MASK_USER0)   p += sprintf(p, "USER0+");
+    if (mask & UBX_PROTO_MASK_USER1)   p += sprintf(p, "USER1+");
+    if (mask & UBX_PROTO_MASK_USER2)   p += sprintf(p, "USER2+");
+    if (mask & UBX_PROTO_MASK_USER3)   p += sprintf(p, "USER3+");
+
+    if (p > output_str)
+        *(--p) = '\0';        // remove trailing '+'
+
+    return output_str;
+}
+
+static const char * const ubx_inf_str(uint16_t mask)
+{
+    if (mask == UBX_INF_MASK_ALL) return "all";
+    if (mask == UBX_INF_MASK_NONE) return "none";
+
+    static _Thread_local char buffers[4][128];
+    static _Thread_local int index = 0;
+    char *output_str = buffers[index];
+    index = (index + 1) % (sizeof(buffers) / sizeof(buffers[0]));
+    *output_str = '\0';
+    char *p = output_str;
+
+    if (mask & UBX_INF_MASK_ERROR)     p += sprintf(p, "error+");
+    if (mask & UBX_INF_MASK_WARNING)   p += sprintf(p, "warning+");
+    if (mask & UBX_INF_MASK_NOTICE)    p += sprintf(p, "notice+");
+    if (mask & UBX_INF_MASK_TEST)      p += sprintf(p, "test+");
+    if (mask & UBX_INF_MASK_DEBUG)     p += sprintf(p, "debug+");
+    if (mask & UBX_INF_MASK_reserved5) p += sprintf(p, "reserved5+");
+    if (mask & UBX_INF_MASK_reserved6) p += sprintf(p, "reserved6+");
+    if (mask & UBX_INF_MASK_USER)      p += sprintf(p, "user+");
 
     if (p > output_str)
         *(--p) = '\0';        // remove trailing '+'
@@ -342,8 +386,8 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                     const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)payload;
 
                     p += sprintf(p, " ProtocolIn=%s ProtocolOut=%s",
-                                 ubx_protocol_str(prt->protocolIn),
-                                 ubx_protocol_str(prt->protocolOut));
+                                 ubx_protocols_str(prt->protocolIn),
+                                 ubx_protocols_str(prt->protocolOut));
 
                     switch(prt->portID) {
                     case UBX_PORT_I2C:
@@ -396,6 +440,18 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                     p += sprintf(p, " %u:[%s(%u)=%s min=%u max=%u signal=%u]", (i + 1),
                                  ubx_gnss_str(b->gnssId), b->gnssId, ubx_enabled_str(b->enable),
                                  b->resTrkCh, b->maxTrkCh, b->sigCfgMask);
+                }
+            } else if (id == UBX_ID_CFG_INF) {
+                const ubx_cfg_inf_t * const inf = (const ubx_cfg_inf_t * const)payload;
+
+                p += sprintf(p, "Protocol=%u(%s)", 
+                             inf->protocolID, ubx_protocol_str(inf->protocolID));
+
+                if (payload_len == 10) {
+                    for (int i = 0; i < 6; i++) {
+                        p += sprintf(p, " Target%u=%s", 
+                                     i, ubx_inf_str(inf->infMsgMask[i].mask));
+                    }
                 }
             }
         }
