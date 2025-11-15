@@ -382,7 +382,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
             } else if (id == UBX_ID_CFG_PRT) {
                 p += sprintf(p, "PortID=%s", ubx_port_str(payload[0]));
 
-                if (payload_len == 20) {
+                if (payload_len == sizeof(ubx_cfg_prt_t)) {
                     const ubx_cfg_prt_t * const prt = (const ubx_cfg_prt_t * const)payload;
 
                     p += sprintf(p, " ProtocolIn=%s ProtocolOut=%s",
@@ -447,7 +447,7 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
                 p += sprintf(p, "Protocol=%u(%s)", 
                              inf->protocolID, ubx_protocol_str(inf->protocolID));
 
-                if (payload_len == 10) {
+                if (payload_len == sizeof(ubx_cfg_inf_t)) {
                     for (int i = 0; i < 6; i++) {
                         p += sprintf(p, " Target%u=%s:%s",
                                      i, ubx_port_str(i),
