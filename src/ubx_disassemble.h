@@ -204,8 +204,8 @@ static const char * const ubx_protocols_str(uint16_t mask)
 
 static const char * const ubx_inf_str(uint16_t mask)
 {
-    if (mask == UBX_INF_MASK_ALL) return "all";
-    if (mask == UBX_INF_MASK_NONE) return "none";
+    if (mask == UBX_INF_MASK_ALL) return "All";
+    if (mask == UBX_INF_MASK_NONE) return "None";
 
     static _Thread_local char buffers[4][128];
     static _Thread_local int index = 0;
@@ -214,14 +214,14 @@ static const char * const ubx_inf_str(uint16_t mask)
     *output_str = '\0';
     char *p = output_str;
 
-    if (mask & UBX_INF_MASK_ERROR)     p += sprintf(p, "error+");
-    if (mask & UBX_INF_MASK_WARNING)   p += sprintf(p, "warning+");
-    if (mask & UBX_INF_MASK_NOTICE)    p += sprintf(p, "notice+");
-    if (mask & UBX_INF_MASK_TEST)      p += sprintf(p, "test+");
-    if (mask & UBX_INF_MASK_DEBUG)     p += sprintf(p, "debug+");
-    if (mask & UBX_INF_MASK_reserved5) p += sprintf(p, "reserved5+");
-    if (mask & UBX_INF_MASK_reserved6) p += sprintf(p, "reserved6+");
-    if (mask & UBX_INF_MASK_USER)      p += sprintf(p, "user+");
+    if (mask & UBX_INF_MASK_ERROR)     p += sprintf(p, "Error+");
+    if (mask & UBX_INF_MASK_WARNING)   p += sprintf(p, "Warning+");
+    if (mask & UBX_INF_MASK_NOTICE)    p += sprintf(p, "Notice+");
+    if (mask & UBX_INF_MASK_TEST)      p += sprintf(p, "Test+");
+    if (mask & UBX_INF_MASK_DEBUG)     p += sprintf(p, "Debug+");
+    if (mask & UBX_INF_MASK_reserved5) p += sprintf(p, "Reserved5+");
+    if (mask & UBX_INF_MASK_reserved6) p += sprintf(p, "Reserved6+");
+    if (mask & UBX_INF_MASK_USER)      p += sprintf(p, "User+");
 
     if (p > output_str)
         *(--p) = '\0';        // remove trailing '+'
@@ -449,8 +449,9 @@ static char *disassemble_ubx_bytes(const uint8_t * const msg, size_t len) {
 
                 if (payload_len == 10) {
                     for (int i = 0; i < 6; i++) {
-                        p += sprintf(p, " Target%u=%s", 
-                                     i, ubx_inf_str(inf->infMsgMask[i].mask));
+                        p += sprintf(p, " Target%u=%s:%s",
+                                     i, ubx_port_str(i),
+                                     ubx_inf_str(inf->infMsgMask[i].mask));
                     }
                 }
             }
